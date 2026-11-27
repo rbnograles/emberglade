@@ -7,7 +7,26 @@ const tree = (name, extra = []) => ({
 const rock = (name, drops) => ({ name, solid: 0.42, hp: 4, tool: 'pickaxe', drops, regrow: 6, pickR: 0.65 });
 const placed = (name, solid = 0.42) => ({ name, solid, hp: 2, tool: null, pickR: 0.55 });
 
+import { KEEPERS, carvingId, carvingName } from '../game/keepers.js';
+
 export const OBJECTS = {
+  ...Object.fromEntries(KEEPERS.map(k => [carvingId(k), { ...placed(carvingName(k), 0.22), item: carvingId(k) }])),
+  rock_rime: { ...rock('Rimeglass seam', [['rimeglass', 2, 3]]), minPower: 2 },
+  rock_ember: { ...rock('Emberglass vein', [['emberglass', 2, 3]]), minPower: 2 },
+  weather_cairn: { name: 'Wayfarer cairn (use for rimeglass)', solid: 0.48, pickR: 0.75, cache: 'rimeglass' },
+  kiln_ruin: { name: 'Abandoned kiln (use for emberglass)', solid: 0.5, pickR: 0.75, cache: 'emberglass' },
+  stairs: { ...placed('Timber stairs', 0), item: 'stairs' },
+  window: { ...placed('Lattice window', 0.35), item: 'window', block: true },
+  brick_wall: { ...placed('Brick wall', 0.35), item: 'brick_wall', block: true },
+  table: { ...placed('Kitchen table', 0.35), item: 'table' },
+  chair: { ...placed('Oak chair', 0.35), item: 'chair' },
+  shelf: { ...placed('Bookcase', 0.35), item: 'shelf' },
+  cabinet: { ...placed('Pantry cabinet', 0.35), item: 'cabinet' },
+  lamp: { ...placed('Amber lamp', 0.35), item: 'lamp' },
+  planter: { ...placed('Flower box', 0.35), item: 'planter' },
+  gate: { ...placed('Pasture gate', 0), item: 'gate' },
+  irrigator: { ...placed('Irrigation cistern', 0.35), item: 'irrigator' },
+
   tree_oak: tree('Oak tree', [['apple', 0, 2]]),
   tree_orange: tree('Maple tree'),
   tree_red: tree('Red maple'),
@@ -20,7 +39,7 @@ export const OBJECTS = {
   bush: { name: 'Berry bush', solid: 0.3, pick: true, drops: [['berries', 2, 3]], becomes: 'bush_bare', regrow: 2, pickR: 0.6 },
   bush_bare: { name: 'Bush (picked)', solid: 0.3, pickR: 0.6 },
   flower: { name: 'Flower', pick: true, drops: [['flower', 1, 1]], regrow: 3 },
-  tallgrass: { name: 'Tall grass', pick: true, drops: [['fiber', 1, 1], ['seeds', 0, 1]], regrow: 3 },
+  tallgrass: { name: 'Tall grass', pick: true, drops: [['fiber', 1, 1], ['seeds', 0, 1], ['turnip_seeds', 1, 1, 0.16], ['pumpkin_seeds', 1, 1, 0.08]], regrow: 3 },
   stick: { name: 'Stick', pick: true, drops: [['stick', 1, 1]], regrow: 3 },
   pebble: { name: 'Loose stone', pick: true, drops: [['stone', 1, 1]], regrow: 3 },
   boulder: rock('Boulder', [['stone', 2, 3]]),

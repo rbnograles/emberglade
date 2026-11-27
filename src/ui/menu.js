@@ -4,6 +4,7 @@ import { applyVolume, sfx, unlockAudio } from '../audio.js';
 import { DIFFICULTIES } from '../game/survival.js';
 import { writeSave, SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
 import { PlayerModel } from '../render/characters.js';
+import { ask } from './dialog.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -73,11 +74,11 @@ export function buildMenu(game, hooks) {
   $('btn-import').addEventListener('click', () => file.click());
   file.addEventListener('change', async () => {
     if (!file.files[0]) return;
-    if (!confirm('Replace the world in this slot with the imported file?')) return;
+    if (!await ask({ title: 'Replace this world?', text: 'The imported file will take the place of the world in this slot.', yes: 'Replace', no: 'Cancel', danger: true })) return;
     if (await importSave(file.files[0])) {
       hooks.beforeLeave(true);
       location.reload();
-    } else alert('That file is not an Emberglade world.');
+    } else ask({ title: 'Could not import', text: 'That file is not an Emberglade world.' });
   });
 
   // ---- character ----
@@ -103,6 +104,20 @@ export function buildMenu(game, hooks) {
     row.append(el('span', '', label), input);
     return row;
   };
+  const graphics = el('label', 'row');
+  const preset = el('select');
+  preset.id = 'graphics';
+  for (const [key, name] of [['low', 'Low · ¾ resolution, no shadows'], ['balanced', 'Balanced · native resolution'], ['high', 'High · high-density resolution']]) {
+    preset.add(new Option(name, key));
+  }
+  preset.value = settings.graphics;
+  preset.addEventListener('change', () => {
+    settings.graphics = preset.value;
+    hooks.onGraphics();
+    saveSettings();
+  });
+  graphics.append(el('span', '', 'Scene quality'), preset);
+  root.append(el('h4', '', 'Graphics'), graphics);
   root.append(el('h4', '', 'Sound'), slider('Effects', 'sfx'), slider('Music', 'music'));
 
   root.append(el('h4', '', 'Keys: click one, then press the new key'));

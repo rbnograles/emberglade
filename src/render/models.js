@@ -1,3 +1,7 @@
+import { homesteadModels } from './homestead.js';
+import { addFieldModels, addFieldItemModels } from './fieldmodels.js';
+import { KEEPERS, carvingId } from '../game/keepers.js';
+import { keeperModel } from './keeper-models.js';
 import { Vox } from './voxel.js';
 import { hash2 } from '../core/noise.js';
 
@@ -12,21 +16,30 @@ const mix = (palette, seed, accent = null, chance = 0) => (x, y, z) => {
   return palette[(hash2(x * 7 + y * 3, z * 5 + y, seed) * palette.length) | 0];
 };
 
-function tree(leaves, seed, accent = null) {
-  return new Vox()
-    .box(-1, 0, -1, 0, 5, 0, TRUNK)
-    .blob(0, 9, 0, 4.7, 4.0, 4.7, mix(leaves, seed, accent, 0.025), 0.35, seed)
-    .build(0.25);
+// shape 0: one round crown. 1: tall, two crowns stacked on a long trunk. 2: broad, a forked trunk under three low crowns.
+function tree(leaves, seed, accent = null, shape = 0) {
+  const c = mix(leaves, seed + shape * 31, accent, 0.025);
+  const v = new Vox();
+  if (shape === 1) {
+    v.box(-1, 0, -1, 0, 8, 0, TRUNK)
+      .blob(0, 10, 0, 3.7, 3.1, 3.7, c, 0.35, seed + 1).blob(0, 14.5, 0, 2.7, 2.6, 2.7, c, 0.35, seed + 2);
+  } else if (shape === 2) {
+    v.box(-1, 0, -1, 0, 3, 0, TRUNK).box(1, 3, -1, 2, 5, 0, TRUNK).box(-3, 3, -1, -2, 4, 0, TRUNK)
+      .blob(-3, 7, 0, 3.3, 2.7, 3.5, c, 0.35, seed + 3).blob(3, 8, 0, 3.5, 2.9, 3.3, c, 0.35, seed + 4)
+      .blob(0, 9.5, 0, 3.1, 2.5, 3.1, c, 0.35, seed + 5);
+  } else v.box(-1, 0, -1, 0, 5, 0, TRUNK).blob(0, 9, 0, 4.7, 4.0, 4.7, c, 0.35, seed);
+  return v.build(0.25);
 }
 
-// snowy: the tips of every tier are dusted white
-function pine(snowy = false) {
-  const v = new Vox().box(-1, 0, -1, 0, 2, 0, TRUNK);
+// snowy: the tips of every tier are dusted white. slim: a taller, narrower tree.
+function pine(snowy = false, slim = false) {
+  const lift = slim ? 3 : 0, k = slim ? 0.78 : 1;
+  const v = new Vox().box(-1, 0, -1, 0, 2 + lift, 0, TRUNK);
   const green = mix([0x2f7a4a, 0x388a55, 0x286b40], 3), white = mix([0xf4f8fb, 0xe4edf3], 3);
   const c = (x, y, z) => (snowy && (y % 3 === 2 || y >= 10 || (x + z + y) % 4 === 0) ? white(x, y, z) : green(x, y, z));
   const layers = [[3, 3.6], [4, 3.1], [5, 2.5], [6, 2.9], [7, 2.3], [8, 1.7], [9, 2.0], [10, 1.4], [11, 0.9], [12, 0.75]];
   for (const [y, r] of layers) {
-    for (let z = -4; z <= 3; z++) for (let x = -4; x <= 3; x++) if (Math.hypot(x + 0.5, z + 0.5) <= r) v.set(x, y, z, c);
+    for (let z = -4; z <= 3; z++) for (let x = -4; x <= 3; x++) if (Math.hypot(x + 0.5, z + 0.5) <= r * k) v.set(x, y + lift, z, c);
   }
   return v.build(0.3);
 }
@@ -108,14 +121,20 @@ function deer() {
 // Every model the chunk builder can place, by key.
 export function buildModels() {
   const m = new Map();
-  m.set('tree_oak', tree(GREENS, 11, 0xd94f4f));
-  m.set('tree_orange', tree([0xe8872e, 0xf09a3e, 0xd97523], 12));
-  m.set('tree_red', tree([0xd9432f, 0xe85a3a, 0xc23628], 13));
-  m.set('tree_yellow', tree([0xe9c535, 0xf2d54e, 0xd9b02a], 14));
-  m.set('tree_pink', tree([0xf08cb4, 0xf7a6c6, 0xe274a2], 15, 0xfff0f5));
-  m.set('tree_purple', tree([0x9a6fd6, 0xad85e2, 0x8558c4], 16, 0xf2e6ff));
+  // Each kind of tree comes in several shapes; "kind#n" are the alternates the chunk builder picks between.
+  for (const [id, leaves, seed, accent] of [
+    ['tree_oak', GREENS, 11, 0xd94f4f], ['tree_orange', [0xe8872e, 0xf09a3e, 0xd97523], 12, null],
+    ['tree_red', [0xd9432f, 0xe85a3a, 0xc23628], 13, null], ['tree_yellow', [0xe9c535, 0xf2d54e, 0xd9b02a], 14, null],
+    ['tree_pink', [0xf08cb4, 0xf7a6c6, 0xe274a2], 15, 0xfff0f5], ['tree_purple', [0x9a6fd6, 0xad85e2, 0x8558c4], 16, 0xf2e6ff],
+  ]) {
+    m.set(id, tree(leaves, seed, accent));
+    m.set(id + '#1', tree(leaves, seed, accent, 1));
+    m.set(id + '#2', tree(leaves, seed, accent, 2));
+  }
   m.set('tree_pine', pine());
+  m.set('tree_pine#1', pine(false, true));
   m.set('tree_snowpine', pine(true));
+  m.set('tree_snowpine#1', pine(true, true));
   // charred tree: a bare black trunk with a few stubs of branch
   m.set('tree_dead', new Vox()
     .box(-1, 0, -1, 0, 7, 0, 0x3a3236).box(1, 4, -1, 2, 4, -1, 0x2b2529).box(2, 5, -1, 2, 6, -1, 0x2b2529)
@@ -213,6 +232,9 @@ export function buildModels() {
     .blob(0, 2, 0, 2.6, 2.3, 2.6, mix([0x3a2a5a, 0x46336b, 0x2f2249], 21), 0.25, 21)
     .set(2, 2, -2, 0xfff27a).set(2, 2, 1, 0xfff27a).set(2, 3, -2, 0xfff27a).set(2, 3, 1, 0xfff27a)
     .build(0.16));
+  homesteadModels(m);
+  for (const k of KEEPERS) m.set(carvingId(k), keeperModel(k, true));
+  addFieldModels(m);
   return m;
 }
 
@@ -238,9 +260,13 @@ const haunch = (meat, bone) => new Vox().blob(0, 2, 0, 2.6, 2.2, 1.8, mix([meat]
 export function buildItemModels(world) {
   const m = new Map();
   const use = (id, key = id) => m.set(id, world.get(key));
+  for (const k of KEEPERS) use(carvingId(k));
   // straight from the world
   for (const id of ['campfire', 'workbench', 'bed', 'chest', 'wood_wall', 'stone_wall', 'coral_wall', 'door', 'wood_floor', 'stone_floor',
     'lantern', 'boat', 'submarine', 'kelp', 'clam', 'coral']) use(id);
+  for (const id of ['roof', 'stairs', 'window', 'brick_floor', 'brick_wall', 'table', 'chair', 'shelf', 'cabinet',
+    'lamp', 'planter', 'gate', 'irrigator', 'turnip', 'pumpkin', 'turnip_seeds', 'pumpkin_seeds',
+    'hull', 'oar', 'pressure_hull', 'propeller', 'axle', 'trail_cart']) use(id);
   use('fence', 'fence_post');
   use('flower', 'flower0');
   use('fiber', 'tallgrass');
@@ -298,6 +324,7 @@ export function buildItemModels(world) {
   m.set('heat_boots', boots(CRYSTAL));
   m.set('woven_bag', bag(STRAW));
   m.set('trail_pack', bag(0x8a5a34));
+  addFieldItemModels(m);
   m.set('diving_mask', new Vox().box(0, 0, 0, 6, 3, 0, 0x2b2b33).box(1, 1, 0, 2, 2, 0, 0x6fc3e8).box(4, 1, 0, 5, 2, 0, 0x6fc3e8).box(-1, 1, 1, -1, 2, 3, 0x2b2b33).box(7, 1, 1, 7, 2, 3, 0x2b2b33).build(0.1));
   return m;
 }

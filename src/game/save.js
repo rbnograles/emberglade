@@ -56,10 +56,14 @@ export function slotSummary(slot) {
 
 // Offer the current world as a .json file download.
 export function exportSave(game) {
-  const blob = new Blob([JSON.stringify(game.serialize())], { type: 'application/json' });
+  exportSaveData(game.serialize());
+}
+
+export function exportSaveData(save) {
+  const blob = new Blob([JSON.stringify(save)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `emberglade-world-${currentSlot()}-day${game.day}.json`;
+  a.download = `emberglade-world-${currentSlot()}-day${save.day ?? 1}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

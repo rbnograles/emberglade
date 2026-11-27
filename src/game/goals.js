@@ -1,4 +1,5 @@
 // need: event key -> count. Keys: collect:<item>, craft:<item>, place:<object>, plant, water.
+const milestone = (text, key, n = 1) => ({ text, need: { [key]: n }, milestone: key });
 export const GOALS = [
   { text: 'Gather 3 sticks from the ground', need: { 'collect:stick': 3 } },
   { text: 'Pick up 3 loose stones', need: { 'collect:stone': 3 } },
@@ -27,6 +28,12 @@ export const GOALS = [
   { text: 'Mine iron ore in the deep sea and smelt an iron bar', need: { 'craft:iron_bar': 1 } },
   { text: 'Build a boat, launch it on water and sail (F to get on)', need: { 'ride:boat': 1 } },
   { text: 'Build a submarine and take it under the sea', need: { 'ride:submarine': 1 } },
+  milestone('Open the world map and choose a keeper to seek', 'travel:map'),
+  milestone('Craft a glider and glide from a ledge', 'travel:glide'),
+  milestone('Travel into the Frozen Wastes with fur gear', 'visit:frost'),
+  milestone('Explore the Volcanic Lands with crystal gear', 'visit:heat'),
+  milestone('Discover a keeper site using the world map bearings', 'keeper:found'),
+  milestone('Restore all twelve hearths by defeating their keepers', 'keeper:restore', 12),
 ];
 
 export class Goals {

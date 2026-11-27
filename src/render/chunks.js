@@ -34,6 +34,8 @@ export class Chunks {
     this.world = game.world;
     this.models = models;
     this.map = new Map();
+    this.roofGroup = new THREE.Group();
+    this.scene.add(this.roofGroup);
     this.dirty = new Set();
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.objectMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -69,6 +71,7 @@ export class Chunks {
   // budget: how many missing chunks to build this frame
   update(px, pz, budget = 2) {
     const ccx = Math.floor(px / CHUNK), ccz = Math.floor(pz / CHUNK);
+    this.roofGroup.visible = !this.world.getRoof(Math.floor(px), Math.floor(pz));
     const missing = [];
     for (let dz = -RADIUS; dz <= RADIUS; dz++) {
       for (let dx = -RADIUS; dx <= RADIUS; dx++) {
@@ -84,6 +87,8 @@ export class Chunks {
         c.terrain.geometry.dispose();
         c.water.geometry.dispose();
         c.lava.geometry.dispose();
+        this.roofGroup.remove(c.roof);
+        c.roof.geometry.dispose();
         c.objects.geometry.dispose();
         this.map.delete(key);
       }
@@ -105,7 +110,10 @@ export class Chunks {
     const objects = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     objects.castShadow = true;
     objects.receiveShadow = true;
-    const c = { cx, cz, terrain, water, lava, objects, fires: [] };
+    const roof = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
+    roof.castShadow = true;
+    this.roofGroup.add(roof);
+    const c = { cx, cz, terrain, water, lava, objects, roof, fires: [] };
     this.buildObjects(c);
     this.scene.add(terrain, water, lava, objects);
     this.map.set(cx + ',' + cz, c);
@@ -176,13 +184,15 @@ export class Chunks {
   }
 
   buildObjects(c) {
-    const list = [];
+    const list = [], roofs = [];
     c.fires = [];
     const M = this.models;
     for (let z = c.cz * CHUNK; z < (c.cz + 1) * CHUNK; z++) {
       for (let x = c.cx * CHUNK; x < (c.cx + 1) * CHUNK; x++) {
         const obj = this.world.get(x, z);
         const floor = this.world.getFloor(x, z);
+        const roof = this.world.getRoof(x, z);
+        if (roof) roofs.push({ m: M.get(roof), x: x + 0.5, y: this.gen.tile(x, z).h + 1.55, z: z + 0.5 });
         if (!obj && !floor) continue;
         // things in the sea rest on the bed
         const tile = this.gen.tile(x, z);
@@ -192,7 +202,9 @@ export class Chunks {
         if (!obj) continue;
         if (obj.t === 'soil') {
           add(obj.wet ? 'soil_wet' : 'soil');
-          if (obj.crop >= 0) add('crop' + obj.crop, { y: y + 0.07 });
+          if (obj.crop >= 0) add((!obj.species || obj.species === 'wheat' ? 'crop' : obj.species) + obj.crop, { y: y + 0.07 });
+        } else if (obj.t === 'gate') {
+          add(obj.open ? 'gate_open' : 'gate');
         } else if (obj.t === 'fence') {
           add('fence_post');
           [[1, 0], [0, -1], [-1, 0], [0, 1]].forEach(([dx, dz], rot) => {
@@ -206,21 +218,25 @@ export class Chunks {
         } else if (obj.placed && obj.t !== 'flower') {
           add(obj.t);
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
-          if (obj.t === 'lantern') c.fires.push({ x: px, y, z: pz, lantern: true });
+          if (obj.t === 'lantern' || obj.t === 'lamp') c.fires.push({ x: px, y, z: pz, lantern: true });
         } else {
           // Natural objects get a stable random turn, size and (if small) nudge.
           const small = obj.t === 'flower' || obj.t === 'tallgrass' || obj.t === 'stick' || obj.t === 'pebble' || obj.t === 'clam';
           const j = small ? 0.25 : 0;
+          const tall = obj.t.startsWith('tree_');
+          const alt = obj.t + '#' + ((hash2(x, z, 95) * 3) | 0);
           list.push({
-            m: M.get(obj.t === 'flower' ? 'flower' + (obj.v ?? 0) : obj.t),
+            m: M.get(obj.t === 'flower' ? 'flower' + (obj.v ?? 0) : M.has(alt) ? alt : obj.t),
             x: px + (hash2(x, z, 93) - 0.5) * j, y, z: pz + (hash2(x, z, 94) - 0.5) * j,
-            rot: (hash2(x, z, 91) * 4) | 0, scale: 0.85 + hash2(x, z, 92) * 0.3,
+            rot: (hash2(x, z, 91) * 4) | 0, scale: tall ? 0.8 + hash2(x, z, 92) * 0.5 : 0.85 + hash2(x, z, 92) * 0.3,
           });
         }
       }
     }
     c.objects.geometry.dispose();
     c.objects.geometry = toGeometry(mergeModels(list));
+    c.roof.geometry.dispose();
+    c.roof.geometry = toGeometry(mergeModels(roofs));
   }
 
   // Meshes of the 3x3 chunks around a position, for cursor picking.

@@ -26,6 +26,7 @@ const saved = load();
 export const settings = {
   sfx: saved.sfx ?? 0.6,
   music: saved.music ?? 0.3,
+  graphics: ['low', 'balanced', 'high'].includes(saved.graphics) ? saved.graphics : 'high',
   keys: { ...DEFAULT_KEYS, ...(saved.keys ?? {}) },
   look: { ...DEFAULT_LOOK, ...(saved.look ?? {}) }, // the character's colours and hair
 };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toGeometry } from './chunks.js';
 import { ENEMY_KINDS } from '../game/game.js';
+import { WILDLIFE } from '../game/wildlife.js';
 import { WATER_Y } from '../world/worldgen.js';
 
 const EAT_TIME = 1.1, EAT_BITES = 4;
@@ -246,103 +247,66 @@ export class PlayerModel {
   }
 }
 
-// Peaceful deer that wander near the player and shy away when approached.
-export class Deer {
-  constructor(scene, game, model) {
+// Animals: one mesh per entry in game.wildlife.list. They trot with a small bounce, the young are
+// smaller, tame ones show a soft glow, and a struck animal flinches.
+export class Animals {
+  constructor(scene, game, models) {
     this.scene = scene;
     this.game = game;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(model.pos, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(model.norm, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(model.col, 3));
-    g.setIndex(new THREE.BufferAttribute(model.idx, 1));
-    this.geometry = g;
-    this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.list = [];
+    this.geometries = Object.fromEntries(Object.keys(WILDLIFE).map((kind) => [kind, toGeometry(models.get(kind))]));
+    this.wild = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.tame = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x3a2a12 });
+    this.meshes = new Map(); // animal id -> mesh
   }
 
-  spawn(px, pz) {
-    const a = Math.random() * Math.PI * 2, r = 22 + Math.random() * 12;
-    const x = px + Math.cos(a) * r, z = pz + Math.sin(a) * r;
-    const biome = this.game.gen.tile(Math.floor(x), Math.floor(z)).biome;
-    if (biome === 'sand' || this.game.blocked(x, z, 0.5, true)) return;
-    const mesh = new THREE.Mesh(this.geometry, this.material);
-    mesh.castShadow = true;
-    this.scene.add(mesh);
-    this.list.push({ mesh, x, z, tx: x, tz: z, wait: Math.random() * 3, t: Math.random() * 10, hp: 5, flee: 0 });
-  }
-
-  // A hunter's blow. Returns true when the deer falls (and removes it).
-  hit(d, power, px, pz) {
-    d.hp -= power;
-    d.flee = 3;
-    if (d.hp > 0) return false;
-    this.scene.remove(d.mesh);
-    this.list.splice(this.list.indexOf(d), 1);
-    return true;
-  }
-
-  update(dt, px, pz) {
-    if (this.list.length < 5 && Math.random() < dt * 0.5) this.spawn(px, pz);
-    for (let i = this.list.length - 1; i >= 0; i--) {
-      const d = this.list[i];
-      const fromPlayer = Math.hypot(d.x - px, d.z - pz);
-      if (fromPlayer > 55) {
-        this.scene.remove(d.mesh);
-        this.list.splice(i, 1);
-        continue;
+  update(dt, clock) {
+    const g = this.game, alive = new Set();
+    for (const a of g.wildlife.list) {
+      alive.add(a.id);
+      let mesh = this.meshes.get(a.id);
+      if (!mesh) {
+        mesh = new THREE.Mesh(this.geometries[a.kind], this.wild);
+        mesh.castShadow = true;
+        mesh.rotation.y = a.dir;
+        this.scene.add(mesh);
+        this.meshes.set(a.id, mesh);
       }
-      let speed = 1.3;
-      d.flee = Math.max(0, d.flee - dt);
-      if (d.flee > 0) {
-        // wounded: bolt away from the hunter
-        d.tx = d.x + ((d.x - px) / (fromPlayer || 1)) * 8;
-        d.tz = d.z + ((d.z - pz) / (fromPlayer || 1)) * 8;
-        d.wait = 0;
-        speed = 5.2;
-      } else if (fromPlayer < 3.5) {
-        // Trot directly away from the player.
-        d.tx = d.x + ((d.x - px) / fromPlayer) * 6;
-        d.tz = d.z + ((d.z - pz) / fromPlayer) * 6;
-        d.wait = 0;
-        speed = 4;
+      mesh.material = a.tame ? this.tame : this.wild;
+      const young = (a.grownDay ?? 0) > g.day;
+      const flinch = a.flee > 2.7 ? 1.2 : 1;
+      const s = (young ? 0.6 : 1) * flinch;
+      mesh.scale.set(s, s / (flinch * flinch), s);
+      // legs bounce while moving; at rest the body breathes
+      const bob = a.moving ? Math.abs(Math.sin(clock * 11 + a.id)) * 0.09 : Math.sin(clock * 2 + a.id) * 0.012;
+      mesh.position.set(a.x, g.ground(a.x, a.z) + bob, a.z);
+      let turn = a.dir - mesh.rotation.y;
+      turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+      mesh.rotation.y += turn * Math.min(1, dt * 10);
+      mesh.rotation.z = a.moving ? Math.sin(clock * 11 + a.id) * 0.05 : 0;
+    }
+    for (const [id, mesh] of this.meshes) {
+      if (!alive.has(id)) {
+        this.scene.remove(mesh);
+        this.meshes.delete(id);
       }
-      const dx = d.tx - d.x, dz = d.tz - d.z, dist = Math.hypot(dx, dz);
-      let moving = false;
-      if (d.wait > 0) d.wait -= dt;
-      else if (dist < 0.2) {
-        d.wait = 1 + Math.random() * 4;
-        d.tx = d.x + (Math.random() - 0.5) * 12;
-        d.tz = d.z + (Math.random() - 0.5) * 12;
-      } else {
-        const nx = d.x + (dx / dist) * speed * dt, nz = d.z + (dz / dist) * speed * dt;
-        if (this.game.blocked(nx, nz, 0.45, true)) {
-          d.tx = d.x;
-          d.tz = d.z;
-        } else {
-          d.x = nx;
-          d.z = nz;
-          d.mesh.rotation.y = Math.atan2(-dz, dx);
-          moving = true;
-        }
-      }
-      d.t += dt * (moving ? speed * 5 : 0);
-      const h = this.game.gen.tile(Math.floor(d.x), Math.floor(d.z)).h;
-      d.mesh.position.set(d.x, h + (moving ? Math.abs(Math.sin(d.t)) * 0.08 : 0), d.z);
     }
   }
 }
+// pace: steps per second. hop: how high a step lifts. sway: side-to-side roll while moving.
+const GAITS = {
+  gloomling: { pace: 9, hop: 0.3, sway: 0 }, brute: { pace: 5, hop: 0.12, sway: 0.1 },
+  golem: { pace: 3.5, hop: 0.08, sway: 0.14 }, spitter: { pace: 7, hop: 0.18, sway: 0.05 },
+  frostprowler: { pace: 12, hop: 0.1, sway: 0.06 }, kilncrab: { pace: 14, hop: 0.04, sway: 0.09 },
+  snapper: { pace: 6, hop: 0, sway: 0.05 },
+};
 
-// Night creatures: one mesh per entry in game.enemies, hopping as they move.
+// Creatures: one mesh per entry in game.enemies. Each kind moves its own way, sways while idle,
+// lunges as it strikes and squashes when hit.
 export class Enemies {
   constructor(scene, game, model) {
     this.scene = scene;
     this.game = game;
-    // one shape per kind of creature (brutes reuse the gloomling, scaled up)
-    this.geometries = {
-      gloomling: toGeometry(model.gloomling), brute: toGeometry(model.gloomling), snapper: toGeometry(model.snapper),
-      golem: toGeometry(model.golem), spitter: toGeometry(model.spitter),
-    };
+    this.geometries = Object.fromEntries(Object.keys(ENEMY_KINDS).map((kind) => [kind, toGeometry(model.get(kind))]));
     // spit in flight
     this.spitGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
     this.spitMat = new THREE.MeshBasicMaterial({ color: 0xb8f25a });
@@ -362,15 +326,18 @@ export class Enemies {
         this.scene.add(mesh);
         this.meshes.set(e.id, mesh);
       }
-      // land creatures hop along the ground; sea creatures glide at their own depth
-      const sea = ENEMY_KINDS[e.kind].sea;
-      const hop = sea ? Math.sin(clock * 5 + e.id) * 0.05 : e.moving ? Math.abs(Math.sin(clock * 9 + e.id)) * 0.3 : 0;
-      mesh.position.set(e.x, e.y + hop, e.z);
-      mesh.rotation.y = e.dir ?? 0;
+      const kind = ENEMY_KINDS[e.kind], gait = GAITS[e.kind] ?? GAITS.gloomling, t = clock + e.id;
+      // moving: each kind has its own step. idle: a slow sway so nothing ever stands frozen.
+      const step = e.moving ? Math.abs(Math.sin(t * gait.pace)) * gait.hop : Math.sin(t * 1.8) * 0.03;
+      // striking: a quick lunge forward that settles back over a third of a second
+      const lunge = Math.sin(Math.min(1, (e.strike ?? 0) / 0.35) * Math.PI) * 0.45;
+      const dir = e.dir ?? 0;
+      mesh.position.set(e.x + Math.cos(dir) * lunge, e.y + (kind.sea ? Math.sin(t * 5) * 0.05 : step), e.z - Math.sin(dir) * lunge);
+      mesh.rotation.y = dir;
+      mesh.rotation.z = (e.moving ? Math.sin(t * gait.pace) * gait.sway : 0) - lunge * 0.5;
       // squash when hit, shrink as daylight burns it away
-      const kind = ENEMY_KINDS[e.kind];
       const s = kind.size * Math.min(1, Math.max(0.3, e.hp / (kind.hp / 2))) * (e.stun > 0 ? 1.25 : 1);
-      mesh.scale.set(s, e.stun > 0 ? s * 0.7 : s, s);
+      mesh.scale.set(s, e.stun > 0 ? s * 0.7 : s * (1 + (e.moving ? 0 : Math.sin(t * 1.8) * 0.03)), s);
     }
     for (const [id, mesh] of this.meshes) {
       if (!alive.has(id)) {
@@ -459,7 +426,7 @@ export class Vehicles {
   constructor(scene, game, models) {
     this.scene = scene;
     this.game = game;
-    this.geometries = { boat: toGeometry(models.boat), submarine: toGeometry(models.submarine) };
+    this.geometries = { trail_cart: toGeometry(models.trail_cart), boat: toGeometry(models.boat), submarine: toGeometry(models.submarine) };
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.meshes = new Map();
   }

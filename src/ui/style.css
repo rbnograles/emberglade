@@ -410,3 +410,86 @@ kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; 
 #look-preview { border: 2px solid rgba(255, 246, 227, 0.14); }
 kbd { color: #2b2420; background: #e6d7b8; }
 #settings input[type='range'] { accent-color: var(--accent); }
+/* Match native settings and field controls to the same wood-and-amber palette as the pack. */
+#menu select, .relocation button, #touch-controls button, .touch-close, .map-actions button {
+  color: var(--cream); background: #41352e; border: 2px solid #79634b;
+  border-radius: 8px; padding: 7px 12px; font: inherit; cursor: pointer;
+}
+#menu select { color-scheme: dark; font-size: 15px; }
+#tab-worlds > .row { display: flex; align-items: center; gap: 12px; margin-bottom: 5px; }
+#menu :focus-visible, .relocation :focus-visible, #panel :focus-visible, #bigmap :focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 1px;
+}
+.relocation { max-width: min(480px, 92vw); padding: 22px; border: 3px solid #705b45;
+  border-radius: 14px; color: var(--cream); background: #2e251f; font: inherit; }
+.relocation::backdrop { background: #212435; }
+.relocation h1, .relocation h2 { color: var(--accent); margin: 0; }
+.relocation h1 { font-size: 28px; } .relocation h2 { font-size: 17px; margin-top: 20px; }
+.relocation button[data-migrate] { color: var(--ink); background: var(--accent); border-color: #ffdf82; }
+.map-actions { display: flex; justify-content: center; gap: 6px; margin-top: 7px; }
+.map-actions button { font-size: 13px; min-width: 38px; padding: 5px 10px; }
+#touch-controls, .touch-close { display: none; }
+canvas#game { touch-action: none; }
+@media (pointer: coarse) {
+  body:has(#menu.hidden):has(#panel.hidden):has(#bigmap.hidden) #touch-controls {
+    display: block; position: fixed; pointer-events: none; z-index: 4; inset: 0;
+  }
+  #walk-stick, .touch-tools, .touch-needs { position: absolute; pointer-events: auto; touch-action: none; }
+  #walk-stick { left: max(10px, env(safe-area-inset-left)); bottom: 112px; width: 90px; height: 90px;
+    border: 2px solid #987f62; border-radius: 50%; background: rgba(42,34,29,.75); display: grid; place-items: center; }
+  #walk-stick i { display: block; width: 40px; height: 40px; border: 2px solid #a28c6d;
+    border-radius: 50%; background: #68533e; transform: translate(var(--sx,0), var(--sy,0)); }
+  .touch-tools, .touch-needs { display: grid; grid-template-columns: repeat(2,auto); gap: 4px; }
+  .touch-tools { bottom: 110px; right: max(8px, env(safe-area-inset-right)); }
+  .touch-needs { bottom: 66px; right: max(8px, env(safe-area-inset-right)); }
+  #touch-controls button { padding: 6px; min-width: 48px; min-height: 38px; font-size: 13px; background: rgba(54,43,35,.93); }
+  #touch-controls button[data-action=strike] { border-color: var(--accent); color: var(--accent); }
+  #touch-controls button:active { background: #796344; }
+  body:has(#menu.hidden):has(#panel:not(.hidden)) .touch-close {
+    display: block; position: fixed; top: 4px; right: 10px; z-index: 7; border-color: var(--accent);
+  }
+  #hotbar .slot { width: clamp(26px, 9.8vw, 44px); height: clamp(28px, 9.8vw, 44px); }
+  #hotbar .slot img { width: 70%; height: 70%; }
+  #hotbar { gap: 2px; padding: 4px; }
+  #bottom { bottom: max(4px, env(safe-area-inset-bottom)); gap: 3px; }
+  #bars { gap: 2px 6px; }
+  .bar { gap: 1px; padding: 2px; } .bar i { width: clamp(4px, 1.7vw, 9px); height: 7px; }
+  .bar::before { min-width: 28px; font-size: 9px; }
+  #hint { max-width: 70vw; white-space: normal; text-align: center; font-size: 11px; padding: 2px 7px; }
+  #toasts { top: 96px; bottom: auto; max-width: 49vw; }
+  #minimap { width: 72px; height: 72px; }
+  #topleft { max-width: 54vw; }
+  #panel { width: min(510px, 98vw); max-height: 82dvh; }
+  #panel .card { width: 100%; padding: 10px; }
+  #panel .grid { zoom: 1; grid-template-columns: repeat(9,minmax(0,1fr)); gap: 2px; }
+  #panel .grid .slot { width: 100%; height: auto; aspect-ratio: 1; }
+  #panel .grid img { max-width: 82%; max-height: 82%; }
+  #bigmap canvas { height: min(70dvh,88vw); width: min(70dvh,88vw); }
+}
+@media (pointer: coarse) and (max-height: 560px) {
+  #walk-stick, .touch-tools { bottom: 8px; }
+  .touch-needs { bottom: 138px; }
+  #bottom { max-width: 56vw; }
+  #hotbar .slot { width: clamp(24px, 4.8vw, 40px); height: clamp(24px, 4.8vw, 40px); }
+}
+@media (max-width: 600px) {
+  #menu .shell { width: 96vw; height: 95dvh; flex-direction: column; }
+  #menu aside { padding: 10px 12px; width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 5px; }
+  #menu aside h1 { font-size: 25px; } #menu aside p { display: none; }
+  #menu aside button.primary { margin: 0; width: auto; font-size: 14px; padding: 6px 12px; }
+  #menu nav { grid-column: 1/-1; display: flex; flex-direction: row; flex-wrap: wrap; }
+  #menu nav button { padding: 5px 7px; font-size: 13px; }
+  #menu main { padding: 14px; } #menu .world { grid-template-columns: auto 1fr; padding: 10px; }
+  #menu .world i { grid-column: 2; }
+  #settings .keys { grid-template-columns: 1fr; } #settings .row { flex-wrap: wrap; }
+  .character { flex-wrap: wrap; } #look-preview { width: 90px; height: 110px; }
+}
+
+/* ---------- question box (replaces the browser's confirm and alert) ---------- */
+.relocation.ask { width: min(420px, 92vw); box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3); }
+.relocation.ask::backdrop { background: rgba(12, 10, 9, 0.72); backdrop-filter: blur(3px); }
+.relocation.ask p { margin: 10px 0 20px; line-height: 1.5; }
+.relocation.ask .row-buttons { display: flex; flex-flow: row wrap; gap: 10px; justify-content: flex-end; }
+.relocation.ask button { width: auto; margin: 0; padding: 9px 18px; border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.relocation.ask button.main { color: #2b2420; background: var(--accent); border-color: #ffdf82; }
+.relocation.ask button.danger { color: #fff; background: #b8323f; border-color: #d9505b; }

@@ -1,4 +1,5 @@
 import { BIOMES, SHORE, WATER_COLORS } from '../world/biomes.js';
+import { KEEPER_BY_ID } from '../game/keepers.js';
 
 const CELLS = 300; // map cells across
 const PX = 2; // canvas pixels per cell
@@ -37,6 +38,7 @@ export class BigMap {
 
   show() {
     this.root.classList.remove('hidden');
+    this.game.encounters.visit(this.game, 'travel:map');
     this.start();
   }
 
@@ -83,9 +85,12 @@ export class BigMap {
     c.stroke();
     c.font = 'bold 12px sans-serif';
     c.lineWidth = 3;
-    c.strokeText(label, cx + 9, cy + 4);
+    // near the right edge the label goes to the left of its dot, so it is never cut off
+    const left = cx + 9 + c.measureText(label).width > CELLS * PX;
+    c.textAlign = left ? 'right' : 'left';
+    c.strokeText(label, cx + (left ? -9 : 9), cy + 4);
     c.fillStyle = '#ffffff';
-    c.fillText(label, cx + 9, cy + 4);
+    c.fillText(label, cx + (left ? -9 : 9), cy + 4);
   }
 
   // Call every frame while open.
@@ -111,6 +116,13 @@ export class BigMap {
     // the two harsh regions are named where their hearts lie
     this.marker(g.gen.frostCentre.x, g.gen.frostCentre.z, '#bfe6f5', 'Frozen Wastes');
     this.marker(g.gen.heatCentre.x, g.gen.heatCentre.z, '#ff7a1a', 'Volcanic Lands');
+    // keepers: a grey "?" bearing until you find the site, then its name, then a gold tick once restored
+    for (const [id, site] of g.encounters.sites) {
+      const k = KEEPER_BY_ID[id];
+      if (g.encounters.restored.has(id)) this.marker(site.x, site.z, '#ffd24a', k.site + ' ✓');
+      else if (g.encounters.discovered.has(id)) this.marker(site.x, site.z, '#ff6a8a', k.name);
+      else this.marker(site.x, site.z, '#9a92a6', '? ' + k.habitat);
+    }
     this.marker(p.x, p.z, '#ffffff', 'You');
   }
 }

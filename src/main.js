@@ -1,38 +1,50 @@
 import * as THREE from 'three';
-import { Game } from './game/game.js';
+import { installControllers } from './ui/controllers.js';
+import { ask } from './ui/dialog.js';
+import { confirmRelocation } from './ui/relocation.js';
+import { Game, needsRelocation } from './game/game.js';
 import { loadSave, writeSave, clearSave } from './game/save.js';
 import { settings } from './settings.js';
 import { sfx, unlockAudio, setNight, setRain } from './audio.js';
 import { Rain, Flurry } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
+import { KeeperView } from './render/keeper-view.js';
+import { RESTORATION } from './game/encounters.js';
 import { BigMap } from './ui/bigmap.js';
 import { buildMenu } from './ui/menu.js';
-import { OBJECTS, CROP_RIPE } from './world/objects.js';
+import { cropFor } from './world/crops.js';
+import { OBJECTS } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
 import { ITEMS } from './game/items.js';
 import { buildModels, buildItemModels } from './render/models.js';
 import { renderItemIcons } from './render/itemicons.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
-import { PlayerModel, Deer, Enemies, Fish, Vehicles } from './render/characters.js';
+import { PlayerModel, Animals, Enemies, Fish, Vehicles } from './render/characters.js';
 import { VEHICLES } from './game/game.js';
 import { Particles, Fires } from './render/effects.js';
 import '@fontsource/pixelify-sans/400.css';
 import '@fontsource/pixelify-sans/600.css';
 import '@fontsource/pixelify-sans/700.css';
 import { Hud } from './ui/hud.js';
-import { loadIcons, iconPixels, setRenderedIcons } from './ui/icons.js';
+import { setRenderedIcons } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
 const $ = (id) => document.getElementById(id);
 const save = loadSave();
+if (needsRelocation(save)) await confirmRelocation(save);
 const game = new Game(save);
 const p = game.player;
 
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+function applyGraphics() {
+  const low = settings.graphics === 'low';
+  const density = settings.graphics === 'high' ? 2 : 1;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, density) * (low ? 0.75 : 1));
+  renderer.shadowMap.enabled = !low;
+}
+applyGraphics();
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 300);
@@ -53,7 +65,6 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-await loadIcons();
 const models = buildModels();
 const itemModels = buildItemModels(models);
 setRenderedIcons(renderItemIcons(itemModels));
@@ -61,12 +72,10 @@ const chunks = new Chunks(scene, game, models);
 const sky = new Sky(scene);
 const particles = new Particles(scene);
 const fires = new Fires(scene);
-const deer = new Deer(scene, game, models.get('deer'));
-const enemies = new Enemies(scene, game, {
-  gloomling: models.get('gloomling'), snapper: models.get('snapper'), golem: models.get('golem'), spitter: models.get('spitter'),
-});
+const animals = new Animals(scene, game, models);
+const enemies = new Enemies(scene, game, models);
 const fish = new Fish(scene, game, models.get('fish'));
-const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
+const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine') });
 const playerModel = new PlayerModel(settings.look, itemModels);
 const rain = new Rain(scene);
 const snow = new Flurry(scene, 0xffffff, 0.075);
@@ -86,6 +95,7 @@ scene.add(marker);
 const hud = new Hud(game);
 if (game.relocated) setTimeout(() => hud.toast('The world has been reshaped, so you wake at a new start. Your items came with you.'), 1200);
 const minimap = new Minimap(game);
+const keeperView = new KeeperView(scene, game, $('keeper-hud'));
 const bigmap = new BigMap(game);
 $('minimap').addEventListener('mousedown', (e) => {
   e.stopPropagation();
@@ -128,8 +138,8 @@ game.on((type, data) => {
   if (type === 'eat') {
     playerModel.startEat(data.id);
     // crumbs in the food's own colour, one puff per bite
-    const pixels = iconPixels(data.id).pixels;
-    const color = pixels[Math.floor(pixels.length / 2)].color;
+    const colors = itemModels.get(data.id).col;
+    const color = new THREE.Color().fromArray(colors, 3 * Math.floor(colors.length / 6)).getHex();
     for (const delay of [250, 480, 710, 940]) {
       setTimeout(() => {
         const a = playerModel.group.rotation.y;
@@ -188,6 +198,10 @@ game.on((type, data) => {
       fade.style.opacity = 0;
     }));
   }
+  if (type === 'restored') {
+    game.toast(RESTORATION);
+    bigmap.show();
+  }
   if (type === 'inv' || type === 'goal' || type === 'newday' || type === 'faint') {
     hud.refresh();
     panels.render();
@@ -212,13 +226,14 @@ function setPaused(v) {
   }
 }
 $('btn-play').addEventListener('click', () => setPaused(false));
-addEventListener('mousedown', unlockAudio);
+addEventListener('pointerdown', unlockAudio);
 addEventListener('keydown', unlockAudio);
 buildMenu(game, {
   beforeLeave: (discard) => {
     if (!discard) writeSave(game);
     discardOnExit = true;
   },
+  onGraphics: applyGraphics,
   onLook: () => playerModel.applyLook(settings.look),
 });
 $('btn-pause').addEventListener('mousedown', (e) => {
@@ -227,8 +242,8 @@ $('btn-pause').addEventListener('mousedown', (e) => {
 });
 // ?play in the address skips the title menu (handy for screenshots and quick testing)
 if (new URLSearchParams(location.search).has('play')) setPaused(false);
-$('btn-new').addEventListener('click', () => {
-  if (!confirm('Start a new world? Your current world will be deleted.')) return;
+$('btn-new').addEventListener('click', async () => {
+  if (!await ask({ title: 'Start this world over?', text: 'Everything in this world will be deleted: your base, items and progress. This cannot be undone.', yes: 'Delete and restart', no: 'Keep my world', danger: true })) return;
   clearSave();
   discardOnExit = true;
   location.reload();
@@ -247,7 +262,7 @@ let target = null; // {x, z, reach}
 
 addEventListener('keydown', (e) => {
   const K = settings.keys;
-  if (e.code === 'Tab' || e.code === K.inventory || (e.code === K.jump && !paused)) e.preventDefault();
+  if (!paused && (e.code === 'Tab' || e.code === K.inventory || e.code === K.jump)) e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'Escape') {
     if (bigmap.open) bigmap.hide();
@@ -316,11 +331,14 @@ addEventListener('mouseup', (e) => {
   const wasClick = !drag.moved && drag.button === 2;
   drag = null;
   if (!wasClick || paused || panels.open) return;
+  secondaryAction();
+});
+function secondaryAction() {
   camera.updateMatrixWorld();
   target = pickTarget();
   if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach);
   hud.refresh();
-});
+}
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('wheel', (e) => {
   if (!paused && !panels.open) distGoal = Math.max(12, Math.min(36, distGoal + Math.sign(e.deltaY) * 2));
@@ -332,6 +350,8 @@ function interact() {
   if (game.player.riding) return void game.dismount();
   if (game.board()) return;
   if (target?.reach && game.interact(target.x, target.z)) return;
+  // an animal beside you: feed it, or gather eggs or fleece from a tame one
+  if (game.wildlife.handle(game.wildlife.near(p.x, p.z, 1.6))) return;
   const px = Math.floor(p.x), pz = Math.floor(p.z);
   let best = null, bestD = 2.6;
   for (let z = pz - 3; z <= pz + 3; z++) {
@@ -355,7 +375,7 @@ function pickTarget() {
   // under water the cursor points at the seabed, not the surface above it
   const hits = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z, !game.submerged), false);
   const def = ITEMS[game.held?.id];
-  const placing = def?.place || def?.vehicle || def?.floor;
+  const placing = def?.place || def?.vehicle || def?.floor || def?.roof;
   const peek = chunks.peek.value;
   const insidePeek = Math.hypot((mouse.x + 1) * peekSize.x / 2 - peek.x,
     (mouse.y + 1) * peekSize.y / 2 - peek.y) < peek.z * 0.45;
@@ -392,7 +412,8 @@ function pickTarget() {
 // The creature a swing would hit: the one under the cursor if it is close enough, else one right next to the player.
 function pickFoe() {
   let best = null, bestD = Infinity;
-  for (const e of game.enemies) {
+  const keeper = game.encounters.active;
+  for (const e of keeper ? [keeper, ...game.enemies] : game.enemies) {
     const fromPlayer = Math.hypot(e.x - p.x, e.z - p.z);
     if (fromPlayer > 2.8 || Math.abs(e.y - p.y) > 2.2) continue; // must be near in depth as well
     const fromCursor = target ? Math.hypot(e.x - target.px, e.z - target.pz) : Infinity;
@@ -408,12 +429,9 @@ function pickFoe() {
   for (const f of fish.list) {
     if (Math.hypot(f.x - p.x, f.y - p.y - 0.6, f.z - p.z) < 1.9) return { fish: f, x: f.x, z: f.z };
   }
-  // no creature in range: a deer under the cursor can be hunted
-  for (const d of deer.list) {
-    if (Math.hypot(d.x - p.x, d.z - p.z) > 2.8) continue;
-    if (target && Math.hypot(d.x - target.px, d.z - target.pz) < 1.3) return { deer: d, x: d.x, z: d.z };
-  }
-  return null;
+  // no creature in range: an animal under the cursor can be hunted
+  const animal = target && game.wildlife.near(target.px, target.pz, 1.3);
+  return animal ? { animal, x: animal.x, z: animal.z } : null;
 }
 
 function targetLabel() {
@@ -422,8 +440,9 @@ function targetLabel() {
   if (!obj) return '';
   if (obj.t !== 'soil') return OBJECTS[obj.t].name;
   if (obj.crop < 0) return obj.wet ? 'Soil (watered)' : 'Soil';
-  if (obj.crop === CROP_RIPE) return 'Wheat (ripe, click to harvest)';
-  return `Wheat sprout ${obj.crop + 1}/3 (${obj.wet ? 'watered' : 'needs water'})`;
+  const crop = cropFor(obj);
+  if (obj.crop >= crop.days) return crop.name + ' (ripe, click to harvest)';
+  return `${crop.name} sprout ${obj.crop}/${crop.days} (${obj.wet ? 'watered' : 'needs water'})`;
 }
 
 const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 0x9a9fa6, soil: 0xe9c545, stick: 0x8a5a34 };
@@ -455,7 +474,7 @@ scene.add(ghost);
 
 function updateGhost() {
   const def = game.held ? ITEMS[game.held.id] : null;
-  const what = def?.floor ? game.held.id : def?.place ?? def?.vehicle;
+  const what = (def?.floor || def?.roof) ? game.held.id : def?.place ?? def?.vehicle;
   ghost.visible = !!what && !!target && !panels.open;
   if (!ghost.visible) return;
   const key = GHOST_MODEL[what] ?? what;
@@ -473,7 +492,7 @@ function updateGhost() {
   ghost.material.color.setHex(ok ? 0xffffff : 0xff4a4a);
   ghost.material.opacity = ok ? 0.7 : 0.55;
   const tile = game.gen.tile(target.x, target.z);
-  const y = def.vehicle && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + 0.02;
+  const y = def.roof ? tile.h + 1.55 : def.vehicle && !VEHICLES[what].land && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + 0.02;
   const isWall = (x, z) => !!OBJECTS[game.world.get(x, z)?.t]?.block;
   if (what !== 'door') {
     ghost.position.set(target.x + 0.5, y, target.z + 0.5);
@@ -488,6 +507,39 @@ function updateGhost() {
   }
 }
 
+const controllers = installControllers(canvas, {
+  aim: (x, y) => mouse.set(2 * x / innerWidth - 1, 1 - 2 * y / innerHeight),
+  nudgeAim: (x, y) => mouse.set(Math.max(-1, Math.min(1, mouse.x + x)), Math.max(-1, Math.min(1, mouse.y - y))),
+  orbit: (yaw, pitch) => {
+    yawGoal += yaw;
+    pitchGoal = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitchGoal + pitch));
+  },
+  zoom: delta => { distGoal = Math.max(12, Math.min(36, distGoal + delta)); },
+  command(action) {
+    if (action === 'back') {
+      if (bigmap.open) bigmap.hide();
+      else if (panels.open) panels.hide();
+      else setPaused(!paused);
+      return;
+    }
+    if (paused || panels.open || bigmap.open) return;
+    if (action === 'strike') clicked = true;
+    else if (action === 'secondary') secondaryAction();
+    else if (action === 'inventory') panels.show();
+    else if (action === 'interact') interact();
+    else if (action === 'map') bigmap.toggle();
+    else if (action === 'eat') game.eatFood();
+    else if (action === 'drink') game.drinkWater();
+    else if (action === 'next' || action === 'previous') game.selected = (game.selected + (action === 'next' ? 1 : 8)) % 9;
+    hud.refresh();
+  },
+});
+$('close-pack').addEventListener('click', () => panels.hide());
+$('map-close').addEventListener('click', () => bigmap.hide());
+for (const [id, delta] of [['map-in', -1], ['map-out', 1]]) {
+  $(id).addEventListener('click', () => bigmap.root.dispatchEvent(new WheelEvent('wheel', { deltaY: delta })));
+}
+
 // ---------- main loop ----------
 const camTarget = new THREE.Vector3(p.x, playerY, p.z);
 const lookAt = new THREE.Vector3();
@@ -500,12 +552,13 @@ let haze = null; // snow or ash thick enough to close the view in
 let stepTimer = 0, wasWinded = false, bubbleTimer = 0;
 let wornKey = null; // armor currently shown on the character
 
-chunks.update(p.x, p.z, 999);
+chunks.update(p.x, p.z, 9);
 
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  controllers.poll(dt, paused ? menu : bigmap.open ? bigmap.root : panels.open ? panels.root : null);
   if (!paused) step(dt);
   renderer.render(scene, camera);
 }
@@ -519,8 +572,10 @@ function step(dt) {
     dx = (keys.has(K.right) || keys.has('ArrowRight') ? 1 : 0) - (keys.has(K.left) || keys.has('ArrowLeft') ? 1 : 0);
     dz = (keys.has(K.down) || keys.has('ArrowDown') ? 1 : 0) - (keys.has(K.up) || keys.has('ArrowUp') ? 1 : 0);
   }
+  dx += controllers.state.x;
+  dz += controllers.state.y;
   const moving = dx !== 0 || dz !== 0;
-  const sprinting = moving && keys.has(K.sprint) && game.canSprint;
+  const sprinting = moving && (keys.has(K.sprint) || controllers.state.sprint) && game.canSprint;
   const swimming = game.swimming;
   const riding = game.vehicle;
   playerModel.gliding = game.gliding;
@@ -535,14 +590,14 @@ function step(dt) {
   }
   if (moving) {
     // Movement is relative to where the camera is looking.
-    const len = Math.hypot(dx, dz), c = Math.cos(camYaw), s = Math.sin(camYaw);
+    const len = Math.max(1, Math.hypot(dx, dz)), c = Math.cos(camYaw), s = Math.sin(camYaw);
     const mx = (dx * c + dz * s) / len, mz = (-dx * s + dz * c) / len;
     game.move(mx * speed * dt, mz * speed * dt);
     if (playerModel.swing <= 0) playerModel.facing = Math.atan2(mx, mz);
   }
   const wasGrounded = p.vy === 0;
   // in deep water the jump key swims up and the sprint key dives
-  game.physics(dt, !panels.open && keys.has(K.jump), !panels.open && keys.has(K.sprint));
+  game.physics(dt, !panels.open && (keys.has(K.jump) || controllers.state.jump), !panels.open && (keys.has(K.sprint) || controllers.state.sprint));
   const submerged = game.underwater; // diving, or below the surface in a submarine
   // on a boat you stand on deck facing the way it sails; inside a submarine you are out of sight
   playerModel.group.visible = !(riding && riding.kind === 'submarine');
@@ -628,7 +683,7 @@ function step(dt) {
   }
   updateGhost();
   swingCooldown -= dt;
-  const wantUse = (lmb || clicked) && !panels.open;
+  const wantUse = (lmb || clicked || controllers.state.strike) && !panels.open && !bigmap.open;
   if (swingCooldown <= 0) clicked = false;
   // a vehicle under the cursor is picked back up with a click (not while riding it)
   if (wantUse && swingCooldown <= 0 && !riding && target) {
@@ -651,16 +706,9 @@ function step(dt) {
       game.emit('swing', { x: foe.x - 0.5, z: foe.z - 0.5 });
       particles.burst(foe.x, foe.fish.y, foe.z, 0xf2a03d, 6);
       sfx('hit');
-    } else if (foe.deer) {
-      // hunting: the deer bolts when hit and drops meat and hide when it falls
-      if (deer.hit(foe.deer, game.attackPower, p.x, p.z)) {
-        game.give('raw_meat', 1 + Math.floor(Math.random() * 2));
-        game.give('hide', 1);
-      }
-      game.wearTool();
-      game.emit('swing', { x: foe.x - 0.5, z: foe.z - 0.5 });
-      game.emit('hit', { x: Math.floor(foe.x), z: Math.floor(foe.z) });
-    } else game.attack(foe);
+    } else if (foe.animal) game.wildlife.hit(foe.animal); // it bolts when hit and leaves its drops when it falls
+    else if (foe === game.encounters.active) game.encounters.strike(game, foe);
+    else game.attack(foe);
   } else if (wantUse && target?.reach && swingCooldown <= 0 && !riding) {
     swingCooldown = 0.32;
     const obj = game.world.get(target.x, target.z);
@@ -679,8 +727,9 @@ function step(dt) {
   torch.intensity = lamp ? 12 : lit ? (game.isNight ? 9 : 2) * (1 + Math.sin(clock * 12) * 0.06) : 0;
   setNight(game.isNight);
   particles.update(dt);
-  deer.update(dt, p.x, p.z);
+  animals.update(dt, clock);
   enemies.update(dt, clock);
+  keeperView.update(clock);
   fish.update(dt, p.x, p.y, p.z);
   vehicles.update(clock);
   bigmap.update();

@@ -3,8 +3,7 @@ import { toGeometry } from './chunks.js';
 
 const SIZE = 112; // pixels per icon
 
-// Photographs every item model once, from a three-quarter view, into a small transparent picture.
-// -> Map of item id -> data URL
+// Photograph each sculpture when its icon first appears. Inventory and crafting share the cache.
 export function renderItemIcons(itemModels) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setSize(SIZE, SIZE);
@@ -20,8 +19,9 @@ export function renderItemIcons(itemModels) {
   const icons = new Map();
   const box = new THREE.Box3(), centre = new THREE.Vector3(), size = new THREE.Vector3();
 
-  for (const [id, model] of itemModels) {
-    if (!model) continue;
+  return (id) => {
+    if (icons.has(id)) return icons.get(id);
+    const model = itemModels.get(id);
     const mesh = new THREE.Mesh(toGeometry(model), material);
     mesh.geometry.computeBoundingBox();
     box.copy(mesh.geometry.boundingBox);
@@ -45,9 +45,6 @@ export function renderItemIcons(itemModels) {
     icons.set(id, renderer.domElement.toDataURL('image/png'));
     scene.remove(pivot);
     mesh.geometry.dispose();
-  }
-  material.dispose();
-  renderer.dispose();
-  renderer.forceContextLoss();
-  return icons;
+    return icons.get(id);
+  };
 }

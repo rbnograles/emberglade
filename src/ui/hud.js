@@ -2,7 +2,7 @@ import { ITEMS, FLASK_DRINKS } from '../game/items.js';
 import { GOALS } from '../game/goals.js';
 import { BIOMES } from '../world/biomes.js';
 import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
-import { iconURL, isPixelIcon } from './icons.js';
+import { iconURL } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -25,7 +25,7 @@ export function renderSlot(el, slot) {
   if (!slot) return;
   const img = document.createElement('img');
   img.src = iconURL(slot.id);
-  img.classList.toggle('px', isPixelIcon(slot.id));
+
   img.draggable = false;
   el.append(img);
   const uses = ITEMS[slot.id].uses;

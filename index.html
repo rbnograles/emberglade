@@ -12,6 +12,7 @@
     <div id="hud">
       <div id="topleft">
         <div id="biome"></div>
+        <div id="keeper-hud" hidden></div>
         <div id="goal">
           <div id="goal-title"></div>
           <div id="goal-text"></div>
@@ -40,9 +41,19 @@
       </div>
     </div>
 
+    <div id="touch-controls" aria-label="Touch controls">
+      <div id="walk-stick" aria-label="Movement stick"><i></i></div>
+      <div class="touch-tools">
+        <button data-action="inventory">Pack</button><button data-action="interact">Use</button>
+        <button data-action="jump">Jump ↑</button><button data-action="sprint">Run ↓</button>
+        <button data-action="secondary">Place</button><button data-action="strike">Tool</button>
+      </div>
+      <div class="touch-needs"><button data-action="eat">Eat</button><button data-action="drink">Drink</button></div>
+    </div>
+    <button id="close-pack" class="touch-close">Close pack</button>
     <div id="panel" class="hidden"></div>
     <div id="cursor" class="slot hidden"></div>
-    <div id="bigmap" class="hidden"><div class="frame"><canvas></canvas><div class="info"></div></div></div>
+    <div id="bigmap" class="hidden"><div class="frame"><canvas></canvas><div class="map-actions"><button id="map-in" aria-label="Zoom in">+</button><button id="map-out" aria-label="Zoom out">−</button><button id="map-close">Close map</button></div><div class="info"></div></div></div>
     <div id="fade"></div>
     <div id="hurt"></div>
     <div id="underwater"></div>
@@ -101,6 +112,11 @@
               <li>With a glider held: jump from a height and hold <kbd>Space</kbd></li>
               <li><kbd>Esc</kbd> pause</li>
             </ul>
+            <h3>Touch</h3>
+            <p>Move with the thumbstick. Tap terrain to aim, then hold Tool or tap Place. Drag with two fingers to turn, or pinch to zoom. Run dives and Jump surfaces.</p>
+            <h3>Gamepad</h3>
+            <p>Left stick moves, right stick aims. Hold the right stick button to orbit. RT uses tools, B places, X interacts, A jumps and LT sprints or dives. Bumpers select a slot. Y opens your pack, View opens the map and Start pauses. D-pad up eats and down drinks.</p>
+            <p>In menus, D-pad up and down move focus. Left and right adjust settings. A selects and B returns.</p>
             <p class="lead">Keys can be changed under Settings.</p>
           </section>
         </main>

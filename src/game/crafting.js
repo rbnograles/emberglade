@@ -1,10 +1,17 @@
 // Grid crafting. The grid is always 3x3 cells (row-major); by hand only the top-left 2x2 is usable.
 // pattern: rows of legend characters, '.' = empty. Shaped recipes may sit anywhere in the grid and may be mirrored.
 // shapeless: list of items, any arrangement. station: null, 'workbench' or 'campfire' (must be standing near one).
+import { KEEPERS, carvingId } from './keepers.js';
+
 export const GRID = 3;
 const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber', K: 'coal', H: 'hide', I: 'iron_bar', P: 'pearl', X: 'crystal', O: 'coral' };
 
 export const RECIPES = [
+  ...KEEPERS.map(k => ({ out: carvingId(k), n: 1, station: 'workbench', keeper: k.id, shapeless: ['stone', 'wood', 'wood', k.medium] })),
+  { out: 'fiber', n: 4, shapeless: ['fleece'], station: null },
+  { out: 'omelet', n: 1, shapeless: ['egg', 'egg'], station: 'campfire' },
+  { out: 'rime_pack', n: 1, shapeless: ['trail_pack', 'fleece', 'rimeglass', 'rimeglass'], station: 'workbench' },
+  { out: 'ember_pike', n: 1, shapeless: ['iron_bar', 'emberglass', 'emberglass', 'stick'], station: 'workbench' },
   { out: 'stick', n: 2, shapeless: ['wood'], station: null },
   { out: 'stone_axe', n: 1, pattern: ['##', '#|'], station: null },
   { out: 'stone_pickaxe', n: 1, pattern: ['##', '||'], station: null },
@@ -43,8 +50,27 @@ export const RECIPES = [
   { out: 'glider', n: 1, pattern: ['FFF', '|H|'], station: 'workbench' },
   { out: 'lantern', n: 1, pattern: ['I', 'X', 'I'], station: 'workbench' },
   { out: 'coral_wall', n: 4, pattern: ['OO', 'OO'], station: 'workbench' },
-  { out: 'boat', n: 1, pattern: ['W.W', 'WWW'], station: 'workbench' },
-  { out: 'submarine', n: 1, pattern: ['III', 'IPI', 'CCC'], station: 'workbench' },
+  { out: 'stairs', n: 1, shapeless: ['wood', 'wood', 'stick'], station: 'workbench' },
+  { out: 'window', n: 1, shapeless: ['stick', 'stick', 'stick', 'wood'], station: 'workbench' },
+  { out: 'brick_wall', n: 4, shapeless: ['stone', 'stone', 'coal', 'stone', 'stone'], station: 'workbench' },
+  { out: 'brick_floor', n: 4, shapeless: ['stone', 'coal', 'stone'], station: 'workbench' },
+  { out: 'table', n: 1, shapeless: ['wood', 'wood', 'stick', 'stick'], station: 'workbench' },
+  { out: 'chair', n: 1, shapeless: ['wood', 'stick', 'stick'], station: 'workbench' },
+  { out: 'shelf', n: 1, shapeless: ['wood', 'wood', 'wood', 'stick', 'stick'], station: 'workbench' },
+  { out: 'cabinet', n: 1, shapeless: ['chest', 'wood', 'stick'], station: 'workbench' },
+  { out: 'lamp', n: 1, shapeless: ['torch', 'copper_bar', 'stick'], station: 'workbench' },
+  { out: 'planter', n: 1, shapeless: ['wood', 'flower', 'flower'], station: 'workbench' },
+  { out: 'gate', n: 1, shapeless: ['fence', 'stick'], station: 'workbench' },
+  { out: 'roof', n: 4, shapeless: ['wood', 'fiber', 'fiber'], station: 'workbench' },
+  { out: 'irrigator', n: 1, shapeless: ['watering_can', 'stone', 'stone', 'copper_bar'], station: 'workbench' },
+  { out: 'hull', n: 1, shapeless: ['wood', 'wood', 'wood', 'wood', 'wood'], station: 'workbench' },
+  { out: 'oar', n: 1, shapeless: ['wood', 'fiber', 'stick'], station: 'workbench' },
+  { out: 'pressure_hull', n: 1, shapeless: ['iron_bar', 'iron_bar', 'iron_bar', 'iron_bar', 'iron_bar', 'pearl'], station: 'workbench' },
+  { out: 'propeller', n: 1, shapeless: ['copper_bar', 'copper_bar', 'copper_bar'], station: 'workbench' },
+  { out: 'axle', n: 1, shapeless: ['wood', 'wood', 'iron_bar'], station: 'workbench' },
+  { out: 'trail_cart', n: 1, shapeless: ['hull', 'axle', 'axle'], station: 'workbench' },
+  { out: 'boat', n: 1, shapeless: ['hull', 'oar'], station: 'workbench' },
+  { out: 'submarine', n: 1, shapeless: ['pressure_hull', 'propeller'], station: 'workbench' },
   { out: 'iron_axe', n: 1, pattern: ['II', 'I|', '.|'], station: 'workbench' },
   { out: 'iron_pickaxe', n: 1, pattern: ['III', '.|.', '.|.'], station: 'workbench' },
   { out: 'iron_sword', n: 1, pattern: ['I', 'I', '|'], station: 'workbench' },

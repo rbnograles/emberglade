@@ -1,8 +1,11 @@
+import { Encounters } from './encounters.js';
 import { DIFFICULTIES } from './survival.js';
+import { Wildlife } from './wildlife.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
 import { WorldState } from '../world/worldstate.js';
-import { OBJECTS, CROP_RIPE } from '../world/objects.js';
+import { cropFor } from '../world/crops.js';
+import { OBJECTS } from '../world/objects.js';
 import { ITEMS, stackSize, ARMOR_SLOTS, MAX_DEFENSE, BASE_STORAGE, FLASK_DRINKS } from './items.js';
 import { Inventory } from './inventory.js';
 import { matchRecipe, ingredients, layout, GRID } from './crafting.js';
@@ -24,6 +27,7 @@ const BANK_LIP = 1.45; // bank height you can climb out of the water onto
 const DIVE_SPEED = 2.6, RISE_SPEED = 3, BUOYANCY = 0.7; // vertical speeds under water
 // float: hull height relative to the water surface. seat: where the rider sits relative to the hull.
 export const VEHICLES = {
+  trail_cart: { speed: 8, land: true, seat: 0.45 },
   boat: { speed: 6.2, dive: false, float: -0.2, seat: 0.25 },
   submarine: { speed: 5, dive: true, float: -0.75, seat: 0 },
 };
@@ -34,6 +38,8 @@ const SWIM_SECONDS = 30; // seconds of swimming on full energy before you start 
 const DROWN_SECONDS = 1.6; // seconds per heart lost once out of energy in deep water
 // brutes are bigger, slower and hit harder; they start turning up from day 4
 export const ENEMY_KINDS = {
+  frostprowler: { hp: 12, speed: 3.2, damage: 1.5, size: 1.1, mountain: true, loot: 'rimeglass' },
+  kilncrab: { hp: 16, speed: 1.8, damage: 2, size: 1.15, mountain: true, ranged: true, loot: 'emberglass' },
   gloomling: { hp: 6, speed: 2.5, damage: 1.5, size: 1 },
   brute: { hp: 14, speed: 1.9, damage: 2.5, size: 1.6 },
   // sea: lives in deep water at any hour and hunts swimmers
@@ -49,6 +55,10 @@ const COLD_HUNGER = 1; // extra hunger drain when cold with no armor (x2 in tota
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
+export function needsRelocation(save) {
+  return !!save?.player && save.gen !== GEN_VERSION;
+}
+
 // All game rules and state. No rendering: the view listens to events.
 // Events: toast{text}, hit{x,z}, swing, inv, goal, newday, faint, open{what,x,z}
 export class Game {
@@ -56,7 +66,7 @@ export class Game {
     this.seed = save?.seed ?? ((Math.random() * 2 ** 31) | 0);
     this.difficulty = Object.hasOwn(DIFFICULTIES, save?.difficulty) ? save.difficulty : 'standard';
     this.gen = new Worldgen(this.seed);
-    this.world = new WorldState(this.gen, save?.world, save?.floors);
+    this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs);
     this.armor = new Inventory(ARMOR_SLOTS.length, save?.armor); // worn items: head, body, feet
     this.status = 'ok'; // 'ok' | 'cold' | 'warm' | 'sheltered'
     this.statusTimer = 0;
@@ -73,6 +83,7 @@ export class Game {
     this.craftGrid = new Inventory(GRID * GRID, save?.craft);
     this.cursor = null; // stack being carried by the mouse in the inventory panel
     this.goals = new Goals(save?.goals);
+    this.encounters = new Encounters(save?.encounters);
     this.day = save?.day ?? 1;
     this.time = save?.time ?? 0.08; // 0 = 6:00, 0.25 = noon, 0.5 = 18:00
     this.selected = save?.selected ?? 0;
@@ -85,7 +96,7 @@ export class Game {
     }
     // A world saved under an older shape of the land may now have its player out at sea or inside a
     // mountain. Wake them at a fresh start instead; their inventory and progress come along.
-    this.relocated = !!save?.player && save.gen !== GEN_VERSION;
+    this.relocated = needsRelocation(save);
     if (this.relocated) {
       const p = this.player;
       p.spawn = this.pickSpawn();
@@ -107,6 +118,7 @@ export class Game {
     });
     this.damage = new Map();
     this.listeners = [];
+    this.wildlife = new Wildlife(this, this.relocated ? [] : save?.livestock);
   }
 
   // A friendly place to begin: gentle lowland with trees close by and fresh water not far off.
@@ -155,8 +167,9 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
-      armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(),
+      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs),
+      livestock: this.wildlife.list.filter(a => a.tame),
+      armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
   }
@@ -176,6 +189,10 @@ export class Game {
 
   launchProblem(kind, tx, tz) {
     const tile = this.gen.tile(tx, tz);
+    if (VEHICLES[kind].land) {
+      return !tile.water && !tile.lava && this.inReach(tx, tz) && !this.blocked(tx + 0.5, tz + 0.5)
+        ? null : 'Park the cart on clear ground nearby';
+    }
     if (!tile.water || Math.hypot(tx + 0.5 - this.player.x, tz + 0.5 - this.player.z) > REACH + 0.5) {
       return 'Aim at water close to you to launch it';
     }
@@ -192,7 +209,7 @@ export class Game {
       return false;
     }
     this.inv.removeAt(this.selected, 1);
-    this.vehicles.push({ id: this.nextVehicleId++, kind, x: tx + 0.5, z: tz + 0.5, y: WATER_Y + VEHICLES[kind].float, dir: 0 });
+    this.vehicles.push({ id: this.nextVehicleId++, kind, x: tx + 0.5, z: tz + 0.5, y: VEHICLES[kind].land ? this.ground(tx, tz) : WATER_Y + VEHICLES[kind].float, dir: 0 });
     this.toast(`${ITEMS[held.id].name} launched. Press F next to it to get ${kind === 'boat' ? 'on' : 'in'}`);
     this.record('place:' + kind);
     this.emit('inv');
@@ -280,7 +297,7 @@ export class Game {
         const obj = this.world.get(tx, tz);
         if (!obj) continue;
         const od = OBJECTS[obj.t];
-        if (od.block || (animal && od.door)) {
+        if (od.block || (obj.t === 'gate' && !obj.open) || (animal && (od.door || obj.t === 'fence'))) {
           const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
           if (Math.hypot(x - nx, z - nz) < r) return true;
         } else if (od.solid && Math.hypot(x - tx - 0.5, z - tz - 0.5) < r + od.solid) return true;
@@ -300,7 +317,10 @@ export class Game {
   // Height the player's feet rest at: the ground, the bed of shallow water, or afloat in deep water.
   standY(x, z) {
     const t = this.gen.tile(Math.floor(x), Math.floor(z));
-    if (!t.water) return t.h;
+    if (!t.water) {
+      if (this.world.get(Math.floor(x), Math.floor(z))?.t === 'stairs') return t.h + Math.floor((x - Math.floor(x)) * 4 + 1) * 0.25;
+      return t.h;
+    }
     return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
   }
 
@@ -323,7 +343,11 @@ export class Game {
     const v = this.vehicle;
     if (v) {
       // a boat goes anywhere there is water; a submarine needs room to dive
-      const ok = (x, z) => (VEHICLES[v.kind].dive ? this.deepAt(x, z) : this.gen.tile(Math.floor(x), Math.floor(z)).water);
+      const ok = (x, z) => {
+        const tile = this.gen.tile(Math.floor(x), Math.floor(z));
+        if (VEHICLES[v.kind].land) return !tile.water && !tile.lava && !this.blocked(x, z) && tile.h <= v.y + 0.55;
+        return VEHICLES[v.kind].dive ? this.deepAt(x, z) : tile.water;
+      };
       if (ok(p.x + dx, p.z)) p.x += dx;
       if (ok(p.x, p.z + dz)) p.z += dz;
       if (dx || dz) v.dir = Math.atan2(-dz, dx);
@@ -348,7 +372,7 @@ export class Game {
         const bed = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).bed ?? WATER_Y;
         const rate = dive ? -DIVE_SPEED : jump ? RISE_SPEED : 0;
         v.y = Math.min(WATER_Y + spec.float, Math.max(bed + 0.3, v.y + rate * dt));
-      } else v.y = WATER_Y + spec.float;
+      } else v.y = spec.land ? this.ground(p.x, p.z) : WATER_Y + spec.float;
       v.x = p.x;
       v.z = p.z;
       p.y = v.y + spec.seat;
@@ -408,6 +432,7 @@ export class Game {
     }
     if (left > 0) this.toast('Inventory full');
     this.emit('inv');
+    return got;
   }
 
   giveDrops(drops) {
@@ -416,7 +441,17 @@ export class Game {
   }
 
   record(key, n = 1) {
-    if (this.goals.record(key, n)) {
+    const previous = this.goals.index;
+    this.goals.record(key, n);
+    // Discoveries and victories can happen before the guide reaches that chapter.
+    while (this.goals.current?.milestone) {
+      const goal = this.goals.current;
+      const count = goal.milestone === 'keeper:restore' ? this.encounters.restored.size :
+        goal.milestone === 'keeper:found' ? this.encounters.discovered.size : Number(this.encounters.visits.has(goal.milestone));
+      this.goals.progress[goal.milestone] = Math.min(count, goal.need[goal.milestone]);
+      if (!this.goals.record(goal.milestone, 0)) break;
+    }
+    if (this.goals.index !== previous) {
       this.toast(this.goals.current ? 'Goal complete!' : 'All goals complete. Enjoy your homestead!');
     }
     this.emit('goal');
@@ -425,7 +460,8 @@ export class Game {
 
   // ---- crafting grid and the stack held on the cursor ----
   craftResult() {
-    return matchRecipe(this.craftGrid.slots.map((s) => s?.id ?? null), this.stationsNear());
+    const recipe = matchRecipe(this.craftGrid.slots.map((s) => s?.id ?? null), this.stationsNear());
+    return recipe && this.knowsRecipe(recipe) ? recipe : null;
   }
 
   consumeGrid(recipe) {
@@ -573,7 +609,10 @@ export class Game {
   }
 
   // Can this recipe be made right now (station nearby and ingredients in the inventory)?
+  knowsRecipe(recipe) { return !recipe.keeper || this.encounters.restored.has(recipe.keeper); }
+
   canMake(recipe, stations = this.stationsNear()) {
+    if (!this.knowsRecipe(recipe)) return false;
     if (recipe.station && !stations.has(recipe.station)) return false;
     return Object.entries(ingredients(recipe)).every(([id, n]) => this.inv.has(id, n));
   }
@@ -581,6 +620,7 @@ export class Game {
   // Recipe book shortcut: lay the recipe's ingredients out in the grid if the inventory has them.
   // quiet: no messages when it cannot be done.
   fillRecipe(recipe, quiet = false) {
+    if (!this.knowsRecipe(recipe)) return false;
     this.clearGrid();
     if (recipe.station && !this.stationsNear().has(recipe.station)) {
       if (!quiet) this.toast(`Stand near a ${recipe.station} to make this`);
@@ -811,6 +851,12 @@ export class Game {
     const tile = this.gen.tile(tx, tz);
     this.emit('swing', { x: tx, z: tz });
 
+    const roof = this.world.getRoof(tx, tz);
+    if (roof && (def?.roof || (!obj && !def))) {
+      this.world.setRoof(tx, tz, null);
+      this.give(roof, 1);
+      return;
+    }
     if (!obj) {
       const floor = this.world.getFloor(tx, tz);
       if (floor) {
@@ -831,11 +877,12 @@ export class Game {
 
     const od = OBJECTS[obj.t];
     if (obj.t === 'soil') {
-      if (obj.crop === CROP_RIPE) {
+      const species = obj.species ?? 'wheat';
+      if (obj.crop >= cropFor(obj).days) {
         this.world.set(tx, tz, { ...obj, crop: -1 });
         this.emit('hit', { x: tx, z: tz });
-        this.give('wheat', rand(1, 2));
-        this.give('seeds', rand(1, 2));
+        this.give(species, rand(1, 2));
+        this.give(cropFor(obj).seed, rand(1, 2));
       } else if (obj.crop >= 0) this.toast('Not ready yet');
       else if (def?.tool === 'hoe') this.world.remove(tx, tz);
       return;
@@ -863,7 +910,7 @@ export class Game {
       power = def.power;
       this.wearTool();
     }
-    if ((obj.t === 'chest' || obj.t === 'lostbag') && obj.items.some(Boolean)) {
+    if ((obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') && obj.items.some(Boolean)) {
       this.toast(obj.t === 'chest' ? 'Empty the chest first' : 'Open it with F and take your things first');
       return;
     }
@@ -899,9 +946,10 @@ export class Game {
   canPlace(tx, tz) {
     const def = this.held ? ITEMS[this.held.id] : null;
     if (def?.vehicle) return !this.launchProblem(def.vehicle, tx, tz);
-    if (!def || (!def.place && !def.floor) || !this.inReach(tx, tz)) return false;
+    if (!def || (!def.place && !def.floor && !def.roof) || !this.inReach(tx, tz)) return false;
     const obj = this.world.get(tx, tz);
     if (this.gen.tile(tx, tz).water || this.gen.tile(tx, tz).lava) return false;
+    if (def.roof) return !this.world.getRoof(tx, tz) && (!obj || obj.placed);
     if (def.floor) return !this.world.getFloor(tx, tz) && !(obj && !obj.placed) && obj?.t !== 'soil';
     const p = this.player;
     return !obj && !(tx === Math.floor(p.x) && tz === Math.floor(p.z));
@@ -913,6 +961,7 @@ export class Game {
     const def = held ? ITEMS[held.id] : null;
     const p = this.player;
 
+    if (hasTarget && held?.id === 'wheat' && this.wildlife.handle(this.wildlife.near(tx + 0.5, tz + 0.5))) return;
     if (def?.food) return void this.eatHeld();
     if (def?.armor) return void this.wear(this.selected);
     if (def?.flask) return void this.drinkWater();
@@ -939,15 +988,22 @@ export class Game {
       return;
     }
 
-    if (held?.id === 'seeds' && obj?.t === 'soil') {
+    if (def?.plant && obj?.t === 'soil') {
       if (obj.crop >= 0) return;
       this.inv.removeAt(this.selected, 1);
-      this.world.set(tx, tz, { ...obj, crop: 0 });
+      this.world.set(tx, tz, { ...obj, crop: 0, species: def.plant });
       this.record('plant');
       this.emit('inv');
       return;
     }
 
+    if (def?.roof) {
+      if (!this.canPlace(tx, tz)) return;
+      this.world.setRoof(tx, tz, held.id);
+      this.inv.removeAt(this.selected, 1);
+      this.emit('inv');
+      return;
+    }
     if (def?.floor) {
       if (!this.canPlace(tx, tz)) return;
       this.inv.removeAt(this.selected, 1);
@@ -960,7 +1016,7 @@ export class Game {
     if (def?.place && !obj) {
       if (!this.canPlace(tx, tz)) return;
       const placed = { t: def.place, placed: true };
-      if (def.place === 'chest') placed.items = Array(CHEST_SLOTS).fill(null);
+      if (def.place === 'chest' || def.place === 'cabinet') placed.items = Array(CHEST_SLOTS).fill(null);
       if (def.place === 'flower') placed.v = (Math.random() * 4) | 0;
       if (def.place === 'bed') p.bed = { x: tx, z: tz };
       this.inv.removeAt(this.selected, 1);
@@ -978,10 +1034,18 @@ export class Game {
   interact(tx, tz) {
     const obj = this.world.get(tx, tz);
     if (!obj) return false;
-    if (obj.t === 'bed') {
+    if (OBJECTS[obj.t].cache) {
+      if (obj.claimedDay === this.day) { this.toast('Return after daybreak for more'); return true; }
+      if (this.give(OBJECTS[obj.t].cache, 2)) this.world.set(tx, tz, { ...obj, claimedDay: this.day });
+      return true;
+    }
+    if (obj.t === 'gate') {
+      if (obj.open && tx === Math.floor(this.player.x) && tz === Math.floor(this.player.z)) return false;
+      this.world.set(tx, tz, { ...obj, open: !obj.open });
+    } else if (obj.t === 'bed') {
       this.player.bed = { x: tx, z: tz };
       this.sleep();
-    } else if (obj.t === 'chest' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz });
+    } else if (obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz });
     else if (obj.t === 'campfire' || obj.t === 'workbench') this.emit('open', { what: 'craft' });
     else return false;
     return true;
@@ -1068,16 +1132,18 @@ export class Game {
         this.trySpawnSeaEnemy();
       }
     }
-    const golems = this.enemies.filter((e) => e.kind === 'golem').length;
+    const golems = this.enemies.filter((e) => ENEMY_KINDS[e.kind].mountain).length;
     const here = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).biome;
-    if ((here === 'mountain' || here === 'snow') && golems < 2) {
+    if (['mountain', 'snow', 'winter', 'ash', 'volcano'].includes(here) && golems < 2) {
       this.golemTimer -= dt;
       if (this.golemTimer <= 0) {
         this.golemTimer = 16;
         const a = Math.random() * Math.PI * 2, r = 12 + Math.random() * 6;
         const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-        const b = this.gen.tile(Math.floor(x), Math.floor(z)).biome;
-        if ((b === 'mountain' || b === 'snow') && this.enemyCanStand(x, z)) this.spawnEnemy(x, z, 'golem');
+        const tile = this.gen.tile(Math.floor(x), Math.floor(z));
+        const kind = tile.frost > 0 ? 'frostprowler' : tile.heat > 0 ? 'kilncrab' :
+          ['mountain', 'snow'].includes(tile.biome) ? 'golem' : null;
+        if (kind && !tile.lava && this.enemyCanStand(x, z)) this.spawnEnemy(x, z, kind);
       }
     }
     // the first night is quiet, to give a new player time to find their feet
@@ -1101,6 +1167,7 @@ export class Game {
         continue;
       }
       e.cool -= dt;
+      e.strike = Math.max(0, (e.strike ?? 0) - dt);
       let mx = 0, mz = 0;
       if (e.stun > 0) {
         // knocked back by a hit
@@ -1114,6 +1181,7 @@ export class Game {
         mz = (dz / d) * spec.speed * dir * dt;
         if (d < 9 && e.cool <= 0) {
           e.cool = 2.6;
+          e.strike = 0.35;
           this.projectiles.push({ x: e.x, z: e.z, y: e.y + 0.6, vx: (dx / d) * 6.5, vz: (dz / d) * 6.5, life: 2, damage: spec.damage });
           this.emit('spit', { x: e.x, z: e.z });
         }
@@ -1148,6 +1216,7 @@ export class Game {
       if (mx || mz) e.dir = Math.atan2(-mz, mx);
       if (hunting && !spec.ranged && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
+        e.strike = 0.35;
         this.hurt(ENEMY_KINDS[e.kind].damage, e);
       }
     }
@@ -1198,7 +1267,8 @@ export class Game {
     if (e.hp <= 0) {
       this.removeEnemy(e);
       this.record('kill');
-      if (e.kind === 'golem') {
+      if (ENEMY_KINDS[e.kind].loot) this.give(ENEMY_KINDS[e.kind].loot, 1);
+      else if (e.kind === 'golem') {
         this.give('stone', 3);
         this.give('iron_ore', 2);
         if (Math.random() < 0.5) this.give('crystal', 1);
@@ -1271,6 +1341,8 @@ export class Game {
         this.emit('hurt');
       }
     }
+    this.wildlife.tick(dt);
+    this.encounters.step(this, dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
     // breath: runs down with your head under water, comes back quickly at the surface

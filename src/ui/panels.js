@@ -3,7 +3,7 @@ import { RECIPES, ingredients } from '../game/crafting.js';
 import { Inventory } from '../game/inventory.js';
 import { HOTBAR } from '../game/game.js';
 import { renderSlot } from './hud.js';
-import { iconURL, isPixelIcon } from './icons.js';
+import { iconURL } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -16,7 +16,7 @@ const range = (n, from = 0) => Array.from({ length: n }, (_, i) => i + from);
 const icon = (id, cls = '') => {
   const img = el('img', cls);
   img.src = iconURL(id);
-  img.classList.toggle('px', isPixelIcon(id));
+
   img.draggable = false;
   return img;
 };
@@ -25,7 +25,7 @@ const icon = (id, cls = '') => {
 const categoryOf = (r) => {
   const def = ITEMS[r.out];
   if (def.armor) return 'wear';
-  if (def.place || def.floor) return 'build';
+  if (def.place || def.floor || def.roof) return 'build';
   if (def.tool || def.weapon || def.flask || def.vehicle || def.glide || def.light) return 'tools';
   if (def.food) return 'food';
   return 'materials';
@@ -55,7 +55,7 @@ export class Panels {
 
   show(chestPos = null) {
     const obj = chestPos && this.game.world.get(chestPos.x, chestPos.z);
-    this.chest = obj?.t === 'chest' || obj?.t === 'lostbag' ? new Inventory(0, obj.items) : null;
+    this.chest = obj?.t === 'chest' || obj?.t === 'cabinet' || obj?.t === 'lostbag' ? new Inventory(0, obj.items) : null;
     this.root.classList.remove('hidden');
     this.render();
   }
@@ -214,7 +214,7 @@ export class Panels {
     card.append(only);
 
     const ready = new Map(RECIPES.map((r) => [r, game.canMake(r, stations)]));
-    const shown = RECIPES.filter((r) => (this.tab === 'all' || categoryOf(r) === this.tab) && (!this.onlyReady || ready.get(r)));
+    const shown = RECIPES.filter((r) => game.knowsRecipe(r) && (this.tab === 'all' || categoryOf(r) === this.tab) && (!this.onlyReady || ready.get(r)));
     shown.sort((a, b) => ready.get(b) - ready.get(a)); // what you can make comes first
     const list = el('div', 'list');
     if (shown.length) for (const r of shown) list.append(this.recipeRow(r, stations));
