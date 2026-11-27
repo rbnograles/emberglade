@@ -9,7 +9,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 ## Features
 
 - **Infinite seeded world** with oceans, mountain ranges with snowy peaks, ponds, and five lowland biomes (Green Meadow, Autumn Woods, Blossom Grove, Pine Forest, Sandy Flats). Everything is generated as you walk and nature regrows over time.
-- **Water:** wade through ponds and shallows and swim in deep water, which drains your energy. Sea water is too salty to drink.
+- **Water:** wade through ponds and shallows and swim in deep water, which drains your energy. Dive under the surface on a limited breath of air. Sea water is too salty to drink.
 - **Gathering and tools:** pick sticks, stones, flowers, fiber and berries by hand; chop trees with an axe; mine stone, coal and copper with a pickaxe.
 - **Grid crafting:** a 2×2 grid by hand and 3×3 at a workbench, with a recipe book that shows every pattern. Campfires smelt copper and cook food.
 - **Farming:** till soil, plant seeds, water them and harvest wheat to bake bread.
@@ -30,8 +30,8 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 | Input | Action |
 | --- | --- |
 | `W` `A` `S` `D` | Move (relative to the camera) |
-| `Shift` | Sprint (uses energy) |
-| `Space` | Jump up ledges |
+| `Shift` | Sprint (uses energy); in deep water, dive |
+| `Space` | Jump up ledges; under water, swim up |
 | Left click | Use tool, pick, harvest, attack |
 | Right click | Place, plant, water, wear |
 | Right-drag, `Q` / `E` | Turn and tilt the camera; tilt low to look at the sky |

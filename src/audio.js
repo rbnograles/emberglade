@@ -75,6 +75,7 @@ const SFX = {
   break: () => { noise(0.18, 0.5, 1800, 'highpass'); tone(200, 0.2, 'square', 0.12, -120); },
   goal: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.2, 'triangle', 0.22, 0, i * 0.09)),
   ui: () => tone(880, 0.035, 'square', 0.07),
+  splash: () => { noise(0.3, 0.4, 900, 'bandpass'); tone(180, 0.25, 'sine', 0.15, -90); },
   winded: () => noise(0.4, 0.2, 500, 'bandpass'),
   morning: () => [392, 494, 587].forEach((f, i) => tone(f, 0.5, 'sine', 0.18, 0, i * 0.18)),
 };

@@ -190,13 +190,17 @@ export class Chunks {
   }
 
   // Meshes of the 3x3 chunks around a position, for cursor picking.
-  nearMeshes(px, pz) {
+  // withWater: include the water surface (leave it out to point through it at the bed)
+  nearMeshes(px, pz, withWater = true) {
     const ccx = Math.floor(px / CHUNK), ccz = Math.floor(pz / CHUNK);
     const out = [];
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         const c = this.map.get(ccx + dx + ',' + (ccz + dz));
-        if (c) out.push(c.terrain, c.water, c.objects);
+        if (c) {
+          out.push(c.terrain, c.objects);
+          if (withWater) out.push(c.water);
+        }
       }
     }
     return out;

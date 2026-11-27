@@ -17,6 +17,10 @@ const JUMP_SPEED = 6.2; // about 0.95 units high: clears a 0.5 step comfortably
 const GRAVITY = 20;
 const FLOAT_SINK = 0.95; // how far below the surface a swimmer's feet hang
 const BANK_LIP = 1.45; // bank height you can climb out of the water onto
+const DIVE_SPEED = 2.6, RISE_SPEED = 3, BUOYANCY = 0.7; // vertical speeds under water
+export const MAX_BREATH = 10;
+const BREATH_SECONDS = 26; // seconds of air on a full breath
+const SUFFOCATE_SECONDS = 1.2; // seconds per heart lost once the air is gone
 const SWIM_SECONDS = 22; // seconds of swimming on full energy before you start to drown
 const DROWN_SECONDS = 1.6; // seconds per heart lost once out of energy in deep water
 // brutes are bigger, slower and hit harder; they start turning up from day 4
@@ -56,6 +60,7 @@ export class Game {
     this.player.thirst ??= MAX_THIRST;
     this.player.stamina ??= MAX_STAMINA;
     this.player.flask ??= 0;
+    this.player.breath ??= MAX_BREATH;
     this.updateCapacity();
     // Saves from before bags existed may hold items in slots that now need a bag: pull them forward.
     this.inv.slots.forEach((s, i) => {
@@ -126,9 +131,13 @@ export class Game {
 
   get inWater() { return this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)).water; }
   get swimming() { return this.deepAt(this.player.x, this.player.z); }
+  // head under the surface
+  get submerged() { return this.swimming && this.player.y < WATER_Y - FLOAT_SINK - 0.35; }
 
   // Ledges higher than a small lip stop the player unless they have jumped high enough.
   canEnter(x, z) {
+    // deep water is open at any depth; the bed pushes a diver up where it rises
+    if (this.deepAt(x, z)) return !this.blocked(x, z);
     // from the water you can haul yourself out onto a low bank
     return !this.blocked(x, z) && this.standY(x, z) <= this.player.y + (this.inWater ? BANK_LIP : STEP_LIP);
   }
@@ -141,8 +150,26 @@ export class Game {
   }
 
   // Gravity and jumping. Call after move() each frame.
-  physics(dt, jump) {
+  // In deep water there is no gravity: dive goes down, jump goes up, and you drift up slowly otherwise.
+  physics(dt, jump, dive = false) {
     const p = this.player;
+    if (this.swimming) {
+      const top = WATER_Y - FLOAT_SINK, bed = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).bed;
+      if (p.y > top + 0.05) {
+        // dropping in from a bank
+        p.vy -= GRAVITY * dt;
+        p.y = Math.max(top, p.y + p.vy * dt);
+        return;
+      }
+      const v = dive ? -DIVE_SPEED : jump ? RISE_SPEED : BUOYANCY;
+      p.y = Math.min(top, Math.max(bed, p.y + v * dt));
+      p.vy = 0;
+      // reaching a deep bed counts once per dive
+      const atBed = p.y <= bed + 0.3 && bed <= -2.5;
+      if (atBed && !this.atBed) this.record('dive');
+      this.atBed = atBed;
+      return;
+    }
     const g = this.standY(p.x, p.z);
     if (p.y <= g + 1e-4 && p.vy <= 0) {
       p.y = g;
@@ -858,6 +885,14 @@ export class Game {
       if ((this.knock.t -= dt) <= 0) this.knock = null;
     }
     this.updateEnemies(dt);
+    // breath: runs down with your head under water, comes back quickly at the surface
+    const pl = this.player, under = this.submerged;
+    if (under) {
+      pl.breath = Math.max(0, pl.breath - (dt * MAX_BREATH) / BREATH_SECONDS);
+      if (pl.breath <= 0) pl.health = Math.max(0, pl.health - dt / SUFFOCATE_SECONDS);
+    } else pl.breath = Math.min(MAX_BREATH, pl.breath + (dt * MAX_BREATH) / 3);
+    if (under !== this.wasUnder) this.emit(under ? 'dive' : 'surface');
+    this.wasUnder = under;
     if (this.swimming) {
       // swimming uses energy; with none left you start to drown
       const p = this.player;
@@ -903,6 +938,7 @@ export class Game {
     p.thirst = 6;
     p.stamina = MAX_STAMINA;
     p.winded = false;
+    p.breath = MAX_BREATH;
     if (p.bed) {
       p.x = p.bed.x + 0.5;
       p.z = p.bed.z + 1.5;

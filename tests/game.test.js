@@ -445,6 +445,49 @@ describe('game rules', () => {
     expect(g.inWater).toBe(false);
   });
 
+  it('dives, runs out of air and surfaces', () => {
+    const g = newGame();
+    const p = g.player;
+    g.goals.index = GOALS.findIndex((x) => x.text.startsWith('Find the sea'));
+    let deep = null;
+    for (let z = -700; z < 700 && !deep; z += 5) {
+      for (let x = -700; x < 700; x += 5) {
+        if (g.gen.tile(x, z).bed <= -5 && g.gen.tile(x + 1, z).bed <= -5) { deep = [x, z]; break; }
+      }
+    }
+    const [x, z] = deep, bed = g.gen.tile(x, z).bed;
+    Object.assign(p, { x: x + 0.5, z: z + 0.5, y: g.standY(x + 0.5, z + 0.5), vy: 0, stamina: 10 });
+    expect(g.submerged).toBe(false);
+
+    const frames = (n, jump, dive) => { for (let i = 0; i < n; i++) { g.physics(0.05, jump, dive); g.tick(0.05); } };
+    frames(8, false, true); // hold dive for 0.4 s
+    expect(g.submerged).toBe(true);
+    expect(p.breath).toBeLessThan(10);
+    frames(120, false, true); // keep going down
+    expect(p.y).toBe(bed); // resting on the seabed
+    expect(g.goals.current).toBe(null); // the dive goal is done
+
+    g.move(0.6, 0); // swimming along the bottom is not blocked
+    expect(Math.floor(p.x)).toBe(x + 1);
+    g.move(-0.6, 0);
+
+    const depth = p.y;
+    frames(10, false, false); // let go: you drift up slowly
+    expect(p.y).toBeGreaterThan(depth);
+    frames(60, true, false); // swim up
+    expect(g.submerged).toBe(false);
+    frames(70, false, false); // 3.5 s at the surface
+    expect(p.breath).toBe(10);
+
+    // staying under too long costs hearts
+    p.breath = 0.2;
+    p.health = 10;
+    p.stamina = 10;
+    frames(60, false, true);
+    expect(p.breath).toBe(0);
+    expect(p.health).toBeLessThan(9);
+  });
+
   it('tires from sprinting and recovers', () => {
     const g = newGame();
     const p = g.player;
@@ -556,7 +599,7 @@ describe('game rules', () => {
     expect(g.goals.index).toBe(goalIndex('Sleep in a bed'));
     g.time = 0.7;
     g.sleep();
-    expect(g.goals.current).toBe(null);
+    expect(g.goals.index).toBe(goalIndex('Find the sea'));
   });
 
   it('builds walls, floors and doors', () => {

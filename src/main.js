@@ -6,6 +6,7 @@ import { sfx, unlockAudio, setNight } from './audio.js';
 import { Minimap } from './ui/minimap.js';
 import { buildSettings } from './ui/menu.js';
 import { OBJECTS, CROP_RIPE } from './world/objects.js';
+import { WATER_Y } from './world/worldgen.js';
 import { ITEMS } from './game/items.js';
 import { buildModels } from './render/models.js';
 import { Chunks, toGeometry } from './render/chunks.js';
@@ -93,6 +94,10 @@ game.on((type, data) => {
   if (type === 'hit') sfx(hitSound);
   else if (type === 'eat' || type === 'drink' || type === 'hurt' || type === 'break') sfx(type);
   else if (type === 'enemygone') sfx('gone');
+  else if (type === 'dive' || type === 'surface') {
+    sfx('splash');
+    particles.burst(p.x, WATER_Y + 0.1, p.z, 0xcfeaff, 10);
+  }
   else if (type === 'record') {
     if (data.key.startsWith('craft:')) sfx('craft');
     else if (data.key.startsWith('place:') || data.key === 'plant') sfx('place');
@@ -317,7 +322,8 @@ const raycaster = new THREE.Raycaster();
 
 function pickTarget() {
   raycaster.setFromCamera(mouse, camera);
-  const hit = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z), false)[0];
+  // under water the cursor points at the seabed, not the surface above it
+  const hit = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z, !game.submerged), false)[0];
   if (!hit) return null;
   const pt = hit.point;
   let best = null;
@@ -426,7 +432,7 @@ const lookAt = new THREE.Vector3();
 let last = performance.now();
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
 let shake = 0; // seconds of camera shake left
-let stepTimer = 0, wasWinded = false;
+let stepTimer = 0, wasWinded = false, bubbleTimer = 0;
 let wornKey = null; // armor currently shown on the character
 
 chunks.update(p.x, p.z, 999);
@@ -468,11 +474,22 @@ function step(dt) {
     if (playerModel.swing <= 0) playerModel.facing = Math.atan2(mx, mz);
   }
   const wasGrounded = p.vy === 0;
-  game.physics(dt, !panels.open && keys.has(K.jump));
+  // in deep water the jump key swims up and the sprint key dives
+  game.physics(dt, !panels.open && keys.has(K.jump), !panels.open && keys.has(K.sprint));
+  const submerged = game.submerged;
+  $('underwater').style.opacity = submerged ? Math.min(0.38, 0.16 + (WATER_Y - p.y) * 0.03) : 0;
+  // from below, the surface thins out so the diver and the seabed stay clear
+  const waterOpacity = chunks.waterMat.opacity;
+  chunks.waterMat.opacity = waterOpacity + ((submerged ? 0.28 : 0.68) - waterOpacity) * Math.min(1, dt * 5);
+  bubbleTimer -= dt;
+  if (submerged && bubbleTimer <= 0) {
+    bubbleTimer = 0.55;
+    particles.burst(p.x, p.y + 1.2, p.z, 0xd8f2ff, 2);
+  }
   if (wasGrounded && p.vy > 0) sfx('jump');
   // footsteps, quicker when sprinting
   stepTimer -= dt;
-  if (moving && p.vy === 0 && stepTimer <= 0) {
+  if (moving && p.vy === 0 && !game.swimming && stepTimer <= 0) {
     stepTimer = sprinting ? 0.24 : 0.34;
     sfx('step');
   }
@@ -480,7 +497,7 @@ function step(dt) {
   wasWinded = !!p.winded;
   playerY = p.y;
   playerModel.group.position.set(p.x, playerY, p.z);
-  playerModel.update(dt, moving, speed, swimming, clock);
+  playerModel.update(dt, moving, speed, swimming, clock, submerged);
   playerModel.setHeld(game.held?.id ?? null, !!(game.held && (ITEMS[game.held.id].tool || ITEMS[game.held.id].weapon)));
   const worn = game.armor.slots.map((s) => s?.id ?? '').join();
   if (worn !== wornKey) {
@@ -530,7 +547,10 @@ function step(dt) {
   // targeting and tool use
   target = panels.open ? null : pickTarget();
   marker.visible = !!target?.reach;
-  if (marker.visible) marker.position.set(target.x + 0.5, game.gen.tile(target.x, target.z).h + 0.04, target.z + 0.5);
+  if (marker.visible) {
+    const tt = game.gen.tile(target.x, target.z);
+    marker.position.set(target.x + 0.5, (tt.water && game.submerged ? tt.bed : tt.h) + 0.04, target.z + 0.5);
+  }
   updateGhost();
   swingCooldown -= dt;
   const wantUse = (lmb || clicked) && !panels.open;

@@ -126,7 +126,10 @@ export class PlayerModel {
     this.held.position.set(isTool ? 0.2 : 0.12, isTool ? -0.62 : -0.56, isTool ? 0.22 : 0.16);
   }
 
-  update(dt, moving, speed, swimming = false, clock = 0) {
+  update(dt, moving, speed, swimming = false, clock = 0, submerged = false) {
+    // under water the body lies flat and glides; the tilt eases in and out
+    this.prone = (this.prone ?? 0) + ((submerged ? 1 : 0) - (this.prone ?? 0)) * Math.min(1, dt * 6);
+    if (!(this.hurt > 0) && !(this.eating > 0)) this.group.rotation.x = this.prone * 1.25;
     this.phase = moving || swimming ? this.phase + dt * (swimming ? 7 : speed * 2.4) : 0;
     const s = Math.sin(this.phase) * 0.7;
     this.legL.rotation.x = s;
@@ -142,7 +145,7 @@ export class PlayerModel {
       if (this.swing <= 0) this.armR.rotation.x = -1.35 - paddle;
       this.legL.rotation.x = paddle * 0.5;
       this.legR.rotation.x = -paddle * 0.5;
-      this.group.position.y += Math.sin(clock * 2.6) * 0.05;
+      if (!submerged) this.group.position.y += Math.sin(clock * 2.6) * 0.05;
     }
     if (this.eating > 0) {
       this.eating = Math.max(0, this.eating - dt);

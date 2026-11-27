@@ -62,6 +62,7 @@ export class Hud {
     this.hunger = segments($('hunger'));
     this.thirst = segments($('thirst'));
     this.stamina = segments($('stamina'));
+    this.air = segments($('air'));
     // Hotbar: click a slot to select it, or drag it onto another slot to swap the two.
     this.dragFrom = null;
     addEventListener('mouseup', () => (this.dragFrom = null));
@@ -108,10 +109,11 @@ export class Hud {
       cold: 'Cold: you get hungry faster. Find a campfire, a floor, or armor',
       warm: 'Warm by the fire',
       sheltered: 'Sheltered indoors',
-      swim: 'Swimming: your energy drains. Reach land before it runs out',
+      swim: 'Swimming: your energy drains. Hold Shift to dive',
+      dive: 'Under water: watch your air. Space swims up',
     };
     const status = $('status');
-    const state = g.swimming ? 'swim' : g.status;
+    const state = g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
     status.className = STATUS[state] ? state : 'hidden';
     status.textContent = STATUS[state] ?? '';
     // Eat button: shows what C would eat, and pulses when you are hungry.
@@ -151,6 +153,8 @@ export class Hud {
     setBar(this.hunger, p.hunger);
     setBar(this.thirst, p.thirst);
     setBar(this.stamina, p.stamina);
+    setBar(this.air, p.breath);
+    $('air').classList.toggle('hidden', p.breath >= 10 && !g.submerged); // only shown while diving or catching breath
     $('stamina').classList.toggle('winded', !!p.winded);
     this.slots.forEach((el, i) => {
       renderSlot(el, g.inv.slots[i]);
