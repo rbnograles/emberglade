@@ -160,7 +160,8 @@ describe('goals and survival', () => {
 });
 
 describe('game rules', () => {
-  const newGame = () => new Game({ seed: 1234 });
+  // a seed whose old-style start at the origin has sea, ponds and mountains within reach, for the tests below
+  const newGame = () => new Game({ seed: 1 });
 
   it('picks sticks by hand and counts them toward the goal', () => {
     const g = newGame();
@@ -454,7 +455,8 @@ describe('game rules', () => {
     let deep = null;
     for (let z = -700; z < 700 && !deep; z += 5) {
       for (let x = -700; x < 700; x += 5) {
-        if (g.gen.tile(x, z).bed <= -5 && g.gen.tile(x + 1, z).bed <= -5) { deep = [x, z]; break; }
+        const here = g.gen.tile(x, z).bed, next = g.gen.tile(x + 1, z).bed; // deep, but not a trench: the dive has to reach the bottom
+        if (here <= -5 && here >= -8 && next <= -5 && next >= -8) { deep = [x, z]; break; }
       }
     }
     const [x, z] = deep, bed = g.gen.tile(x, z).bed;
@@ -640,7 +642,21 @@ describe('game rules', () => {
       expect(Math.floor(g.player.x)).toBe(x);
     }
     expect(spots.size).toBeGreaterThan(1);
-    expect(newGame().player.spawn).toEqual({ x: 0, z: 0 }); // older worlds keep the origin
+    expect(newGame().player.spawn).toEqual({ x: 0, z: 0 }); // tests start at the origin
+
+    // a save made before the land changed shape: the player is moved to safe ground, with their things
+    const old = new Game(null).serialize();
+    old.gen = 1;
+    old.inv[0] = { id: 'wood', n: 5 };
+    Object.assign(old.player, { x: 99999.5, z: 99999.5, riding: 3 });
+    const moved = new Game(JSON.parse(JSON.stringify(old)));
+    expect(moved.relocated).toBe(true);
+    expect(moved.gen.tile(Math.floor(moved.player.x), Math.floor(moved.player.z)).water).toBe(false);
+    expect(moved.player.riding).toBe(null);
+    expect(moved.inv.count('wood')).toBe(5);
+    const again = new Game(JSON.parse(JSON.stringify(moved.serialize())));
+    expect(again.relocated).toBe(false); // only once
+    expect(again.player.x).toBe(moved.player.x);
   });
 
   it('glides, meets golems and spitters, and gets rained on', () => {
@@ -766,7 +782,7 @@ describe('game rules', () => {
     expect(g.exposure().have).toBe(1);
 
     // frozen water is solid ice: walkable, not drinkable
-    const [wx, wz] = frozen.find(([, , t]) => t.ice);
+    const [wx, wz] = frozen.find(([, , t]) => t.ice && t.frost > 0.3); // well inside, away from unfrozen ponds at the edge
     Object.assign(p, { x: wx + 0.5, z: wz + 0.5, y: g.gen.tile(wx, wz).h });
     expect(g.inWater).toBe(false);
     expect(g.drinkSource()).toBe(null);

@@ -17,13 +17,32 @@ export class Worldgen {
     this.cache = new Map();
     this.volcanoes = new Map(); // grid cell -> volcano or null
     // Each world has exactly one frozen region and one volcanic region, on roughly opposite sides.
-    const a = hash2(this.seed, 1, 900) * Math.PI * 2, b = a + Math.PI + (hash2(this.seed, 2, 900) - 0.5) * 1.2;
-    this.frostCentre = { x: Math.round(Math.cos(a) * REGION_DISTANCE), z: Math.round(Math.sin(a) * REGION_DISTANCE) };
-    this.heatCentre = { x: Math.round(Math.cos(b) * REGION_DISTANCE), z: Math.round(Math.sin(b) * REGION_DISTANCE) };
+    // They are put where there is the most land, so neither is lost at sea.
+    const start = hash2(this.seed, 1, 900) * Math.PI * 2;
+    const spots = [];
+    for (let i = 0; i < 20; i++) {
+      for (const dist of [REGION_DISTANCE - 700, REGION_DISTANCE, REGION_DISTANCE + 900]) {
+        const a = start + (i / 20) * Math.PI * 2;
+        const x = Math.round(Math.cos(a) * dist), z = Math.round(Math.sin(a) * dist);
+        let land = 0;
+        for (let k = 0; k < 14; k++) {
+          const r = k === 0 ? 0 : k < 7 ? 450 : 900, b = (k / 7) * Math.PI * 2;
+          if (this.continent(x + Math.cos(b) * r, z + Math.sin(b) * r) > OCEAN + 0.004) land++;
+        }
+        spots.push({ x, z, land });
+      }
+    }
+    spots.sort((p, q) => q.land - p.land);
+    this.frostCentre = { x: spots[0].x, z: spots[0].z };
+    const apart = spots.find((p) => Math.hypot(p.x - spots[0].x, p.z - spots[0].z) > 3400) ?? spots[spots.length - 1];
+    this.heatCentre = { x: apart.x, z: apart.z };
   }
 
+  // Land or sea. A very broad shape makes whole continents and whole oceans; a finer one on top only
+  // roughens the coastline, so the land stays solid and the sea stays open.
   continent(x, z) {
-    return fbm(x / 520, z / 520, this.seed + 20, 4) + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
+    const s = this.seed;
+    return fbm(x / 5200, z / 5200, s + 20, 2) + fbm(x / 170, z / 170, s + 21, 3) * 0.03 + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
   }
 
   // How deep into each harsh region a spot is: 0 outside, rising to 1 at the heart. The edge is ragged.
@@ -48,7 +67,7 @@ export class Worldgen {
             const vx = Math.round((cx + 0.2 + hash2(cx, cz, s + 51) * 0.6) * VOLCANO_CELL);
             const vz = Math.round((cz + 0.2 + hash2(cx, cz, s + 52) * 0.6) * VOLCANO_CELL);
             // only on solid land, and only inside the volcanic region
-            if (this.continent(vx, vz) > OCEAN + 0.1 && this.climate(vx, vz).heat > 0.12) {
+            if (this.continent(vx, vz) > OCEAN + 0.03 && this.climate(vx, vz).heat > 0.12) {
               v = { x: vx, z: vz, radius: 52 + hash2(cx, cz, s + 53) * 30, height: 28 + hash2(cx, cz, s + 54) * 16 };
             }
           }
@@ -80,7 +99,7 @@ export class Worldgen {
       // Sea: the bed drops away in steps, down to deep trenches far from land.
       water = salt = true;
       h = WATER_Y;
-      bed = Math.max(-22, -0.7 - Math.floor((OCEAN - cont) * 60) * 0.5);
+      bed = Math.max(-22, -0.7 - Math.floor((OCEAN - cont) * 330) * 0.5);
       biome = 'ocean';
       // deep inside the frozen region the shallows are locked under sea ice
       if (frost > 0.25 && bed > -2.5) {
@@ -91,7 +110,7 @@ export class Worldgen {
         biome = 'winter';
       }
     } else {
-      const coast = cont < OCEAN + 0.035;
+      const coast = cont < OCEAN + 0.004;
       if (n < -0.3 && !coast) {
         if (frost > 0) {
           // frozen pond: solid ice to walk on
@@ -124,12 +143,13 @@ export class Worldgen {
       }
 
       // Mountains: broad ranges that climb very high, fading in away from the old start and the coast.
-      const range = fbm(x / 300, z / 300, s + 30, 4);
-      const inland = Math.min(1, (cont - OCEAN - 0.035) / 0.1);
+      // broad ranges, highest in the heart of a continent
+      const inland = Math.min(1, Math.max(0, (cont - OCEAN - 0.004) / 0.06));
+      const range = fbm(x / 620, z / 620, s + 30, 4) + inland * 0.08;
       if (range > MOUNTAIN && !coast) {
         const fade = Math.min(1, Math.max(0, (d - 40) / 40)) * inland;
         const rough = 0.8 + 0.2 * fbm(x / 14, z / 14, s + 31, 2);
-        const rise = Math.floor((range - MOUNTAIN) * 125 * rough * fade * 2) / 2;
+        const rise = Math.floor((range - MOUNTAIN) * 120 * rough * fade * 2) / 2;
         if (rise >= 0.5) {
           if (water) {
             water = false;

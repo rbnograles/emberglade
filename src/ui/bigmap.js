@@ -2,7 +2,7 @@ import { BIOMES, SHORE, WATER_COLORS } from '../world/biomes.js';
 
 const CELLS = 300; // map cells across
 const PX = 2; // canvas pixels per cell
-const ZOOMS = [2, 4, 8, 16, 32]; // world tiles per cell: 600 to 4800 tiles across
+const ZOOMS = [2, 4, 8, 16, 32, 64]; // world tiles per cell: 600 to 19,200 tiles across // world tiles per cell: 600 to 4800 tiles across
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
 // Full-screen map of the world around the player. The terrain is generated from the seed, so it can

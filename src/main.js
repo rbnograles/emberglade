@@ -78,6 +78,7 @@ marker.visible = false;
 scene.add(marker);
 
 const hud = new Hud(game);
+if (game.relocated) setTimeout(() => hud.toast('The world has been reshaped, so you wake at a new start. Your items came with you.'), 1200);
 const minimap = new Minimap(game);
 const bigmap = new BigMap(game);
 $('minimap').addEventListener('mousedown', (e) => {

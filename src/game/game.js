@@ -9,6 +9,7 @@ import { Goals } from './goals.js';
 import { tickSurvival, tickStamina, eat, drink, MAX_HEALTH, MAX_HUNGER, MAX_THIRST, MAX_STAMINA } from './survival.js';
 
 export const DAY_SECONDS = 480;
+const GEN_VERSION = 4; // bump when world generation changes shape, so old saves are moved to safe ground
 export const REACH = 3.5;
 export const CAN_CAPACITY = 10;
 export const HOTBAR = 9;
@@ -80,6 +81,15 @@ export class Game {
       this.player.x = this.player.spawn.x + 0.5;
       this.player.z = this.player.spawn.z + 0.5;
     }
+    // A world saved under an older shape of the land may now have its player out at sea or inside a
+    // mountain. Wake them at a fresh start instead; their inventory and progress come along.
+    this.relocated = !!save?.player && save.gen !== GEN_VERSION;
+    if (this.relocated) {
+      const p = this.player;
+      p.spawn = this.pickSpawn();
+      Object.assign(p, { x: p.spawn.x + 0.5, z: p.spawn.z + 0.5, y: undefined, vy: 0, riding: null, bed: null, lost: null });
+      this.vehicles = [];
+    }
     this.player.y ??= this.ground(this.player.x, this.player.z);
     this.player.vy ??= 0;
     this.player.thirst ??= MAX_THIRST;
@@ -100,13 +110,20 @@ export class Game {
   // A friendly place to begin: gentle lowland with trees close by and fresh water not far off.
   pickSpawn() {
     const lowland = new Set(['meadow', 'autumn', 'blossom', 'pine']);
-    for (let attempt = 0; attempt < 400; attempt++) {
+    for (let attempt = 0; attempt < 1500; attempt++) {
       const x = Math.round((Math.random() - 0.5) * 6000), z = Math.round((Math.random() - 0.5) * 6000);
       const t = this.gen.tile(x, z);
       if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
       // well clear of the two harsh regions: they are places to travel to, not to wake up beside
       const far = (c, r) => Math.hypot(x - c.x, z - c.z) > r;
       if (!far(this.gen.frostCentre, 2200) || !far(this.gen.heatCentre, 1900)) continue;
+      // and within a few minutes' walk of the sea, so both the land and the ocean are there to explore
+      let sea = false;
+      for (let k = 0; k < 16 && !sea; k++) {
+        const b = (k / 8) * Math.PI * 2, r = k < 8 ? 350 : 700;
+        sea = this.gen.tile(Math.round(x + Math.cos(b) * r), Math.round(z + Math.sin(b) * r)).salt;
+      }
+      if (!sea) continue;
       let trees = 0, pond = false;
       for (let dz = -24; dz <= 24; dz += 2) {
         for (let dx = -24; dx <= 24; dx += 2) {
@@ -136,7 +153,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
+      seed: this.seed, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
