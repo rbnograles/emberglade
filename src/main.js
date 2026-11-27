@@ -10,14 +10,18 @@ import { buildMenu } from './ui/menu.js';
 import { OBJECTS, CROP_RIPE } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
 import { ITEMS } from './game/items.js';
-import { buildModels } from './render/models.js';
+import { buildModels, buildItemModels } from './render/models.js';
+import { renderItemIcons } from './render/itemicons.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
 import { PlayerModel, Deer, Enemies, Fish, Vehicles } from './render/characters.js';
 import { VEHICLES } from './game/game.js';
 import { Particles, Fires } from './render/effects.js';
+import '@fontsource/pixelify-sans/400.css';
+import '@fontsource/pixelify-sans/600.css';
+import '@fontsource/pixelify-sans/700.css';
 import { Hud } from './ui/hud.js';
-import { loadIcons, iconPixels } from './ui/icons.js';
+import { loadIcons, iconPixels, setRenderedIcons } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
 const $ = (id) => document.getElementById(id);
@@ -51,6 +55,7 @@ resize();
 
 await loadIcons();
 const models = buildModels();
+setRenderedIcons(renderItemIcons(buildItemModels(models)));
 const chunks = new Chunks(scene, game, models);
 const sky = new Sky(scene);
 const particles = new Particles(scene);
@@ -457,6 +462,7 @@ function updateGhost() {
 // ---------- main loop ----------
 const camTarget = new THREE.Vector3(p.x, playerY, p.z);
 const lookAt = new THREE.Vector3();
+const peekPoint = new THREE.Vector3(), peekSize = new THREE.Vector2();
 let last = performance.now();
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
 let shake = 0; // seconds of camera shake left
@@ -578,8 +584,14 @@ function step(dt) {
   camera.lookAt(lookAt);
   camera.updateMatrixWorld();
 
-  // targeting and tool use
-  target = panels.open ? null : pickTarget();
+  // see-through circle: where the player is on screen, and how far from the camera
+  peekPoint.set(p.x, playerY + 0.9, p.z);
+  const playerDepth = -peekPoint.clone().applyMatrix4(camera.matrixWorldInverse).z;
+  peekPoint.project(camera);
+  const buffer = renderer.getDrawingBufferSize(peekSize);
+  chunks.peek.value.set((peekPoint.x * 0.5 + 0.5) * buffer.x, (peekPoint.y * 0.5 + 0.5) * buffer.y, (buffer.y * 2.6) / camDist, playerDepth);
+
+  // targeting and tool use  target = panels.open ? null : pickTarget();
   marker.visible = !!target?.reach;
   if (marker.visible) {
     const tt = game.gen.tile(target.x, target.z);

@@ -37,7 +37,26 @@ export class Chunks {
     this.dirty = new Set();
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.objectMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+    // See-through: anything standing between the camera and the player is thinned to a fine dither
+    // inside a circle around them, so the character is never lost behind a tree or a wall.
+    // peek = (player's screen x, y in pixels, radius in pixels, player's distance from the camera)
+    this.peek = { value: new THREE.Vector4(0, 0, 0, 0) };
+    this.objectMat.onBeforeCompile = (shader) => {
+      shader.uniforms.peek = this.peek;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform vec4 peek;
+          // 4x4 ordered (Bayer) dither threshold for this pixel, in 0..1
+          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`)
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+          if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7) {
+            float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
+            // nearly clear at the centre, solid again at the rim
+            float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
+            if (keep < peekDither(gl_FragCoord.xy)) discard;
+          }`);
+    };    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     this.waterMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthWrite: false });
     this.world.onChange((x, z) => {
       // Neighbours too, so fences across a chunk border reconnect.

@@ -13,7 +13,8 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **The sea floor:** kelp, clams with the odd pearl, coral, and iron ore in the deep. Fish to catch, and snappers that hunt swimmers. A diving mask doubles your air.
 - **Vehicles:** a boat to cross open water without tiring, and a submarine that dives, holds its depth, carries its own air and lamp, and keeps sea creatures off you.
 - **Gathering and tools:** pick sticks, stones, flowers, fiber and berries by hand; chop trees with an axe; mine stone, coal and copper with a pickaxe.
-- **Grid crafting:** a 2×2 grid by hand and 3×3 at a workbench, with a recipe book that shows every pattern. Campfires smelt copper and cook food.
+- **Crafting:** a list of recipes in tabs, each showing what it needs against what you have, with a Craft button (Shift makes 10). More recipes unlock beside a workbench or a campfire. Every item icon is rendered from its own voxel model.
+- **See-through cover:** trees and walls between you and the camera thin out around the character, so you never lose sight of them.
 - **Farming:** till soil, plant seeds, water them and harvest wheat to bake bread.
 - **Survival:** health, food, water and energy bars. Eat, drink at ponds or from a flask, and catch your breath after sprinting.
 - **Day and night:** a full sky with sun, moon, stars and clouds, and a gradual dawn.

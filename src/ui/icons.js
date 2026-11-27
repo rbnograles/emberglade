@@ -102,7 +102,7 @@ const PACK = {
 };
 
 // Code-drawn pixel icons want crisp scaling; pack sprites want smooth scaling.
-export const isPixelIcon = (id) => !PACK[id];
+export const isPixelIcon = (id) => !rendered.has(id) && !PACK[id];
 
 const HELD_RES = 16;
 const packPixels = new Map();
@@ -147,7 +147,12 @@ export function iconPixels(id) {
 
 const cache = new Map();
 
+// Icons photographed from the item's voxel model at start-up; these take priority over everything else.
+let rendered = new Map();
+export function setRenderedIcons(map) { rendered = map; }
+
 export function iconURL(id) {
+  if (rendered.has(id)) return rendered.get(id);
   if (PACK[id]) return PACK[id];
   if (cache.has(id)) return cache.get(id);
   const canvas = document.createElement('canvas');

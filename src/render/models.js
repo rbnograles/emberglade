@@ -215,3 +215,89 @@ export function buildModels() {
     .build(0.16));
   return m;
 }
+
+// ---------- item models, for inventory and crafting icons ----------
+// One small voxel sculpture per item, so every icon shares the look of the world itself.
+// Things that exist in the world reuse their world model.
+const STONE = 0x9aa0a8, COPPER = 0xd9803a, IRON = 0xdfe6ee, STRAW = 0xd9c27a, FUR = 0xb08a5a, CRYSTAL = 0x9fdcf5;
+const HANDLE = 0x8a5a34;
+
+const handle = (v, top = 8) => v.box(0, 0, 0, 0, top, 0, HANDLE);
+const axe = (c) => handle(new Vox()).box(1, 6, 0, 3, 8, 0, c).box(1, 5, 0, 2, 5, 0, c).set(4, 6, 0, c).set(4, 7, 0, c).build(0.1);
+const pickaxe = (c) => handle(new Vox()).box(-3, 8, 0, 3, 8, 0, c).set(-4, 7, 0, c).set(4, 7, 0, c).set(-3, 9, 0, c).set(3, 9, 0, c).box(-1, 9, 0, 1, 9, 0, c).build(0.1);
+const sword = (c) => new Vox().box(0, 0, 0, 0, 1, 0, HANDLE).box(-2, 2, 0, 2, 2, 0, 0x6b7078).box(0, 3, 0, 0, 10, 0, c).box(-1, 3, 0, -1, 8, 0, c).set(0, 11, 0, c).build(0.1);
+const hat = (c) => new Vox().box(0, 0, 0, 5, 0, 5, c).box(1, 1, 1, 4, 3, 4, c).box(1, 1, 1, 4, 1, 4, 0x5c3a20).build(0.1);
+const tunic = (c) => new Vox().box(1, 0, 0, 4, 5, 2, c).box(-1, 3, 0, 0, 5, 2, c).box(5, 3, 0, 6, 5, 2, c).box(2, 5, 0, 3, 5, 0, 0x2b2b33).build(0.1);
+const boots = (c) => new Vox().box(0, 0, 0, 1, 3, 1, c).box(0, 0, 2, 1, 1, 3, c).box(3, 0, 0, 4, 3, 1, c).box(3, 0, 2, 4, 1, 3, c).build(0.1);
+const bag = (c) => new Vox().blob(0, 2.6, 0, 2.6, 2.8, 2.0, mix([c], 71), 0.1, 71).box(-2, 4, 2, 1, 4, 2, 0x5c3a20).box(-1, 3, 2, 0, 3, 2, 0xf2c94c).build(0.1);
+const lump = (palette, seed, accent = null) => new Vox().blob(0, 1.5, 0, 2.6, 1.9, 2.3, mix(palette, seed, accent, 0.3), 0.35, seed).build(0.1);
+const ingot = (c, light) => new Vox().box(0, 0, 0, 5, 0, 2, c).box(0, 1, 0, 5, 1, 2, c).box(1, 2, 0, 4, 2, 2, light).build(0.1);
+const fishy = (palette) => new Vox().box(0, 0, 0, 5, 2, 1, mix(palette, 72)).box(-2, 0, 0, -1, 2, 1, palette[0]).set(5, 2, 1, 0x2b2b33).box(1, 3, 0, 3, 3, 1, palette[0]).build(0.1);
+const haunch = (meat, bone) => new Vox().blob(0, 2, 0, 2.6, 2.2, 1.8, mix([meat], 73), 0.2, 73).box(2, 1, 0, 4, 1, 0, bone).box(4, 0, 0, 5, 2, 0, bone).build(0.1);
+
+export function buildItemModels(world) {
+  const m = new Map();
+  const use = (id, key = id) => m.set(id, world.get(key));
+  // straight from the world
+  for (const id of ['campfire', 'workbench', 'bed', 'chest', 'wood_wall', 'stone_wall', 'coral_wall', 'door', 'wood_floor', 'stone_floor',
+    'lantern', 'boat', 'submarine', 'kelp', 'clam', 'coral']) use(id);
+  use('fence', 'fence_post');
+  use('flower', 'flower0');
+  use('fiber', 'tallgrass');
+  use('wheat', 'crop3');
+  use('stone', 'pebble');
+  use('raw_fish', 'fish');
+
+  m.set('stick', new Vox().box(0, 0, 0, 0, 8, 0, HANDLE).set(1, 5, 0, HANDLE).set(1, 6, 0, 0x6cc257).build(0.1));
+  m.set('wood', new Vox().box(0, 0, 0, 6, 2, 2, mix([0x7a4b2c, 0x8a5a34], 74)).box(0, 0, 0, 0, 2, 2, 0xd9a066).box(6, 0, 0, 6, 2, 2, 0xd9a066).set(6, 1, 1, 0x8a5a34).build(0.1));
+  m.set('seeds', new Vox().set(0, 0, 0, 0xd9a066).set(2, 0, 1, 0xcf9459).set(1, 0, 3, 0xd9a066).set(3, 0, 3, 0xb9834a).set(4, 0, 0, 0xcf9459).set(2, 1, 2, 0x7ac74f).build(0.1));
+  m.set('coal', lump([0x2b2b33, 0x3a3a44, 0x1f1f26], 75));
+  m.set('copper_ore', lump(GRAYS, 76, COPPER));
+  m.set('iron_ore', lump(GRAYS, 77, 0x8a3f2c));
+  m.set('copper_bar', ingot(COPPER, 0xf0a05a));
+  m.set('iron_bar', ingot(0xb8c0c8, IRON));
+  m.set('hide', new Vox().box(0, 0, 0, 6, 0, 5, mix([FUR, 0xa07a4c], 78)).set(-1, 0, 0, FUR).set(7, 0, 0, FUR).set(-1, 0, 5, FUR).set(7, 0, 5, FUR).build(0.1));
+  m.set('pearl', new Vox().blob(0, 1.5, 0, 1.6, 1.6, 1.6, mix([0xffffff, 0xf2eef7, 0xe6f2ff], 79), 0.05, 79).build(0.1));
+  m.set('crystal', new Vox().box(0, 0, 0, 0, 6, 0, 0x9fe8ff).box(-1, 0, -1, -1, 4, -1, 0x7fd4f2).box(1, 0, 1, 1, 5, 1, 0xc8f4ff).box(-2, 0, 1, -2, 2, 1, 0x9fe8ff).build(0.1));
+
+  // food
+  m.set('berries', new Vox().blob(-1.2, 1.3, 0, 1.4, 1.4, 1.4, mix([0xd9304f, 0xe8556a], 80), 0.05, 80).blob(1.4, 1.3, 0.6, 1.4, 1.4, 1.4, mix([0xd9304f, 0xc22841], 81), 0.05, 81)
+    .blob(0.2, 3, -0.3, 1.3, 1.3, 1.3, mix([0xe8556a, 0xd9304f], 82), 0.05, 82).set(0, 4, 0, 0x4f9c3f).set(1, 5, 0, 0x4f9c3f).build(0.1));
+  const apple = (c) => new Vox().blob(0, 2.4, 0, 2.5, 2.4, 2.5, mix(c, 83), 0.08, 83).set(0, 5, 0, 0x5c3a20).set(1, 5, 0, 0x5cb850).build(0.1);
+  m.set('apple', apple([0xd94f4f, 0xe86a5a]));
+  m.set('roasted_apple', apple([0xb86a2a, 0x9a5220]));
+  m.set('bread', new Vox().blob(0, 1.6, 0, 3.4, 1.9, 2.0, mix([0xd9a066, 0xcf9459], 84), 0.08, 84).set(-2, 3, 0, 0xf2d6a0).set(0, 3, 0, 0xf2d6a0).set(2, 3, 0, 0xf2d6a0).build(0.1));
+  m.set('raw_meat', haunch(0xd9606a, 0xf2efe6));
+  m.set('cooked_meat', haunch(0x9a5a2c, 0xf2efe6));
+  m.set('cooked_fish', fishy([0xb9834a, 0xa8743c]));
+
+  // tools and weapons, one shape per kind in three metals
+  for (const [tier, c] of [['stone', STONE], ['copper', COPPER], ['iron', IRON]]) {
+    m.set(tier + '_axe', axe(c));
+    m.set(tier + '_pickaxe', pickaxe(c));
+    m.set(tier + '_sword', sword(c));
+  }
+  m.set('hoe', handle(new Vox()).box(1, 8, 0, 3, 8, 0, STONE).set(3, 7, 0, STONE).build(0.1));
+  m.set('torch', new Vox().box(0, 0, 0, 0, 5, 0, HANDLE).box(-1, 6, -1, 1, 7, 1, 0xff8a2a).box(0, 8, 0, 0, 9, 0, 0xffe27a).build(0.1));
+  m.set('flask', new Vox().box(0, 0, 0, 3, 4, 2, 0x6fc3e8).box(0, 3, 0, 3, 4, 2, 0xa9dcf5).box(1, 5, 0, 2, 6, 2, 0x6fc3e8).box(1, 7, 1, 2, 7, 1, 0x8a5a34).build(0.1));
+  m.set('watering_can', new Vox().box(0, 0, 0, 4, 4, 3, mix([COPPER, 0xc9722f], 85)).box(5, 2, 1, 7, 2, 2, COPPER).box(8, 3, 1, 8, 4, 2, COPPER).box(-2, 1, 1, -1, 1, 2, 0x8a5a34)
+    .box(-2, 2, 1, -2, 4, 2, 0x8a5a34).box(-1, 4, 1, -1, 4, 2, 0x8a5a34).build(0.1));
+  m.set('glider', new Vox().box(-6, 4, 0, 6, 4, 3, mix([0xf2efe6, 0xe6e0d0], 86)).box(-2, 0, 1, -2, 3, 1, HANDLE).box(2, 0, 1, 2, 3, 1, HANDLE).box(-2, 0, 1, 2, 0, 1, HANDLE).build(0.1));
+
+  // things to wear
+  for (const [name, c] of [['woven', STRAW], ['fur', FUR]]) {
+    m.set(name + '_hat', hat(c));
+    m.set(name + (name === 'fur' ? '_coat' : '_tunic'), tunic(c));
+    m.set(name + '_boots', boots(c));
+  }
+  m.set('copper_helmet', hat(COPPER));
+  m.set('copper_chestplate', tunic(COPPER));
+  m.set('copper_boots', boots(COPPER));
+  m.set('heat_hood', hat(CRYSTAL));
+  m.set('heat_suit', tunic(CRYSTAL));
+  m.set('heat_boots', boots(CRYSTAL));
+  m.set('woven_bag', bag(STRAW));
+  m.set('trail_pack', bag(0x8a5a34));
+  m.set('diving_mask', new Vox().box(0, 0, 0, 6, 3, 0, 0x2b2b33).box(1, 1, 0, 2, 2, 0, 0x6fc3e8).box(4, 1, 0, 5, 2, 0, 0x6fc3e8).box(-1, 1, 1, -1, 2, 3, 0x2b2b33).box(7, 1, 1, 7, 2, 3, 0x2b2b33).build(0.1));
+  return m;
+}

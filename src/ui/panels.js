@@ -1,5 +1,5 @@
 import { ITEMS, ARMOR_SLOTS, MAX_DEFENSE } from '../game/items.js';
-import { RECIPES, GRID, layout, ingredients } from '../game/crafting.js';
+import { RECIPES, ingredients } from '../game/crafting.js';
 import { Inventory } from '../game/inventory.js';
 import { HOTBAR } from '../game/game.js';
 import { renderSlot } from './hud.js';
@@ -21,19 +21,18 @@ const icon = (id, cls = '') => {
   return img;
 };
 
-const STATION_NAMES = { workbench: 'Workbench', campfire: 'Campfire' };
-
-// Recipe book tabs. Each recipe falls in exactly one of the last four.
+// Which tab a recipe sits under.
 const categoryOf = (r) => {
   const def = ITEMS[r.out];
   if (def.armor) return 'wear';
   if (def.place || def.floor) return 'build';
-  if (def.tool || def.weapon || def.flask || def.vehicle) return 'tools';
-  return 'other';
+  if (def.tool || def.weapon || def.flask || def.vehicle || def.glide || def.light) return 'tools';
+  if (def.food) return 'food';
+  return 'materials';
 };
-const TABS = [['ready', 'Can make'], ['all', 'All'], ['tools', 'Tools'], ['build', 'Build'], ['wear', 'Wear'], ['other', 'Food & materials']];
+const TABS = [['all', 'All'], ['tools', 'Tools'], ['materials', 'Materials'], ['build', 'Building'], ['wear', 'Clothing'], ['food', 'Cooking']];
 
-// Inventory on the left; crafting grid, recipe book and recipe details on the right.
+// Two cards side by side: the inventory on the left, crafting on the right.
 // Items are moved by picking a stack up onto the cursor and putting it down.
 export class Panels {
   constructor(game) {
@@ -42,15 +41,14 @@ export class Panels {
     this.cursorEl = $('cursor');
     this.chest = null; // Inventory view over the open chest's items
     this.hover = null; // inventory slot index under the mouse
-    this.tab = 'ready';
-    this.selected = null; // recipe shown in the details box
+    this.tab = 'all';
+    this.onlyReady = false; // "only show what I can make"
     const follow = (e) => {
       this.cursorEl.style.left = e.clientX + 'px';
       this.cursorEl.style.top = e.clientY + 'px';
     };
     addEventListener('mousemove', follow);
     addEventListener('mousedown', follow, true);
-
   }
 
   get open() { return !this.root.classList.contains('hidden'); }
@@ -82,42 +80,49 @@ export class Panels {
   }
 
   // A grid of slots over `inv`; shift-click sends a stack to `other`.
-  grid(inv, order, other, columns = 9) {
-    const grid = el('div', 'grid');
-    grid.style.gridTemplateColumns = `repeat(${columns}, 50px)`;
+  grid(inv, order, other, cls = '') {
+    const grid = el('div', 'grid ' + cls);
     for (const i of order) {
       const slot = el('div', 'slot');
       renderSlot(slot, inv.slots[i]);
-      if (inv === this.game.inv && i < HOTBAR) slot.dataset.key = i + 1;
       if (inv === this.game.inv) {
+        if (i < HOTBAR) slot.dataset.key = i + 1;
         if (i === this.game.selected) slot.classList.add('selected');
         slot.addEventListener('mouseenter', () => (this.hover = i));
         slot.addEventListener('mouseleave', () => (this.hover = null));
       }
       slot.addEventListener('mousedown', (e) => {
-        const game = this.game, c = game.cursor, s = inv.slots[i];
-        // Shift + click an inventory item (no chest open): equip it.
-        if (e.shiftKey && inv === game.inv && !this.chest && !c) {
+        const game = this.game, s = inv.slots[i];
+        // Shift + click an inventory item (no chest open): equip or wear it.
+        if (e.shiftKey && inv === game.inv && !this.chest && !game.cursor) {
           if (s) game.equip(i);
           return;
         }
-        // In the crafting grid a held stack goes down one item per click, so no right-click is needed.
-        const one = inv === game.craftGrid && c && (!s || s.id === c.id);
-        game.clickSlot(inv, i, e.button === 2 || one ? 2 : 0, e.shiftKey, other);
+        game.clickSlot(inv, i, e.button === 2 ? 2 : 0, e.shiftKey, other);
       });
       grid.append(slot);
     }
     return grid;
   }
 
-  // ---- left column: worn items, trash, inventory ----
+  // ---- left card: chest (if open), worn items, inventory, hotbar ----
   renderInventory() {
     const game = this.game, inv = game.inv;
-    const left = el('div', 'col');
-    if (this.chest) left.append(el('h3', '', this.chest.slots.length > 18 ? 'Your dropped pack' : 'Chest'), this.grid(this.chest, range(this.chest.slots.length), inv));
+    const card = el('div', 'card inventory');
+    if (this.chest) {
+      const head = el('header');
+      head.append(el('h2', '', this.chest.slots.length > 18 ? 'Your dropped pack' : 'Chest'));
+      card.append(head, this.grid(this.chest, range(this.chest.slots.length), inv));
+    }
 
-    const top = el('div', 'worn-row');
-    const worn = el('div', 'armor');
+    const head = el('header');
+    head.append(el('h2', '', 'Inventory'), el('span', 'count', `${inv.slots.filter(Boolean).length}/${game.capacity}`));
+    const sort = el('button', 'chip', 'Sort');
+    sort.addEventListener('click', () => game.sortInventory());
+    head.append(sort);
+    card.append(head);
+
+    const worn = el('div', 'worn');
     ARMOR_SLOTS.forEach((name, i) => {
       const slot = el('div', 'slot');
       slot.dataset.label = name;
@@ -125,146 +130,106 @@ export class Panels {
       slot.addEventListener('mousedown', () => game.clickArmor(i));
       worn.append(slot);
     });
-    worn.append(el('b', '', `Armor ${game.defense}/${MAX_DEFENSE}`));
+    worn.append(el('b', 'armor-total', `Armor ${game.defense}/${MAX_DEFENSE}`));
     const trash = el('div', 'slot trash', '✕');
     trash.dataset.label = 'discard';
     trash.title = 'Pick up a stack and click here to throw it away';
     trash.addEventListener('mousedown', () => game.trashCursor());
-    top.append(worn, trash);
-    left.append(el('h3', '', 'Worn'), top);
+    worn.append(trash);
+    card.append(worn);
 
-    const used = inv.slots.filter(Boolean).length;
-    left.append(el('h3', '', `Inventory (${used}/${game.capacity})`));
     // Only the slots you can carry are shown: a worn bag adds rows.
-    left.append(this.grid(inv, range(game.capacity - HOTBAR, HOTBAR), this.chest));
-    if (game.capacity < inv.slots.length) left.append(el('p', 'note', 'Wear a bag (Wear tab, at a workbench) for more rows.'));
-    left.append(el('h3', '', 'Hotbar'), this.grid(inv, range(HOTBAR), this.chest));
-    left.append(el('p', 'note', this.chest
-      ? 'Click: pick up / put down · Right click: half / one · Shift + click: move to or from the chest'
-      : 'Click: pick up / put down · Right click: half / one · Shift + click or 1–9: equip or wear'));
-    return left;
+    card.append(this.grid(inv, range(game.capacity - HOTBAR, HOTBAR), this.chest));
+    card.append(this.grid(inv, range(HOTBAR), this.chest, 'hotbar-row'));
+    card.append(el('p', 'note', this.chest
+      ? 'Click to pick up or put down. Right click splits. Shift + click moves to or from the chest.'
+      : game.capacity < inv.slots.length
+        ? 'Click to pick up or put down. Right click splits. Shift + click equips. Wear a bag for more rows.'
+        : 'Click to pick up or put down. Right click splits. Shift + click equips.'));
+    return card;
   }
 
-  // ---- right column: crafting grid, recipe book, recipe details ----
-  recipeTile(r, canMake) {
-    const tile = el('button', 'tile' + (canMake ? '' : ' dim') + (r === this.selected ? ' selected' : ''));
-    tile.title = ITEMS[r.out].name;
-    tile.append(icon(r.out));
-    if (r.n > 1) tile.append(el('span', '', '×' + r.n));
-    if (r.station) tile.append(el('i', r.station, r.station === 'workbench' ? 'W' : 'F'));
-    tile.addEventListener('click', () => {
-      // The panel is rebuilt on every click, so a double click is detected by hand.
-      const now = performance.now();
-      const again = this.selected === r && now - (this.lastClick ?? 0) < 400;
-      this.lastClick = now;
-      this.selected = r;
-      if (again) this.game.quickCraft(r);
-      this.render();
-    });
-    return tile;
-  }
-
-  recipeDetails(r, stations) {
+  // ---- right card: crafting list ----
+  recipeRow(r, stations) {
     const game = this.game;
-    const box = el('div', 'details');
-    if (!r) {
-      box.append(el('p', 'note', 'Pick a recipe to see what it needs. Double-click a recipe to craft it straight away.'));
-      return box;
-    }
-    const cells = layout(r);
-    const size = r.shapeless || cells.some((id, i) => id && (i % GRID === 2 || i >= 6)) ? 3 : 2;
-    const mini = el('div', 'mini');
-    mini.style.gridTemplateColumns = `repeat(${size}, 22px)`;
-    for (let y = 0; y < (r.shapeless ? 1 : size); y++) {
-      for (let x = 0; x < size; x++) {
-        const cell = el('i');
-        const id = cells[y * GRID + x];
-        if (id) {
-          cell.style.backgroundImage = `url(${iconURL(id)})`;
-          cell.classList.toggle('px', isPixelIcon(id));
-          cell.title = ITEMS[id].name;
-        }
-        mini.append(cell);
-      }
-    }
+    const can = game.canMake(r, stations);
+    const row = el('div', 'recipe' + (can ? '' : ' dim'));
+    row.append(icon(r.out, 'big'));
 
-    const info = el('div', 'info');
-    info.append(el('b', '', ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '')));
+    const body = el('div', 'body');
+    body.append(el('b', '', ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '')));
     const needs = el('div', 'needs');
     for (const [id, n] of Object.entries(ingredients(r))) {
       const have = game.inv.count(id);
-      const row = el('span', have >= n ? '' : 'missing');
-      row.append(icon(id), `${ITEMS[id].name} ${Math.min(have, 999)}/${n}`);
-      needs.append(row);
+      const chip = el('span', have >= n ? '' : 'missing');
+      chip.title = ITEMS[id].name;
+      chip.append(icon(id), `${Math.min(have, 999)}/${n}`);
+      needs.append(chip);
     }
-    info.append(needs);
-    const near = !r.station || stations.has(r.station);
-    const where = r.station ? `Needs a ${STATION_NAMES[r.station].toLowerCase()} nearby` + (near ? ' ✓' : '') : r.shapeless ? 'By hand, any arrangement' : 'By hand';
-    info.append(el('p', 'where' + (near ? '' : ' missing'), where));
+    if (r.station && !stations.has(r.station)) needs.append(el('span', 'missing station', `needs ${r.station}`));
+    body.append(needs);
 
-    const buttons = el('div', 'buttons');
-    const canMake = game.canMake(r, stations);
-    const add = (label, fn, primary = false) => {
-      const b = el('button', primary ? 'primary' : '', label);
-      b.disabled = !canMake;
-      b.addEventListener('click', fn);
-      buttons.append(b);
-    };
-    add('Craft', () => game.quickCraft(r), true);
-    add('Craft all', () => game.quickCraft(r, true));
-    add('Lay out', () => game.fillRecipe(r));
-    box.append(mini, info, buttons);
-    return box;
+    const craft = el('button', 'craft-btn', 'Craft');
+    craft.disabled = !can;
+    craft.addEventListener('click', (e) => game.quickCraft(r, e.shiftKey ? 10 : 1));
+    row.append(body, craft);
+    return row;
   }
 
   renderCrafting() {
-    const game = this.game, inv = game.inv;
+    const game = this.game;
     const stations = game.stationsNear();
-    const bench = stations.has('workbench');
-    const right = el('div', 'col recipes');
+    const card = el('div', 'card crafting');
 
-    const where = [bench ? 'Workbench 3×3' : 'By hand 2×2', stations.has('campfire') ? 'campfire lit' : null].filter(Boolean).join(' + ');
-    right.append(el('h3', '', `Crafting · ${where}`));
-    const craft = el('div', 'craft');
-    craft.append(this.grid(game.craftGrid, bench ? range(GRID * GRID) : [0, 1, 3, 4], inv, bench ? 3 : 2), el('span', 'arrow big', '→'));
-    const result = game.craftResult();
-    const output = el('div', 'slot output' + (result ? ' ready' : ''));
-    renderSlot(output, result ? { id: result.out, n: result.n } : null);
-    output.addEventListener('mousedown', (e) => game.clickOutput(e.shiftKey));
-    craft.append(output);
-    craft.append(el('b', 'take', result ? `← Click to take ${ITEMS[result.out].name}` : ''));
-    right.append(craft);
+    const head = el('header');
+    head.append(el('h2', '', 'Crafting'));
+    const badges = el('div', 'badges');
+    for (const station of ['workbench', 'campfire']) {
+      const on = stations.has(station);
+      badges.append(el('span', 'badge' + (on ? ' on' : ''), on ? `✓ At ${station}` : `No ${station}`));
+    }
+    head.append(badges);
+    card.append(head);
 
-    right.append(el('h3', '', 'Recipes'));
-    const ready = new Map(RECIPES.map((r) => [r, game.canMake(r, stations)]));
     const tabs = el('div', 'tabs');
     for (const [id, label] of TABS) {
-      const count = id === 'ready' ? ` (${[...ready.values()].filter(Boolean).length})` : '';
-      const b = el('button', id === this.tab ? 'active' : '', label + count);
+      const b = el('button', 'chip' + (id === this.tab ? ' active' : ''), label);
       b.addEventListener('click', () => {
         this.tab = id;
         this.render();
       });
       tabs.append(b);
     }
-    right.append(tabs);
+    card.append(tabs);
 
-    const shown = RECIPES.filter((r) => this.tab === 'all' || (this.tab === 'ready' ? ready.get(r) : categoryOf(r) === this.tab));
+    const only = el('label', 'only');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.checked = this.onlyReady;
+    box.addEventListener('change', () => {
+      this.onlyReady = box.checked;
+      this.render();
+    });
+    only.append(box, 'Only show what I can make');
+    card.append(only);
+
+    const ready = new Map(RECIPES.map((r) => [r, game.canMake(r, stations)]));
+    const shown = RECIPES.filter((r) => (this.tab === 'all' || categoryOf(r) === this.tab) && (!this.onlyReady || ready.get(r)));
     shown.sort((a, b) => ready.get(b) - ready.get(a)); // what you can make comes first
-    const book = el('div', 'book');
-    if (shown.length) for (const r of shown) book.append(this.recipeTile(r, ready.get(r)));
-    else book.append(el('p', 'note', 'Nothing yet. Gather sticks, stones and wood, or stand near a workbench or campfire.'));
-    const scroll = this.root.querySelector('.book')?.scrollTop ?? 0;
-    right.append(book, this.recipeDetails(this.selected, stations));
-    right.append(el('p', 'note', 'W = needs a workbench nearby · F = needs a campfire nearby'));
-    return [right, book, scroll];
+    const list = el('div', 'list');
+    if (shown.length) for (const r of shown) list.append(this.recipeRow(r, stations));
+    else list.append(el('p', 'note', this.onlyReady ? 'Nothing you can make here yet. Gather more, or stand near a workbench or campfire.' : 'Nothing in this group.'));
+    card.append(list);
+    card.append(el('p', 'note', 'Pick a recipe and press Craft. Hold Shift to make 10.'));
+    return [card, list];
   }
 
   render() {
     this.renderCursor();
     if (!this.open) return;
-    const [right, book, scroll] = this.renderCrafting();
-    this.root.replaceChildren(this.renderInventory(), right);
-    book.scrollTop = scroll;
+    const scroll = this.root.querySelector('.list')?.scrollTop ?? 0;
+    const [crafting, list] = this.renderCrafting();
+    this.root.replaceChildren(this.renderInventory(), crafting);
+    list.scrollTop = scroll;
   }
 }

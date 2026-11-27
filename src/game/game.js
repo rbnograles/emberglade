@@ -518,7 +518,9 @@ export class Game {
   }
 
   // One-click crafting from the recipe book: lay the recipe out and take the result, once or as often as possible.
-  quickCraft(recipe, all = false) {
+  // times: how many to make (true = as many as possible)
+  quickCraft(recipe, times = 1) {
+    const all = times === true || times > 1, limit = times === true ? 99 : times;
     let made = 0;
     do {
       if (!this.fillRecipe(recipe, made > 0)) break;
@@ -530,9 +532,30 @@ export class Game {
         break;
       }
       made++;
-    } while (all && made < 99);
+    } while (all && made < limit);
     if (made) this.toast(`Crafted ${made * recipe.n} ${ITEMS[recipe.out].name}`);
     return made;
+  }
+
+  // Tidy the storage rows (not the hotbar): merge stacks, then group by name.
+  sortInventory() {
+    const cap = this.capacity, items = [];
+    for (let i = HOTBAR; i < this.inv.slots.length; i++) {
+      const s = this.inv.slots[i];
+      if (!s) continue;
+      const same = stackSize(s.id) > 1 && items.find((x) => x.id === s.id && x.n < stackSize(s.id));
+      if (same) {
+        const take = Math.min(s.n, stackSize(s.id) - same.n);
+        same.n += take;
+        s.n -= take;
+      }
+      if (s.n > 0) items.push(s);
+      this.inv.slots[i] = null;
+    }
+    items.sort((a, b) => ITEMS[a.id].name.localeCompare(ITEMS[b.id].name) || b.n - a.n);
+    items.forEach((s, i) => (this.inv.slots[HOTBAR + i] = s));
+    this.emit('inv');
+    return cap;
   }
 
   // Throw away whatever is on the cursor.

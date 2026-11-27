@@ -12,7 +12,8 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #1c2542;
-  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Pixelify Sans', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  font-size: 17px;
   color: var(--cream);
   user-select: none;
 }
@@ -326,3 +327,86 @@ kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; 
 }
 #status.harsh { color: #fff; background: #b8323f; font-weight: bold; animation: glow 0.8s ease-in-out infinite alternate; }
 #status.safe { color: #b9e89a; }
+
+/* ================= themed panels: inventory + crafting ================= */
+:root { --card: rgba(38, 31, 28, 0.93); --card-edge: #5c4a3c; --slot: rgba(255, 246, 227, 0.09); --slot-edge: rgba(255, 246, 227, 0.14); }
+
+#panel { display: flex; gap: 22px; align-items: flex-start; background: none; border: 0; padding: 0; max-height: 90vh; max-width: 97vw; overflow: visible; }
+#panel .card { display: flex; flex-direction: column; min-height: 0; max-height: 88vh; padding: 16px 18px 12px; background: var(--card); border: 3px solid var(--card-edge); border-radius: 16px; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.25); }
+#panel .card header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+#panel h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); }
+#panel header .count { font-size: 13px; opacity: 0.6; }
+#panel header .chip, #panel header .badges { margin-left: auto; }
+#panel .note { margin: 8px 0 0; font-size: 13px; opacity: 0.65; max-width: none; }
+
+.chip { font: inherit; font-size: 14px; font-weight: 600; color: var(--cream); background: rgba(255, 246, 227, 0.1); border: 2px solid rgba(255, 246, 227, 0.16); border-radius: 9px; padding: 4px 12px; cursor: pointer; }
+.chip:hover { border-color: rgba(255, 246, 227, 0.45); }
+.chip.active { border-color: var(--accent); color: var(--accent); background: rgba(242, 201, 76, 0.12); }
+
+#panel .grid { display: grid; grid-template-columns: repeat(9, 52px); gap: 5px; margin-bottom: 8px; zoom: 1; }
+#panel .grid.hotbar-row { margin-top: 4px; padding-top: 10px; border-top: 2px dashed rgba(255, 246, 227, 0.14); }
+.slot { width: 52px; height: 52px; background: var(--slot); border: 2px solid var(--slot-edge); border-radius: 9px; }
+.slot img { width: 40px; height: 40px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.slot span { font-size: 14px; font-weight: 700; }
+#hotbar .slot { width: 54px; height: 54px; }
+
+#panel .worn { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
+#panel .worn .slot::after { content: attr(data-label); position: absolute; bottom: 0; font-size: 10px; opacity: 0.5; }
+#panel .worn .armor-total { margin-left: 8px; font-size: 14px; color: var(--accent); }
+#panel .worn .trash { margin-left: auto; }
+
+#panel .crafting { width: 440px; }
+.badges { display: flex; gap: 6px; }
+.badge { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 8px; border: 2px solid rgba(255, 246, 227, 0.14); opacity: 0.55; white-space: nowrap; }
+.badge.on { opacity: 1; color: #b9e89a; border-color: #6fa85a; background: rgba(111, 168, 90, 0.16); }
+#panel .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+#panel .only { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; opacity: 0.85; cursor: pointer; }
+#panel .only input { width: 18px; height: 18px; accent-color: var(--accent); }
+#panel .list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 120px; padding-right: 6px; }
+
+#panel .recipe { display: flex; align-items: center; gap: 12px; width: auto; margin: 0; padding: 8px 10px; background: rgba(255, 246, 227, 0.07); border: 2px solid rgba(255, 246, 227, 0.1); border-radius: 11px; cursor: default; }
+#panel .recipe.dim { opacity: 0.55; }
+#panel .recipe img.big { width: 46px; height: 46px; flex: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+#panel .recipe .body { flex: 1; min-width: 0; }
+#panel .recipe .body b { display: block; font-size: 16px; margin-bottom: 3px; }
+#panel .recipe .needs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 14px; }
+#panel .recipe .needs span { display: inline-flex; align-items: center; gap: 3px; color: #b9e89a; }
+#panel .recipe .needs span.missing { color: #f08a80; }
+#panel .recipe .needs span.station { font-size: 12px; }
+#panel .recipe .needs img { width: 22px; height: 22px; }
+.craft-btn { font: inherit; font-size: 15px; font-weight: 700; color: #2b2420; background: var(--accent); border: 0; border-radius: 9px; padding: 8px 16px; box-shadow: 0 3px 0 #b8922c; cursor: pointer; }
+.craft-btn:active:enabled { transform: translateY(2px); box-shadow: 0 1px 0 #b8922c; }
+.craft-btn:disabled { color: rgba(255, 246, 227, 0.5); background: rgba(255, 246, 227, 0.14); box-shadow: none; cursor: default; }
+
+@media (max-width: 1060px) {
+  #panel { flex-direction: column; align-items: center; overflow-y: auto; gap: 10px; }
+  #panel .card { max-height: none; }
+  #panel .crafting { width: auto; align-self: stretch; }
+  #panel .grid { zoom: 0.82; }
+}
+
+/* ================= title / pause menu in the same theme ================= */
+#menu { background: radial-gradient(ellipse at center, rgba(20, 16, 14, 0.35), rgba(12, 10, 9, 0.82)); }
+#menu .shell { background: var(--card); color: var(--cream); border: 3px solid var(--card-edge); box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3); }
+#menu aside { background: rgba(0, 0, 0, 0.22); border-right: 2px solid rgba(255, 246, 227, 0.08); }
+#menu aside h1 { color: var(--accent); letter-spacing: 2px; text-transform: uppercase; font-size: 30px; }
+#menu main h2 { color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+#menu button.primary { color: #2b2420; background: var(--accent); box-shadow: 0 4px 0 #b8922c; }
+#menu button.primary:active { box-shadow: 0 2px 0 #b8922c; }
+#menu nav button { color: var(--cream); border: 2px solid transparent; }
+#menu nav button:hover { background: rgba(255, 246, 227, 0.08); }
+#menu nav button.active { color: var(--accent); background: rgba(242, 201, 76, 0.12); border-color: var(--accent); box-shadow: none; }
+#menu .world { color: var(--cream); background: rgba(255, 246, 227, 0.07); border: 2px solid rgba(255, 246, 227, 0.1); }
+#menu .world:hover { border-color: rgba(255, 246, 227, 0.45); }
+#menu .world.current { background: rgba(111, 168, 90, 0.16); border-color: #6fa85a; }
+#menu .row-buttons button, #menu button.small, #menu .style, #settings .keys button { color: var(--cream); background: rgba(255, 246, 227, 0.1); border: 2px solid rgba(255, 246, 227, 0.16); box-shadow: none; }
+#menu .row-buttons button:hover, #menu button.small:hover, #menu .style:hover, #settings .keys button:hover { border-color: rgba(255, 246, 227, 0.45); }
+#menu .row-buttons button.danger { color: #fff; background: #b8323f; border-color: #d9505b; box-shadow: none; }
+#menu .style.active { color: var(--accent); background: rgba(242, 201, 76, 0.12); border-color: var(--accent); }
+#settings .keys button.waiting { color: #2b2420; background: var(--accent); border-color: var(--accent); }
+#look-options h4, #settings h4 { color: var(--accent); }
+#menu .swatch { border-color: rgba(255, 246, 227, 0.2); }
+#menu .swatch.active { border-color: var(--accent); }
+#look-preview { border: 2px solid rgba(255, 246, 227, 0.14); }
+kbd { color: #2b2420; background: #e6d7b8; }
+#settings input[type='range'] { accent-color: var(--accent); }
