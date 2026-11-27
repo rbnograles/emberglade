@@ -116,9 +116,14 @@ export class Hud {
     };
     const status = $('status');
     const ride = g.vehicle;
-    const state = ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
-    status.className = STATUS[state] ? state : 'hidden';
-    status.textContent = STATUS[state] ?? '';
+    // the harsh regions come first: they kill fastest
+    const ex = g.exposed ?? g.exposure();
+    const missing = ex.short > 0 ? `need ${ex.short} more ${ex.kind === 'frost' ? 'fur' : 'crystal'} piece${ex.short > 1 ? 's' : ''}` : '';
+    const harsh = ex.kind === 'frost' ? (ex.short ? `Freezing! You ${missing}, or a campfire` : ex.need ? 'Your furs keep out the cold' : '')
+      : ex.kind === 'heat' ? (ex.short ? `Scorching! You ${missing}` : ex.need ? 'Your crystal gear keeps out the heat' : '') : '';
+    const state = harsh ? (ex.short ? 'harsh' : 'safe') : ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
+    status.className = harsh || STATUS[state] ? state : 'hidden';
+    status.textContent = harsh || (STATUS[state] ?? '');
     // what the eat and drink keys would use right now, for the prompt below
     const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
     const source = g.drinkSource();

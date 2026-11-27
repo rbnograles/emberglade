@@ -64,6 +64,13 @@ export const ITEMS = {
   woven_hat: { name: 'Woven hat', armor: 'head', def: 1, color: 0xd9c27a, stack: 1, hint: 'RMB: wear' },
   woven_tunic: { name: 'Woven tunic', armor: 'body', def: 1, color: 0xd9c27a, stack: 1, hint: 'RMB: wear' },
   woven_boots: { name: 'Woven boots', armor: 'feet', def: 1, color: 0xd9c27a, stack: 1, hint: 'RMB: wear' },
+  // gear for the harsh regions: warm pieces for the frozen wastes, cool pieces for the volcanic lands
+  fur_hat: { name: 'Fur hat', armor: 'head', def: 1, warm: 1, color: 0xb08a5a, stack: 1, hint: 'RMB: wear (keeps out the freezing cold)' },
+  fur_coat: { name: 'Fur coat', armor: 'body', def: 1, warm: 1, color: 0xb08a5a, stack: 1, hint: 'RMB: wear (keeps out the freezing cold)' },
+  fur_boots: { name: 'Fur boots', armor: 'feet', def: 1, warm: 1, color: 0xb08a5a, stack: 1, hint: 'RMB: wear (keeps out the freezing cold)' },
+  heat_hood: { name: 'Crystal hood', armor: 'head', def: 1, cool: 1, color: 0x9fdcf5, stack: 1, hint: 'RMB: wear (keeps out the scorching heat)' },
+  heat_suit: { name: 'Crystal suit', armor: 'body', def: 1, cool: 1, color: 0x9fdcf5, stack: 1, hint: 'RMB: wear (keeps out the scorching heat)' },
+  heat_boots: { name: 'Crystal boots', armor: 'feet', def: 1, cool: 1, color: 0x9fdcf5, stack: 1, hint: 'RMB: wear (keeps out the scorching heat)' },
   copper_helmet: { name: 'Copper helmet', armor: 'head', def: 2, color: 0xd9803a, stack: 1, hint: 'RMB: wear' },
   copper_chestplate: { name: 'Copper chestplate', armor: 'body', def: 2, color: 0xd9803a, stack: 1, hint: 'RMB: wear' },
   copper_boots: { name: 'Copper boots', armor: 'feet', def: 2, color: 0xd9803a, stack: 1, hint: 'RMB: wear' },

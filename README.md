@@ -8,7 +8,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 
 ## Features
 
-- **Infinite seeded world** with vast oceans and deep trenches, mountain ranges that climb to snowy peaks, volcanoes with lava-filled craters, frozen wastes with icy ponds, and five lowland biomes (Green Meadow, Autumn Woods, Blossom Grove, Pine Forest, Sandy Flats). Everything is generated as you walk and nature regrows over time.
+- **Infinite seeded world** with vast oceans and deep trenches, mountain ranges that climb to snowy peaks, one Frozen Wastes region and one Volcanic Lands region per world, and five lowland biomes (Green Meadow, Autumn Woods, Blossom Grove, Pine Forest, Sandy Flats). Everything is generated as you walk and nature regrows over time.
 - **Water:** wade through ponds and shallows and swim in deep water, which drains your energy. Dive under the surface on a limited breath of air. Sea water is too salty to drink.
 - **The sea floor:** kelp, clams with the odd pearl, coral, and iron ore in the deep. Fish to catch, and snappers that hunt swimmers. A diving mask doubles your air.
 - **Vehicles:** a boat to cross open water without tiring, and a submarine that dives, holds its depth, carries its own air and lamp, and keeps sea creatures off you.
@@ -20,6 +20,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Creatures:** gloomlings, brutes and spitting spitters hunt you after dark; golems guard the mountains at any hour. Fight them with swords, or stay near campfire light.
 - **World map:** press M for a full map of the land and sea around you, with your start, bed, vehicles and dropped pack marked.
 - **Glider:** jump from a height and glide. **Weather:** real falling rain with splashes and sound, which waters your fields.
+- **Harsh regions:** the Frozen Wastes and the Volcanic Lands each lie in one place, marked on the world map. Going in without fur or crystal gear drains your health fast, and the deeper you go the more pieces you need. Snow falls harder toward the heart of the wastes; ash drifts over the volcanoes.
 - **Armor and bags:** woven and copper armor reduce damage and night cold; bags add inventory rows.
 - **Base building:** walls, doors, floors, fences, beds and chests, with a placement preview. Creatures cannot cross walls or step on built floors.
 - **Hunting and light:** hunt deer for meat and hide, and carry a torch to see at night.

@@ -2,7 +2,7 @@ import { BIOMES, SHORE, WATER_COLORS } from '../world/biomes.js';
 
 const CELLS = 300; // map cells across
 const PX = 2; // canvas pixels per cell
-const ZOOMS = [2, 4, 8, 16]; // world tiles per cell: 600 to 4800 tiles across
+const ZOOMS = [2, 4, 8, 16, 32]; // world tiles per cell: 600 to 4800 tiles across
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
 // Full-screen map of the world around the player. The terrain is generated from the seed, so it can
@@ -107,6 +107,9 @@ export class BigMap {
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a', 'Dropped pack');
     this.marker(p.spawn.x + 0.5, p.spawn.z + 0.5, '#b9e89a', 'Start');
     if (p.bed) this.marker(p.bed.x + 0.5, p.bed.z + 0.5, '#ffd24a', 'Bed');
+    // the two harsh regions are named where their hearts lie
+    this.marker(g.gen.frostCentre.x, g.gen.frostCentre.z, '#bfe6f5', 'Frozen Wastes');
+    this.marker(g.gen.heatCentre.x, g.gen.heatCentre.z, '#ff7a1a', 'Volcanic Lands');
     this.marker(p.x, p.z, '#ffffff', 'You');
   }
 }

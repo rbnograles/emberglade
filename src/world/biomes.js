@@ -34,6 +34,10 @@ BIOMES.volcano = {
   name: 'Volcano', ground: [0x4d4549, 0x443c40],
   spawn: [['rock_coal', 0.025], ['boulder', 0.02], ['rock_iron', 0.012], ['rock_crystal', 0.005], ['pebble', 0.012]],
 };
+BIOMES.ash = {
+  name: 'Ashlands', ground: [0x5a5054, 0x4f464a],
+  spawn: [['tree_dead', 0.03], ['boulder', 0.02], ['rock_coal', 0.02], ['rock_iron', 0.008], ['pebble', 0.015], ['stick', 0.01]],
+};
 BIOMES.winter = {
   name: 'Frozen Wastes', ground: [0xeef4f8, 0xdfe9f0],
   spawn: [['tree_snowpine', 0.05], ['boulder', 0.012], ['stick', 0.02], ['pebble', 0.015], ['rock_coal', 0.006]],

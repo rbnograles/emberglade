@@ -114,7 +114,8 @@ export class Sky {
   }
 
   // time: 0..1 of the day. (cx, cy, cz): player. cam: camera position. clock: seconds, for cloud drift.
-  update(time, cx, cy, cz, camDist, cam, clock, raining = false) {
+  // haze: {level 0..1, color} closes the view in with snow or ash
+  update(time, cx, cy, cz, camDist, cam, clock, raining = false, haze = null) {
     // rain eases in and out, dimming the light and greying the sky
     this.rain = (this.rain ?? 0) + ((raining ? 1 : 0) - (this.rain ?? 0)) * 0.02;
     let i = 0;
@@ -128,10 +129,16 @@ export class Sky {
     u.stars.value = lerp(6);
     u.horizon.value.lerp(a.setHex(0x9aa7b3), this.rain * 0.7);
     u.zenith.value.lerp(b.setHex(0x7d8a98), this.rain * 0.7);
+    const thick = haze ? haze.level : 0;
+    if (thick > 0) {
+      u.horizon.value.lerp(a.setHex(haze.color), thick * 0.85);
+      u.zenith.value.lerp(b.setHex(haze.color), thick * 0.6);
+    }
     this.scene.background.copy(u.horizon.value);
     this.scene.fog.color.copy(u.horizon.value);
-    this.scene.fog.near = camDist + 18;
-    this.scene.fog.far = camDist + 44;
+    // a blizzard or an ash storm pulls the fog in close
+    this.scene.fog.near = camDist + 18 - thick * 22;
+    this.scene.fog.far = camDist + 44 - thick * 26;
 
     // The shadow light is the sun by day and the moon by night. It dims to almost nothing
     // at the two hand-overs (6:00 and 18:00) so the change of direction is never seen.

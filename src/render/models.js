@@ -116,6 +116,11 @@ export function buildModels() {
   m.set('tree_purple', tree([0x9a6fd6, 0xad85e2, 0x8558c4], 16, 0xf2e6ff));
   m.set('tree_pine', pine());
   m.set('tree_snowpine', pine(true));
+  // charred tree: a bare black trunk with a few stubs of branch
+  m.set('tree_dead', new Vox()
+    .box(-1, 0, -1, 0, 7, 0, 0x3a3236).box(1, 4, -1, 2, 4, -1, 0x2b2529).box(2, 5, -1, 2, 6, -1, 0x2b2529)
+    .box(-3, 5, 0, -2, 5, 0, 0x2b2529).box(-3, 6, 0, -3, 7, 0, 0x2b2529).box(-1, 8, 0, -1, 9, 0, 0x2b2529)
+    .build(0.25));
   m.set('bush', bush(true));
   m.set('bush_bare', bush(false));
   [0xe8556a, 0xffffff, 0xa77be0, 0xf2a03d].forEach((c, i) => m.set('flower' + i, flower(c)));

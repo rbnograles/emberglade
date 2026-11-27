@@ -91,3 +91,54 @@ export class Rain {
     this.streaks.material.opacity = 0.5 * Math.min(1, this.level * 1.5);
   }
 }
+
+const FLAKES = 3200;
+
+// Drifting flakes that follow the player: snow in the frozen region, ash over the volcanic lands.
+// `level` (0..1) is how deep into the region the player is: a few lazy flakes at the edge,
+// a driving blizzard at the heart.
+export class Flurry {
+  constructor(scene, color, size = 0.07) {
+    this.level = 0;
+    this.flakes = Array.from({ length: FLAKES }, () => ({
+      x: (Math.random() * 2 - 1) * HALF, y: Math.random() * TOP, z: (Math.random() * 2 - 1) * HALF,
+      drift: Math.random() * Math.PI * 2, speed: 0.6 + Math.random() * 0.8,
+    }));
+    this.mesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(size, size, size),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }),
+      FLAKES,
+    );
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 3;
+    scene.add(this.mesh);
+  }
+
+  update(dt, target, cx, cy, cz, clock) {
+    this.level += (target - this.level) * Math.min(1, dt * 0.8);
+    // few flakes at the edge, the full count only near the heart
+    const active = this.level < 0.01 ? 0 : Math.floor(FLAKES * (0.06 + 0.94 * this.level * this.level));
+    this.mesh.visible = active > 0;
+    if (!active) return;
+    this.mesh.count = active;
+    const fall = 1.6 + this.level * 7, wind = 0.6 + this.level * this.level * 15; // gentle, then driven sideways
+    for (let i = 0; i < active; i++) {
+      const f = this.flakes[i];
+      f.y -= fall * f.speed * dt;
+      f.x += (wind + Math.sin(clock * 1.3 + f.drift) * 0.8) * dt;
+      f.z += Math.cos(clock * 1.1 + f.drift) * 0.6 * dt;
+      if (f.y < -3) {
+        f.y += TOP + 3;
+        f.x = (Math.random() * 2 - 1) * HALF;
+        f.z = (Math.random() * 2 - 1) * HALF;
+      }
+      if (f.x > HALF) f.x -= HALF * 2;
+      dummy.position.set(cx + f.x, cy + f.y, cz + f.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(0.7 + f.speed * 0.5);
+      dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, dummy.matrix);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}

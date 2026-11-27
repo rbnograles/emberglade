@@ -3,7 +3,7 @@ import { Game } from './game/game.js';
 import { loadSave, writeSave, clearSave } from './game/save.js';
 import { settings } from './settings.js';
 import { sfx, unlockAudio, setNight, setRain } from './audio.js';
-import { Rain } from './render/weather.js';
+import { Rain, Flurry } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
 import { BigMap } from './ui/bigmap.js';
 import { buildMenu } from './ui/menu.js';
@@ -63,6 +63,8 @@ const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
 const playerModel = new PlayerModel(settings.look);
 const rain = new Rain(scene);
+const snow = new Flurry(scene, 0xffffff, 0.075);
+const ash = new Flurry(scene, 0x4a4246, 0.06);
 scene.add(playerModel.group);
 
 // Square frame marking the targeted tile.
@@ -457,6 +459,7 @@ const lookAt = new THREE.Vector3();
 let last = performance.now();
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
 let shake = 0; // seconds of camera shake left
+let haze = null; // snow or ash thick enough to close the view in
 let stepTimer = 0, wasWinded = false, bubbleTimer = 0;
 let wornKey = null; // armor currently shown on the character
 
@@ -623,7 +626,7 @@ function step(dt) {
     game.primary(target.x, target.z);
   }
 
-  sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock, game.raining);
+  sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock, game.raining, haze);
   fires.update(chunks.fires(), p.x, p.z, clock, game.isNight);
   // a held torch lights the way
   const lit = game.held && ITEMS[game.held.id].light;
@@ -641,7 +644,12 @@ function step(dt) {
   // weather: rain streaks over the view, and the water surface rises and falls a little
   // rain falls as real streaks with splashes; the tallest water is what a drop lands on
   rain.update(dt, game.raining, p.x, playerY, p.z, (x, z) => game.ground(x, z));
-  setRain(submerged ? 0 : rain.level);
+  // snow thickens toward the heart of the frozen region; ash drifts over the volcanic lands
+  const here = game.gen.tile(Math.floor(p.x), Math.floor(p.z));
+  snow.update(dt, here.frost > 0 ? Math.min(1, 0.12 + here.frost * 1.15) : 0, p.x, playerY, p.z, clock);
+  ash.update(dt, here.heat > 0 ? Math.min(0.6, 0.08 + here.heat * 0.6) : 0, p.x, playerY, p.z, clock);
+  haze = snow.level > 0.02 ? { level: snow.level * snow.level, color: 0xe8f0f5 } : ash.level > 0.02 ? { level: ash.level * 0.8, color: 0x6b5048 } : null;
+  setRain(submerged ? 0 : Math.max(rain.level, snow.level * snow.level * 0.8)); // the hiss doubles as blizzard wind
   const swell = Math.sin(clock * 1.3) * 0.035;
   for (const c of chunks.map.values()) c.water.position.y = swell;
 

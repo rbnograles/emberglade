@@ -42,6 +42,7 @@ export const ENEMY_KINDS = {
   spitter: { hp: 5, speed: 2.2, damage: 1.2, size: 0.85, ranged: true },
 };
 const FIRE_SAFE = 4; // creatures keep this far from a campfire
+const EXPOSURE_SECONDS = 3; // seconds per heart lost for each missing piece of gear in a harsh region
 const COLD_HUNGER = 1; // extra hunger drain when cold with no armor (x2 in total)
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -103,6 +104,9 @@ export class Game {
       const x = Math.round((Math.random() - 0.5) * 6000), z = Math.round((Math.random() - 0.5) * 6000);
       const t = this.gen.tile(x, z);
       if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
+      // well clear of the two harsh regions: they are places to travel to, not to wake up beside
+      const far = (c, r) => Math.hypot(x - c.x, z - c.z) > r;
+      if (!far(this.gen.frostCentre, 2200) || !far(this.gen.heatCentre, 1900)) continue;
       let trees = 0, pond = false;
       for (let dz = -24; dz <= 24; dz += 2) {
         for (let dx = -24; dx <= 24; dx += 2) {
@@ -122,7 +126,11 @@ export class Game {
 
   get held() { return this.inv.slots[this.selected]; }
   // rain: every third day or so, for the middle part of the day; it waters the fields
-  get raining() { return hash2(this.day, 7, this.seed) < 0.3 && this.time > 0.14 && this.time < 0.4; }
+  get raining() {
+    // it never rains in the frozen region (it snows) or over the volcanic lands
+    const t = this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z));
+    return hash2(this.day, 7, this.seed) < 0.3 && this.time > 0.14 && this.time < 0.4 && t.frost <= 0 && t.heat <= 0;
+  }
   get canSprint() { return !this.player.winded && this.player.stamina > 0 && !this.inWater && !this.player.riding; }
   get isNight() { return this.time > 0.56 && this.time < 0.96; }
 
@@ -727,6 +735,25 @@ export class Game {
     return (this.status = 'cold');
   }
 
+  // ---- the harsh regions ----
+  // What the frozen and volcanic regions demand where the player stands, and whether they are covered.
+  // need: pieces of the right gear required (1 at the edge, 3 in the heart). have: pieces worn.
+  // short: how many are missing; each missing piece costs a heart every few seconds.
+  exposure() {
+    const p = this.player, px = Math.floor(p.x), pz = Math.floor(p.z);
+    const t = this.gen.tile(px, pz);
+    const kind = t.frost > 0 ? 'frost' : t.heat > 0 ? 'heat' : null;
+    if (!kind) return { kind: null, need: 0, have: 0, short: 0, depth: 0 };
+    const depth = kind === 'frost' ? t.frost : t.heat;
+    let need = Math.min(3, 1 + Math.floor(depth * 3));
+    // a fire or a floor underfoot beats the cold; water or a vehicle beats the heat
+    if (kind === 'frost' && (this.world.getFloor(px, pz) || this.nearCampfire(p.x, p.z, 5))) need = 0;
+    if (kind === 'heat' && (t.water || p.riding)) need = 0;
+    const prop = kind === 'frost' ? 'warm' : 'cool';
+    const have = this.armor.slots.reduce((sum, s) => sum + (s ? ITEMS[s.id][prop] ?? 0 : 0), 0);
+    return { kind, need, have, short: Math.max(0, need - have), depth };
+  }
+
   get hungerRate() {
     return this.status === 'cold' ? 1 + COLD_HUNGER * (1 - Math.min(1, this.defense / MAX_DEFENSE)) : 1;
   }
@@ -1174,6 +1201,17 @@ export class Game {
       this.burnTimer = 0.6;
       this.toast('The lava burns!');
       this.hurt(2);
+    }
+    // the frozen and volcanic regions wear down anyone without the gear for them
+    const ex = this.exposure();
+    this.exposed = ex;
+    if (ex.short > 0) {
+      this.player.health = Math.max(0, this.player.health - (dt * ex.short) / EXPOSURE_SECONDS);
+      this.exposureTimer = (this.exposureTimer ?? 0) - dt;
+      if (this.exposureTimer <= 0) {
+        this.exposureTimer = 1.6;
+        this.emit('hurt');
+      }
     }
     this.updateEnemies(dt);
     this.updateProjectiles(dt);

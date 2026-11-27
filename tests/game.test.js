@@ -634,6 +634,8 @@ describe('game rules', () => {
       expect(['meadow', 'autumn', 'blossom', 'pine']).toContain(t.biome);
       expect(g.player.x).toBe(x + 0.5);
       expect(g.blocked(g.player.x, g.player.z)).toBe(false);
+      expect(Math.hypot(x - g.gen.frostCentre.x, z - g.gen.frostCentre.z)).toBeGreaterThan(2200); // not beside the harsh regions
+      expect(Math.hypot(x - g.gen.heatCentre.x, z - g.gen.heatCentre.z)).toBeGreaterThan(1900);
       g.hurt(99); // fainting with no bed brings you back to your own start
       expect(Math.floor(g.player.x)).toBe(x);
     }
@@ -692,53 +694,83 @@ describe('game rules', () => {
     expect(g.world.get(0, 5).wet).toBe(true);
   });
 
-  it('has vast oceans, very high mountains, volcanoes and frozen wastes', () => {
+  it('has vast oceans, very high mountains, and one frozen and one volcanic region', () => {
     const g = newGame();
     const p = g.player;
     g.spawnTimer = g.seaTimer = g.golemTimer = Infinity;
     const tiles = [];
-    for (let z = -3000; z < 3000; z += 15) for (let x = -3000; x < 3000; x += 15) tiles.push([x, z, g.gen.tile(x, z)]);
+    for (let z = -5000; z < 5000; z += 25) for (let x = -5000; x < 5000; x += 25) tiles.push([x, z, g.gen.tile(x, z)]);
     const share = (pred) => tiles.filter(([, , t]) => pred(t)).length / tiles.length;
     expect(share((t) => t.salt)).toBeGreaterThan(0.3); // vast oceans
     expect(tiles.reduce((m, [, , t]) => Math.min(m, t.bed ?? 0), 0)).toBeLessThan(-12); // with deep trenches
     expect(tiles.reduce((m, [, , t]) => Math.max(m, t.h), 0)).toBeGreaterThan(35); // very high mountains
-    expect(share((t) => t.biome === 'winter')).toBeGreaterThan(0.03);
-    expect(tiles.some(([, , t]) => t.biome === 'snow')).toBe(true);
 
-    // a volcano: a cone rising to a rim, with a lava-filled crater that burns
-    const v = [...g.gen.volcanoes.values()].find(Boolean);
-    expect(v).toBeTruthy();
-    const crater = g.gen.tile(v.x, v.z), rim = g.gen.tile(v.x + 9, v.z), slope = g.gen.tile(v.x + Math.round(v.radius / 2), v.z);
+    // each harsh region is one place: everything frozen lies around one centre, everything volcanic around another
+    const { frostCentre: fc, heatCentre: hc } = g.gen;
+    const frozen = tiles.filter(([, , t]) => t.frost > 0), hot = tiles.filter(([, , t]) => t.heat > 0);
+    expect(frozen.length).toBeGreaterThan(100);
+    expect(hot.length).toBeGreaterThan(100);
+    expect(frozen.every(([x, z]) => Math.hypot(x - fc.x, z - fc.z) < 1800)).toBe(true);
+    expect(hot.every(([x, z]) => Math.hypot(x - hc.x, z - hc.z) < 1500)).toBe(true);
+    expect(tiles.filter(([, , t]) => t.biome === 'winter' || t.ice).every(([, , t]) => t.frost > 0)).toBe(true);
+    expect(tiles.filter(([, , t]) => t.biome === 'ash' || t.biome === 'volcano' || t.lava).every(([, , t]) => t.heat > 0)).toBe(true);
+    expect(g.gen.tile(fc.x, fc.z).frost).toBeGreaterThan(0.8); // deepest at the heart
+    expect(g.gen.tile(0, 0).frost + g.gen.tile(0, 0).heat).toBe(0);
+
+    // volcanoes stand only in the volcanic region; their craters hold lava that burns
+    const volcanoes = [...g.gen.volcanoes.values()].filter(Boolean);
+    expect(volcanoes.length).toBeGreaterThan(2);
+    const v = volcanoes[0];
+    const crater = g.gen.tile(v.x, v.z), rim = g.gen.tile(v.x + 9, v.z);
+    expect(crater.heat).toBeGreaterThan(0);
     expect(crater.lava).toBe(true);
-    expect(rim.lava).toBe(false);
     expect(rim.h).toBeGreaterThan(crater.h);
-    expect(rim.h).toBeGreaterThan(slope.h);
-    expect(rim.biome).toBe('volcano');
-    expect(g.gen.object(v.x, v.z)).toBe(null);
+    expect(g.enemyCanStand(v.x + 0.5, v.z + 0.5)).toBe(false);
+    g.armor.slots[0] = { id: 'heat_hood', n: 1 };
+    g.armor.slots[1] = { id: 'heat_suit', n: 1 };
+    g.armor.slots[2] = { id: 'heat_boots', n: 1 };
     Object.assign(p, { x: v.x + 0.5, z: v.z + 0.5, y: crater.h, vy: 0, health: 10 });
     g.tick(0.1);
-    expect(p.health).toBeCloseTo(8, 1);
-    g.tick(0.1); // not again straight away
-    expect(p.health).toBeCloseTo(8, 1);
-    expect(g.enemyCanStand(v.x + 0.5, v.z + 0.5)).toBe(false);
-    g.inv.slots[0] = { id: 'campfire', n: 1 };
-    Object.assign(p, { x: v.x + 1.5, z: v.z + 0.5 });
-    expect(g.canPlace(v.x, v.z)).toBe(false);
+    expect(p.health).toBeLessThan(9); // even in full heat gear, lava itself burns
+    g.armor.slots.fill(null);
 
-    // frozen wastes: cold by day, with frozen ponds you can walk on
-    const [wx, wz] = tiles.find(([, , t]) => t.biome === 'winter' && !t.ice);
-    Object.assign(p, { x: wx + 0.5, z: wz + 0.5, y: g.ground(wx + 0.5, wz + 0.5), health: 10 });
+    // exposure: the further in, the more gear is needed; each missing piece drains health
+    const at = (pred) => frozen.find(([x, z, t]) => pred(t) && !t.ice && !t.water && !g.blocked(x + 0.5, z + 0.5));
+    const [ex, ez] = at((t) => t.frost < 0.3), [ix, iz] = at((t) => t.frost > 0.7);
+    const stand = (x, z) => Object.assign(p, { x: x + 0.5, z: z + 0.5, y: g.ground(x + 0.5, z + 0.5), health: 10, hunger: 5, thirst: 10 });
+    stand(ex, ez);
+    expect(g.exposure()).toMatchObject({ kind: 'frost', need: 1, short: 1 });
+    stand(ix, iz);
+    expect(g.exposure()).toMatchObject({ kind: 'frost', need: 3, short: 3 });
     g.time = 0.25;
-    expect(g.updateStatus()).toBe('cold');
-    let ice = null;
-    for (let z = -3000; z < 3000 && !ice; z += 4) for (let x = -3000; x < 3000; x += 4) if (g.gen.tile(x, z).ice) { ice = [x, z]; break; }
-    const frozen = g.gen.tile(ice[0], ice[1]);
-    expect(frozen.water).toBe(false);
-    Object.assign(p, { x: ice[0] + 0.5, z: ice[1] + 0.5, y: frozen.h });
+    for (let i = 0; i < 30; i++) g.tick(0.1); // three seconds unprotected in the heart: three hearts gone
+    expect(p.health).toBeCloseTo(7, 0);
+    g.armor.slots[0] = { id: 'fur_hat', n: 1 };
+    g.armor.slots[1] = { id: 'fur_coat', n: 1 };
+    expect(g.exposure().short).toBe(1);
+    g.armor.slots[2] = { id: 'fur_boots', n: 1 };
+    stand(ix, iz);
+    for (let i = 0; i < 30; i++) g.tick(0.1);
+    expect(p.health).toBe(10); // fully dressed for it: no harm
+    g.armor.slots.fill(null);
+    g.world.set(ix + 1, iz, { t: 'campfire', placed: true });
+    expect(g.exposure().short).toBe(0); // a campfire keeps the cold off too
+    expect(g.raining).toBe(false);
+
+    // fur is no use against heat, and the other way round
+    const [hx, hz] = hot.find(([x, z, t]) => t.heat > 0.1 && !t.lava && t.biome === 'ash' && !g.blocked(x + 0.5, z + 0.5));
+    stand(hx, hz);
+    g.armor.slots[1] = { id: 'fur_coat', n: 1 };
+    expect(g.exposure()).toMatchObject({ kind: 'heat', have: 0 });
+    g.armor.slots[1] = { id: 'heat_suit', n: 1 };
+    expect(g.exposure().have).toBe(1);
+
+    // frozen water is solid ice: walkable, not drinkable
+    const [wx, wz] = frozen.find(([, , t]) => t.ice);
+    Object.assign(p, { x: wx + 0.5, z: wz + 0.5, y: g.gen.tile(wx, wz).h });
     expect(g.inWater).toBe(false);
     expect(g.drinkSource()).toBe(null);
   });
-
   it('tires from sprinting and recovers', () => {    const g = newGame();
     const p = g.player;
     expect(g.canSprint).toBe(true);
