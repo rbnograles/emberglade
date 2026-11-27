@@ -11,7 +11,7 @@ import { ITEMS } from './game/items.js';
 import { buildModels } from './render/models.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
-import { PlayerModel, Deer, Enemies } from './render/characters.js';
+import { PlayerModel, Deer, Enemies, Fish } from './render/characters.js';
 import { Particles, Fires } from './render/effects.js';
 import { Hud } from './ui/hud.js';
 import { loadIcons, iconPixels } from './ui/icons.js';
@@ -53,7 +53,8 @@ const sky = new Sky(scene);
 const particles = new Particles(scene);
 const fires = new Fires(scene);
 const deer = new Deer(scene, game, models.get('deer'));
-const enemies = new Enemies(scene, game, models.get('gloomling'));
+const enemies = new Enemies(scene, game, { gloomling: models.get('gloomling'), snapper: models.get('snapper') });
+const fish = new Fish(scene, game, models.get('fish'));
 const playerModel = new PlayerModel();
 scene.add(playerModel.group);
 
@@ -357,7 +358,7 @@ function pickFoe() {
   let best = null, bestD = Infinity;
   for (const e of game.enemies) {
     const fromPlayer = Math.hypot(e.x - p.x, e.z - p.z);
-    if (fromPlayer > 2.8) continue;
+    if (fromPlayer > 2.8 || Math.abs(e.y - p.y) > 2.2) continue; // must be near in depth as well
     const fromCursor = target ? Math.hypot(e.x - target.px, e.z - target.pz) : Infinity;
     if (fromCursor > 1.5 && fromPlayer > 1.5) continue;
     const d = Math.min(fromCursor, fromPlayer);
@@ -367,6 +368,10 @@ function pickFoe() {
     }
   }
   if (best) return best;
+  // fish: any one within arm's reach of a diver
+  for (const f of fish.list) {
+    if (Math.hypot(f.x - p.x, f.y - p.y - 0.6, f.z - p.z) < 1.9) return { fish: f, x: f.x, z: f.z };
+  }
   // no creature in range: a deer under the cursor can be hunted
   for (const d of deer.list) {
     if (Math.hypot(d.x - p.x, d.z - p.z) > 2.8) continue;
@@ -560,7 +565,14 @@ function step(dt) {
     swingCooldown = 0.32;
     hitColor = 0x6b4f9a;
     hitSound = 'hit';
-    if (foe.deer) {
+    if (foe.fish) {
+      fish.hit(foe.fish);
+      game.give('raw_fish', 1);
+      game.wearTool();
+      game.emit('swing', { x: foe.x - 0.5, z: foe.z - 0.5 });
+      particles.burst(foe.x, foe.fish.y, foe.z, 0xf2a03d, 6);
+      sfx('hit');
+    } else if (foe.deer) {
       // hunting: the deer bolts when hit and drops meat and hide when it falls
       if (deer.hit(foe.deer, game.attackPower, p.x, p.z)) {
         game.give('raw_meat', 1 + Math.floor(Math.random() * 2));
@@ -588,6 +600,7 @@ function step(dt) {
   particles.update(dt);
   deer.update(dt, p.x, p.z);
   enemies.update(dt, clock);
+  fish.update(dt, p.x, p.y, p.z);
 
   hudTimer -= dt;
   if (hudTimer <= 0) {

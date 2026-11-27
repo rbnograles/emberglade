@@ -141,6 +141,30 @@ export function buildModels() {
   m.set('soil', soil(0x7a5233, 0x6b4529));
   m.set('soil_wet', soil(0x4f3320, 0x432a19));
   for (let s = 0; s < 4; s++) m.set('crop' + s, crop(s));
+  // ---- sea floor ----
+  {
+    const kelp = new Vox();
+    const green = mix([0x3f8f5a, 0x4fa56a, 0x357a4c], 41);
+    for (const [x, z, h] of [[0, 0, 13], [2, 1, 9], [-2, -1, 11], [1, -2, 7]]) {
+      for (let y = 0; y < h; y++) kelp.set(x + ((y >> 1) & 1), y, z, green); // strands that sway side to side
+    }
+    m.set('kelp', kelp.build(0.11));
+    m.set('clam', new Vox().blob(0, 0.8, 0, 2.0, 1.2, 1.7, mix([0xf2e6d8, 0xe8d4c4, 0xf7efe6], 42), 0.2, 42).box(-1, 1, 1, 0, 1, 1, 0xe8a0b4).build(0.11));
+    const coral = new Vox();
+    const pink = mix([0xf0728a, 0xf78fa3, 0xf2a03d], 43);
+    coral.box(0, 0, 0, 0, 4, 0, pink).box(-2, 2, 0, -1, 2, 0, pink).box(-2, 3, 0, -2, 6, 0, pink).box(1, 3, 0, 2, 3, 0, pink)
+      .box(2, 4, 0, 2, 7, 0, pink).box(0, 2, 1, 0, 2, 2, pink).box(0, 3, 2, 0, 5, 2, pink).box(0, 5, 0, 0, 6, 0, pink);
+    m.set('coral', coral.build(0.13));
+    m.set('rock_iron', rock(0x8a3f2c));
+    // snapper: a long dark fish facing +x with a pale jaw
+    m.set('snapper', new Vox()
+      .box(0, 1, 0, 8, 3, 2, mix([0x2f5f6a, 0x386e7a, 0x28525c], 44)).box(7, 1, 0, 9, 1, 2, 0xe6ecef)
+      .box(-2, 1, 1, -1, 3, 1, 0x28525c).box(3, 4, 1, 5, 4, 1, 0x28525c).set(8, 3, 0, 0xfff27a).set(8, 3, 2, 0xfff27a)
+      .build(0.16));
+    m.set('fish', new Vox()
+      .box(0, 0, 0, 3, 1, 0, mix([0xf2a03d, 0xf7b85c, 0xe88a2a], 45)).set(-1, 0, 0, 0xe88a2a).set(-1, 1, 0, 0xe88a2a).set(3, 1, 0, 0x2b2b33)
+      .build(0.12));
+  }
   m.set('deer', deer());
   // gloomling: a dark blob facing +x with two bright eyes
   m.set('gloomling', new Vox()

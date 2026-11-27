@@ -24,6 +24,11 @@ export const OBJECTS = {
   boulder: rock('Boulder', [['stone', 2, 3]]),
   rock_coal: rock('Coal rock', [['coal', 2, 3], ['stone', 1, 1]]),
   rock_copper: rock('Copper rock', [['copper_ore', 2, 3], ['stone', 1, 1]]),
+  // sea floor
+  kelp: { name: 'Kelp', pick: true, drops: [['kelp', 1, 2]], regrow: 3, pickR: 0.5 },
+  clam: { name: 'Clam', pick: true, drops: [['clam', 1, 1], ['pearl', 1, 1, 0.3]], regrow: 5 },
+  coral: { name: 'Coral', pick: true, drops: [['coral', 1, 1]], regrow: 6, pickR: 0.55 },
+  rock_iron: { ...rock('Iron rock', [['iron_ore', 2, 3], ['stone', 1, 1]]), minPower: 2 },
   campfire: { ...placed('Campfire'), item: 'campfire' },
   workbench: { ...placed('Workbench', 0.45), item: 'workbench' },
   fence: { ...placed('Fence', 0.45), hp: 1, item: 'fence' },

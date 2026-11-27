@@ -1,7 +1,7 @@
 // 8x8 pixel icons, one character per pixel.
 const PALETTE = {
   k: '#2b2b33', w: '#ffffff', g: '#9aa0a8', G: '#6b7078', b: '#8a5a34', B: '#5c3a20', y: '#f2c94c', o: '#e8833a',
-  r: '#d94f4f', p: '#e88ac0', l: '#7ac74f', L: '#4a9a3a', c: '#6fc3e8', t: '#d9a066', s: '#d9c27a',
+  r: '#d94f4f', p: '#e88ac0', l: '#7ac74f', L: '#4a9a3a', c: '#6fc3e8', t: '#d9a066', s: '#d9c27a', i: '#c9d1d9',
 };
 
 const axe = (h) => `....${h}${h}.. ...${h}${h}${h}${h}. ..${h}${h}${h}${h}b. ...${h}${h}b.. ....b... ...b.... ..b..... .b......`;
@@ -14,6 +14,14 @@ const boots = (h) => `........ .${h}${h}..${h}${h}. .${h}${h}..${h}${h}. .${h}${
 const bag = (h) => `..${h}${h}${h}${h}.. .${h}....${h}. ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}bb${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} .${h}${h}${h}${h}${h}${h}. ........`;
 
 const ART = {
+  kelp: '...L.... ..LL.... ..L..L.. .LL..L.. .L..LL.. .LL.L... ..L.LL.. ..L..L..',
+  clam: '........ ........ .wwwwww. wwtwwtww wtwwwwtw .wppppw. ..wwww.. ........',
+  pearl: '........ ..wwww.. .wwwwww. .wwcwww. .wwwwww. .wwwwww. ..wwww.. ........',
+  coral: 'p..p..p. p..p..p. pp.p.pp. .p.ppp.. .ppp.p.. ..pp.p.. ...pp... ...pp...',
+  raw_fish: '........ ........ o..oooo. oooooowo oooooooo o..oooo. ........ ........',
+  cooked_fish: '........ ........ b..tttt. bttttttk tttttttt b..tttt. ........ ........',
+  iron_bar: '........ ........ ..iiiii. .iwwiiiG iiiiiiiG iiiiiiGG .GGGGGG. ........',
+  diving_mask: '........ .kkkkkk. kccckccc kcwckcwc kccckccc .kkkkkk. ..k..k.. ........',
   flask: '...bb... ...cc... ..cccc.. .cccccc. .cwcccc. .cccccc. ..cccc.. ........',
   woven_bag: bag('s'),
   trail_pack: bag('t'),
@@ -60,6 +68,10 @@ const PACK = {
   copper_pickaxe: new URL('../../assets/kenney_voxel-pack/PNG/Items/pick_bronze.png', import.meta.url).href,
   stone_sword: new URL('../../assets/kenney_voxel-pack/PNG/Items/sword_iron.png', import.meta.url).href,
   copper_sword: new URL('../../assets/kenney_voxel-pack/PNG/Items/sword_bronze.png', import.meta.url).href,
+  iron_ore: new URL('../../assets/kenney_voxel-pack/PNG/Items/ore_iron.png', import.meta.url).href,
+  iron_axe: new URL('../../assets/kenney_voxel-pack/PNG/Items/axe_silver.png', import.meta.url).href,
+  iron_pickaxe: new URL('../../assets/kenney_voxel-pack/PNG/Items/pick_silver.png', import.meta.url).href,
+  iron_sword: new URL('../../assets/kenney_voxel-pack/PNG/Items/sword_silver.png', import.meta.url).href,
   hoe: new URL('../../assets/kenney_voxel-pack/PNG/Items/hoe_iron.png', import.meta.url).href,
   apple: new URL('../../assets/kenney_voxel-pack/PNG/Items/apple.png', import.meta.url).href,
   wheat: new URL('../../assets/kenney_voxel-pack/PNG/Items/wheat.png', import.meta.url).href,

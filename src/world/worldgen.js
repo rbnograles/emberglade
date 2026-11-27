@@ -1,5 +1,5 @@
 import { fbm, hash2 } from '../core/noise.js';
-import { BIOMES, SHORE } from './biomes.js';
+import { BIOMES, SHORE, SEABED } from './biomes.js';
 
 export const WATER_Y = -0.3;
 export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swum, shallower is waded
@@ -83,8 +83,10 @@ export class Worldgen {
     const t = this.tile(x, z);
     if (t.obj !== undefined) return t.obj;
     let obj = null;
-    if (!t.water && Math.hypot(x, z) > 2) {
-      const table = t.shore ? SHORE.spawn : BIOMES[t.biome].spawn;
+    if ((t.salt || !t.water) && Math.hypot(x, z) > 2) {
+      // the seabed has its own life, changing with depth
+      const depth = t.salt ? WATER_Y - t.bed : 0;
+      const table = t.salt ? (depth < 2 ? SEABED.shallow : depth < 4 ? SEABED.mid : SEABED.deep) : t.shore ? SHORE.spawn : BIOMES[t.biome].spawn;
       let r = hash2(x, z, this.seed + 11);
       for (const [id, p] of table) {
         if (r < p) {

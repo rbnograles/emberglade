@@ -27,6 +27,8 @@ const DROWN_SECONDS = 1.6; // seconds per heart lost once out of energy in deep 
 export const ENEMY_KINDS = {
   gloomling: { hp: 6, speed: 2.5, damage: 1.5, size: 1 },
   brute: { hp: 14, speed: 1.9, damage: 2.5, size: 1.6 },
+  // sea: lives in deep water at any hour and hunts swimmers
+  snapper: { hp: 9, speed: 2.9, damage: 2, size: 1, sea: true },
 };
 const FIRE_SAFE = 4; // creatures keep this far from a campfire
 const COLD_HUNGER = 1.5; // extra hunger drain when cold with no armor (x2.5 in total)
@@ -46,6 +48,7 @@ export class Game {
     this.enemies = []; // night creatures, not saved
     this.nextEnemyId = 1;
     this.spawnTimer = 3;
+    this.seaTimer = 6;
     this.knock = null;
     this.inv = new Inventory(36, save?.inv);
     this.craftGrid = new Inventory(GRID * GRID, save?.craft);
@@ -179,7 +182,10 @@ export class Game {
   }
 
   inReach(tx, tz) {
-    return Math.hypot(tx + 0.5 - this.player.x, tz + 0.5 - this.player.z) <= REACH;
+    if (Math.hypot(tx + 0.5 - this.player.x, tz + 0.5 - this.player.z) > REACH) return false;
+    // the seabed is only in reach when you have dived down near it
+    const t = this.gen.tile(tx, tz);
+    return !t.water || this.player.y - t.bed <= 1.6;
   }
 
   // ---- items ----
@@ -200,7 +206,8 @@ export class Game {
   }
 
   giveDrops(drops) {
-    for (const [id, min, max] of drops) this.give(id, rand(min, max));
+    // [item, min, max] or [item, min, max, chance]
+    for (const [id, min, max, chance = 1] of drops) if (Math.random() < chance) this.give(id, rand(min, max));
   }
 
   record(key, n = 1) {
@@ -599,6 +606,10 @@ export class Game {
         this.toast(od.tool === 'axe' ? 'You need an axe' : 'You need a pickaxe');
         return;
       }
+      if (od.minPower && def.power < od.minPower) {
+        this.toast('This needs a copper pickaxe or better');
+        return;
+      }
       power = def.power;
       this.wearTool();
     }
@@ -763,7 +774,7 @@ export class Game {
   }
 
   spawnEnemy(x, z, kind = 'gloomling') {
-    const e = { id: this.nextEnemyId++, kind, x, z, hp: ENEMY_KINDS[kind].hp, cool: 0.6, stun: 0, kx: 0, kz: 0, tx: x, tz: z, wait: 0 };
+    const e = { id: this.nextEnemyId++, kind, x, z, y: this.ground(x, z), hp: ENEMY_KINDS[kind].hp, cool: 0.6, stun: 0, kx: 0, kz: 0, tx: x, tz: z, wait: 0 };
     this.enemies.push(e);
     return e;
   }
@@ -775,6 +786,17 @@ export class Game {
     return this.spawnEnemy(x, z, this.day >= 4 && Math.random() < 0.25 ? 'brute' : 'gloomling');
   }
 
+  // A snapper appears out in the deep while you are swimming in the sea.
+  trySpawnSeaEnemy() {
+    const p = this.player, a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 6;
+    const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+    const t = this.gen.tile(Math.floor(x), Math.floor(z));
+    if (!t.salt || t.bed > -2.5) return null;
+    const e = this.spawnEnemy(x, z, 'snapper');
+    e.y = t.bed + 1;
+    return e;
+  }
+
   removeEnemy(e) {
     this.enemies.splice(this.enemies.indexOf(e), 1);
     this.emit('enemygone', { x: e.x, z: e.z });
@@ -782,7 +804,16 @@ export class Game {
 
   updateEnemies(dt) {
     const p = this.player, night = this.isNight;
-    if (night && this.enemies.length < Math.min(8, 3 + Math.floor(this.day / 2))) {
+    const seaCount = this.enemies.filter((e) => ENEMY_KINDS[e.kind].sea).length;
+    const inSea = this.swimming && this.gen.tile(Math.floor(p.x), Math.floor(p.z)).salt;
+    if (inSea && seaCount < (night ? 3 : 2)) {
+      this.seaTimer -= dt;
+      if (this.seaTimer <= 0) {
+        this.seaTimer = 9;
+        this.trySpawnSeaEnemy();
+      }
+    }
+    if (night && this.enemies.length - seaCount < Math.min(8, 3 + Math.floor(this.day / 2))) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 5;
@@ -791,7 +822,11 @@ export class Game {
     }
     for (const e of [...this.enemies]) {
       const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz);
-      if (!night) e.hp -= dt * 3; // daylight burns them away
+      const sea = !!ENEMY_KINDS[e.kind].sea;
+      // land creatures hunt at night; sea creatures hunt whoever is in deep water
+      const hunting = sea ? this.swimming : night;
+      const canStand = (x, z) => (sea ? this.deepAt(x, z) : this.enemyCanStand(x, z));
+      if (!night && !sea) e.hp -= dt * 3; // daylight burns the night creatures away
       if (e.hp <= 0 || d > 48) {
         this.removeEnemy(e);
         continue;
@@ -803,7 +838,7 @@ export class Game {
         e.stun -= dt;
         mx = e.kx * dt;
         mz = e.kz * dt;
-      } else if (night && d < 16 && d > 0.6) {
+      } else if (hunting && d < (sea ? 11 : 16) && d > 0.6) {
         mx = (dx / d) * ENEMY_KINDS[e.kind].speed * dt;
         mz = (dz / d) * ENEMY_KINDS[e.kind].speed * dt;
       } else if (d >= 16) {
@@ -819,11 +854,20 @@ export class Game {
           mz = (wz / wd) * dt;
         }
       }
-      if (mx && this.enemyCanStand(e.x + mx, e.z)) e.x += mx;
-      if (mz && this.enemyCanStand(e.x, e.z + mz)) e.z += mz;
+      if (mx && canStand(e.x + mx, e.z)) e.x += mx;
+      if (mz && canStand(e.x, e.z + mz)) e.z += mz;
+      let reach = d;
+      if (sea) {
+        // rise or sink toward the swimmer, staying between the bed and the surface
+        const bed = this.gen.tile(Math.floor(e.x), Math.floor(e.z)).bed ?? -1;
+        const want = hunting && d < 11 ? p.y + 0.4 : bed + 1;
+        const goal = Math.max(bed + 0.3, Math.min(WATER_Y - 0.8, want));
+        e.y += Math.max(-2 * dt, Math.min(2 * dt, goal - e.y));
+        reach = Math.hypot(d, p.y + 0.4 - e.y);
+      } else e.y = this.ground(e.x, e.z);
       e.moving = mx !== 0 || mz !== 0;
       if (mx || mz) e.dir = Math.atan2(-mz, mx);
-      if (night && d < 0.95 && e.cool <= 0 && e.stun <= 0) {
+      if (hunting && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
         this.hurt(ENEMY_KINDS[e.kind].damage, e);
       }
@@ -861,7 +905,10 @@ export class Game {
     if (e.hp <= 0) {
       this.removeEnemy(e);
       this.record('kill');
-      if (e.kind === 'brute') {
+      if (e.kind === 'snapper') {
+        this.give('raw_fish', 2);
+        if (Math.random() < 0.25) this.give('pearl', 1);
+      } else if (e.kind === 'brute') {
         this.give('coal', 2);
         if (Math.random() < 0.5) this.give('copper_ore', 1);
       } else if (Math.random() < 0.4) this.give('coal', 1);
@@ -888,7 +935,10 @@ export class Game {
     // breath: runs down with your head under water, comes back quickly at the surface
     const pl = this.player, under = this.submerged;
     if (under) {
-      pl.breath = Math.max(0, pl.breath - (dt * MAX_BREATH) / BREATH_SECONDS);
+      // a diving mask stretches each breath
+      const head = this.armor.slots[0];
+      const stretch = (head && ITEMS[head.id].air) || 1;
+      pl.breath = Math.max(0, pl.breath - (dt * MAX_BREATH) / (BREATH_SECONDS * stretch));
       if (pl.breath <= 0) pl.health = Math.max(0, pl.health - dt / SUFFOCATE_SECONDS);
     } else pl.breath = Math.min(MAX_BREATH, pl.breath + (dt * MAX_BREATH) / 3);
     if (under !== this.wasUnder) this.emit(under ? 'dive' : 'surface');

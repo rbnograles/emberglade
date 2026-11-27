@@ -34,5 +34,11 @@ BIOMES.snow = {
 BIOMES.ocean = { name: 'Open Ocean', ground: [0x4f9fd6, 0x4a98cf], spawn: [] };
 
 export const SHORE = { ground: BIOMES.sand.ground, spawn: [['pebble', 0.05], ['stick', 0.02]] };
+// what grows and lies on the sea floor, by depth
+export const SEABED = {
+  shallow: [['kelp', 0.05], ['clam', 0.035], ['pebble', 0.02]],
+  mid: [['kelp', 0.045], ['coral', 0.04], ['clam', 0.025], ['rock_iron', 0.008]],
+  deep: [['rock_iron', 0.035], ['coral', 0.025], ['boulder', 0.02], ['clam', 0.01]],
+};
 export const WATER_COLORS = [0x82cbec, 0x74c0e6];
 export const SEABED_COLORS = { shallow: 0xe6d9a8, deep: 0x3d5f78 }; // sand near the surface, blue-grey far below

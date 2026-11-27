@@ -153,7 +153,9 @@ export class Chunks {
         const obj = this.world.get(x, z);
         const floor = this.world.getFloor(x, z);
         if (!obj && !floor) continue;
-        const y = this.gen.tile(x, z).h, px = x + 0.5, pz = z + 0.5;
+        // things in the sea rest on the bed
+        const tile = this.gen.tile(x, z);
+        const y = tile.water ? tile.bed : tile.h, px = x + 0.5, pz = z + 0.5;
         const add = (key, extra = {}) => list.push({ m: M.get(key), x: px, y, z: pz, ...extra });
         if (floor) add(floor);
         if (!obj) continue;
@@ -175,7 +177,7 @@ export class Chunks {
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
         } else {
           // Natural objects get a stable random turn, size and (if small) nudge.
-          const small = obj.t === 'flower' || obj.t === 'tallgrass' || obj.t === 'stick' || obj.t === 'pebble';
+          const small = obj.t === 'flower' || obj.t === 'tallgrass' || obj.t === 'stick' || obj.t === 'pebble' || obj.t === 'clam';
           const j = small ? 0.25 : 0;
           list.push({
             m: M.get(obj.t === 'flower' ? 'flower' + (obj.v ?? 0) : obj.t),

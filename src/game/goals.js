@@ -23,6 +23,8 @@ export const GOALS = [
   { text: 'Build a shelter: 6 walls, a door and 2 floors', need: { 'place:wall': 6, 'place:door': 1, 'place:floor': 2 } },
   { text: 'Sleep in a bed inside your shelter', need: { sleep: 1 } },
   { text: 'Find the sea and dive to the seabed (hold Shift in deep water)', need: { dive: 1 } },
+  { text: 'Find a pearl: open clams on the seabed', need: { 'collect:pearl': 1 } },
+  { text: 'Mine iron ore in the deep sea and smelt an iron bar', need: { 'craft:iron_bar': 1 } },
 ];
 
 export class Goals {

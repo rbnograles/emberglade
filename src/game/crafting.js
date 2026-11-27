@@ -2,7 +2,7 @@
 // pattern: rows of legend characters, '.' = empty. Shaped recipes may sit anywhere in the grid and may be mirrored.
 // shapeless: list of items, any arrangement. station: null, 'workbench' or 'campfire' (must be standing near one).
 export const GRID = 3;
-const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber', K: 'coal', H: 'hide' };
+const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber', K: 'coal', H: 'hide', I: 'iron_bar', P: 'pearl' };
 
 export const RECIPES = [
   { out: 'stick', n: 2, shapeless: ['wood'], station: null },
@@ -34,6 +34,12 @@ export const RECIPES = [
   { out: 'copper_helmet', n: 1, pattern: ['CCC', 'C.C'], station: 'workbench' },
   { out: 'copper_chestplate', n: 1, pattern: ['C.C', 'CCC', 'CCC'], station: 'workbench' },
   { out: 'copper_boots', n: 1, pattern: ['C.C', 'C.C'], station: 'workbench' },
+  { out: 'iron_axe', n: 1, pattern: ['II', 'I|', '.|'], station: 'workbench' },
+  { out: 'iron_pickaxe', n: 1, pattern: ['III', '.|.', '.|.'], station: 'workbench' },
+  { out: 'iron_sword', n: 1, pattern: ['I', 'I', '|'], station: 'workbench' },
+  { out: 'diving_mask', n: 1, pattern: ['FPF'], station: 'workbench' },
+  { out: 'iron_bar', n: 1, shapeless: ['iron_ore', 'coal'], station: 'campfire' },
+  { out: 'cooked_fish', n: 1, shapeless: ['raw_fish'], station: 'campfire' },
   { out: 'copper_bar', n: 1, shapeless: ['copper_ore', 'coal'], station: 'campfire' },
   { out: 'roasted_apple', n: 1, shapeless: ['apple'], station: 'campfire' },
   { out: 'cooked_meat', n: 1, shapeless: ['raw_meat'], station: 'campfire' },

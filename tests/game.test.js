@@ -52,7 +52,8 @@ describe('noise and worldgen', () => {
       expect(g.tile(0, 0).water).toBe(false);
       expect(g.object(0, 0)).toBe(null);
       for (let x = -60; x < 60; x++) {
-        for (let z = -60; z < 60; z++) if (g.tile(x, z).water) expect(g.object(x, z)).toBe(null);
+        // fresh water is bare; only the sea floor has things growing on it
+        for (let z = -60; z < 60; z++) if (g.tile(x, z).water && !g.tile(x, z).salt) expect(g.object(x, z)).toBe(null);
       }
     }
   });
@@ -420,6 +421,7 @@ describe('game rules', () => {
     Object.assign(p, { x: sx + 0.5, z: sz + 0.5, y: g.standY(sx + 0.5, sz + 0.5), vy: 0 });
     expect(g.drinkSource()).toBe(null);
 
+    g.spawnTimer = g.seaTimer = Infinity; // no creatures in this test
     // swimming: afloat, no sprinting or jumping, energy drains, then drowning
     expect(g.swimming).toBe(true);
     expect(p.y).toBeCloseTo(-1.25);
@@ -459,13 +461,14 @@ describe('game rules', () => {
     Object.assign(p, { x: x + 0.5, z: z + 0.5, y: g.standY(x + 0.5, z + 0.5), vy: 0, stamina: 10 });
     expect(g.submerged).toBe(false);
 
+    g.spawnTimer = g.seaTimer = Infinity; // no creatures in this test
     const frames = (n, jump, dive) => { for (let i = 0; i < n; i++) { g.physics(0.05, jump, dive); g.tick(0.05); } };
     frames(8, false, true); // hold dive for 0.4 s
     expect(g.submerged).toBe(true);
     expect(p.breath).toBeLessThan(10);
     frames(120, false, true); // keep going down
     expect(p.y).toBe(bed); // resting on the seabed
-    expect(g.goals.current).toBe(null); // the dive goal is done
+    expect(g.goals.current.text).toMatch(/pearl/); // the dive goal is done, on to the next
 
     g.move(0.6, 0); // swimming along the bottom is not blocked
     expect(Math.floor(p.x)).toBe(x + 1);
@@ -488,8 +491,68 @@ describe('game rules', () => {
     expect(p.health).toBeLessThan(9);
   });
 
-  it('tires from sprinting and recovers', () => {
+  it('has a living seabed to harvest, an iron tier and sea creatures', () => {
     const g = newGame();
+    const p = g.player;
+    const sea = [];
+    for (let z = -700; z < 700; z += 2) for (let x = -700; x < 700; x += 2) { const t = g.gen.tile(x, z); if (t.salt) sea.push([x, z, t, g.gen.object(x, z)]); }
+    const kinds = new Set(sea.map(([, , , o]) => o?.t).filter(Boolean));
+    for (const k of ['kelp', 'clam', 'coral', 'rock_iron']) expect(kinds.has(k), k).toBe(true);
+
+    // a clam on a deep bed is out of reach from the surface, in reach once you dive to it
+    const [cx, cz, ct] = sea.find(([, , t, o]) => o?.t === 'clam' && t.bed <= -3.5);
+    Object.assign(p, { x: cx + 0.5, z: cz + 1.4, y: g.standY(cx + 0.5, cz + 1.4), vy: 0 });
+    expect(g.inReach(cx, cz)).toBe(false);
+    p.y = ct.bed;
+    expect(g.inReach(cx, cz)).toBe(true);
+    g.primary(cx, cz);
+    expect(g.inv.count('clam')).toBe(1);
+    expect(g.world.get(cx, cz)).toBe(null);
+
+    // iron needs a copper pickaxe or better
+    const [ix, iz, it2] = sea.find(([, , , o]) => o?.t === 'rock_iron');
+    Object.assign(p, { x: ix + 0.5, z: iz + 1.4, y: it2.bed });
+    g.inv.slots[0] = { id: 'stone_pickaxe', n: 1 };
+    g.selected = 0;
+    for (let i = 0; i < 6; i++) g.primary(ix, iz);
+    expect(g.world.get(ix, iz)).not.toBe(null);
+    g.inv.slots[0] = { id: 'copper_pickaxe', n: 1 };
+    for (let i = 0; i < 2; i++) g.primary(ix, iz);
+    expect(g.inv.count('iron_ore')).toBeGreaterThanOrEqual(2);
+
+    // a diving mask makes a breath last twice as long
+    const [dx, dz, dt2] = sea.find(([x, z, t]) => t.bed <= -5 && g.gen.tile(x + 1, z).bed <= -5);
+    Object.assign(p, { x: dx + 0.5, z: dz + 0.5, y: dt2.bed, breath: 10, stamina: 10 });
+    g.spawnTimer = g.seaTimer = Infinity;
+    g.tick(2.6);
+    const bare = 10 - p.breath;
+    g.armor.slots[0] = { id: 'diving_mask', n: 1 };
+    p.breath = 10;
+    g.tick(2.6);
+    expect(10 - p.breath).toBeCloseTo(bare / 2);
+
+    // a snapper hunts a swimmer, in three dimensions, and leaves someone on land alone
+    Object.assign(p, { health: 10, stamina: 10, breath: 10, y: dt2.bed + 2 });
+    const e = g.spawnEnemy(dx + 1.5, dz + 0.5, 'snapper');
+    e.y = dt2.bed + 0.3;
+    for (let i = 0; i < 60; i++) g.updateEnemies(1 / 30);
+    expect(p.health).toBeLessThan(10);
+    expect(Math.abs(e.y - (p.y + 0.4))).toBeLessThan(0.5);
+    g.inv.slots[0] = { id: 'iron_sword', n: 1 };
+    expect(g.attackPower).toBe(7);
+    g.attack(e);
+    g.attack(e);
+    expect(g.enemies.length).toBe(0);
+    expect(g.inv.count('raw_fish')).toBe(2);
+
+    const far = g.spawnEnemy(dx + 1.5, dz + 0.5, 'snapper');
+    Object.assign(p, { x: 0.5, z: 0.5, y: g.standY(0.5, 0.5), health: 10 });
+    for (let i = 0; i < 60; i++) g.updateEnemies(1 / 30);
+    expect(p.health).toBe(10);
+    expect(g.deepAt(far.x, far.z)).toBe(true); // it never leaves deep water
+  });
+
+  it('tires from sprinting and recovers', () => {    const g = newGame();
     const p = g.player;
     expect(g.canSprint).toBe(true);
     for (let i = 0; i < 70; i++) g.tick(0.1, true); // 7 seconds flat out

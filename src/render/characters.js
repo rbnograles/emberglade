@@ -3,6 +3,7 @@ import { Vox } from './voxel.js';
 import { toGeometry } from './chunks.js';
 import { iconPixels } from '../ui/icons.js';
 import { ENEMY_KINDS } from '../game/game.js';
+import { WATER_Y } from '../world/worldgen.js';
 
 const EAT_TIME = 1.1, EAT_BITES = 4;
 const HURT_RED = new THREE.Color(0xff2a2a), HURT_GLOW = new THREE.Color(0x8a0f0f);
@@ -292,7 +293,8 @@ export class Enemies {
   constructor(scene, game, model) {
     this.scene = scene;
     this.game = game;
-    this.geometry = toGeometry(model);
+    // one shape per kind of creature (brutes reuse the gloomling, scaled up)
+    this.geometries = { gloomling: toGeometry(model.gloomling), brute: toGeometry(model.gloomling), snapper: toGeometry(model.snapper) };
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1f44 });
     this.meshes = new Map(); // enemy id -> mesh
   }
@@ -303,13 +305,15 @@ export class Enemies {
       alive.add(e.id);
       let mesh = this.meshes.get(e.id);
       if (!mesh) {
-        mesh = new THREE.Mesh(this.geometry, this.material);
+        mesh = new THREE.Mesh(this.geometries[e.kind], this.material);
         mesh.castShadow = true;
         this.scene.add(mesh);
         this.meshes.set(e.id, mesh);
       }
-      const hop = e.moving ? Math.abs(Math.sin(clock * 9 + e.id)) * 0.3 : 0;
-      mesh.position.set(e.x, this.game.ground(e.x, e.z) + hop, e.z);
+      // land creatures hop along the ground; sea creatures glide at their own depth
+      const sea = ENEMY_KINDS[e.kind].sea;
+      const hop = sea ? Math.sin(clock * 5 + e.id) * 0.05 : e.moving ? Math.abs(Math.sin(clock * 9 + e.id)) * 0.3 : 0;
+      mesh.position.set(e.x, e.y + hop, e.z);
       mesh.rotation.y = e.dir ?? 0;
       // squash when hit, shrink as daylight burns it away
       const kind = ENEMY_KINDS[e.kind];
@@ -321,6 +325,65 @@ export class Enemies {
         this.scene.remove(mesh);
         this.meshes.delete(id);
       }
+    }
+  }
+}
+// Schools of small fish in the sea. Harmless, quick to dart away, and good eating if you can catch one.
+export class Fish {
+  constructor(scene, game, model) {
+    this.scene = scene;
+    this.game = game;
+    this.geometry = toGeometry(model);
+    this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.list = [];
+  }
+
+  // a spot in open sea near (x, z), or null
+  seaSpot(x, z) {
+    const t = this.game.gen.tile(Math.floor(x), Math.floor(z));
+    if (!t.salt || WATER_Y - t.bed < 1.2) return null;
+    return { x, z, y: t.bed + 0.4 + Math.random() * (WATER_Y - t.bed - 0.9) };
+  }
+
+  hit(f) {
+    this.scene.remove(f.mesh);
+    this.list.splice(this.list.indexOf(f), 1);
+  }
+
+  update(dt, px, py, pz) {
+    if (this.list.length < 10 && Math.random() < dt * 2) {
+      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 16;
+      const spot = this.seaSpot(px + Math.cos(a) * r, pz + Math.sin(a) * r);
+      if (spot) {
+        const mesh = new THREE.Mesh(this.geometry, this.material);
+        this.scene.add(mesh);
+        this.list.push({ mesh, ...spot, tx: spot.x, ty: spot.y, tz: spot.z, t: Math.random() * 10 });
+      }
+    }
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const f = this.list[i];
+      const away = Math.hypot(f.x - px, f.z - pz);
+      if (away > 40) {
+        this.scene.remove(f.mesh);
+        this.list.splice(i, 1);
+        continue;
+      }
+      const near = Math.hypot(away, f.y - py - 0.6) < 2.2;
+      const dx = f.tx - f.x, dy = f.ty - f.y, dz = f.tz - f.z, dist = Math.hypot(dx, dy, dz);
+      if (near || dist < 0.3) {
+        // pick somewhere new to swim to: away from the player if they are close
+        const a = near ? Math.atan2(f.z - pz, f.x - px) + (Math.random() - 0.5) : Math.random() * Math.PI * 2;
+        const spot = this.seaSpot(f.x + Math.cos(a) * (3 + Math.random() * 4), f.z + Math.sin(a) * (3 + Math.random() * 4));
+        if (spot) Object.assign(f, { tx: spot.x, ty: spot.y, tz: spot.z });
+      } else {
+        const speed = (near ? 4.5 : 1.6) * dt / dist;
+        f.x += dx * speed;
+        f.y += dy * speed;
+        f.z += dz * speed;
+        f.mesh.rotation.y = Math.atan2(-dz, dx);
+      }
+      f.t += dt * 9;
+      f.mesh.position.set(f.x, f.y + Math.sin(f.t) * 0.03, f.z);
     }
   }
 }
