@@ -1,0 +1,163 @@
+import { ITEMS, FLASK_DRINKS } from '../game/items.js';
+import { GOALS } from '../game/goals.js';
+import { BIOMES } from '../world/biomes.js';
+import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
+import { iconURL, isPixelIcon } from './icons.js';
+
+const $ = (id) => document.getElementById(id);
+
+// Fills a slot element with an item icon and count.
+export function renderSlot(el, slot) {
+  el.replaceChildren();
+  el.title = slot ? ITEMS[slot.id].name : '';
+  if (!slot) return;
+  const img = document.createElement('img');
+  img.src = iconURL(slot.id);
+  img.classList.toggle('px', isPixelIcon(slot.id));
+  img.draggable = false;
+  el.append(img);
+  if (slot.n > 1) {
+    const n = document.createElement('span');
+    n.textContent = slot.n;
+    el.append(n);
+  }
+}
+
+function segments(parent) {
+  return Array.from({ length: 10 }, () => {
+    const seg = document.createElement('i');
+    seg.append(document.createElement('b'));
+    parent.append(seg);
+    return seg.firstChild;
+  });
+}
+
+const setBar = (segs, value) => segs.forEach((s, i) => (s.style.width = Math.round(Math.max(0, Math.min(1, value - i)) * 100) + '%'));
+
+export class Hud {
+  constructor(game) {
+    this.game = game;
+    this.hearts = segments($('hearts'));
+    this.hunger = segments($('hunger'));
+    this.thirst = segments($('thirst'));
+    this.stamina = segments($('stamina'));
+    // Hotbar: click a slot to select it, or drag it onto another slot to swap the two.
+    this.dragFrom = null;
+    addEventListener('mouseup', () => (this.dragFrom = null));
+    this.slots = Array.from({ length: HOTBAR }, (_, i) => {
+      const el = document.createElement('div');
+      el.className = 'slot';
+      el.dataset.key = i + 1;
+      el.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        this.dragFrom = i;
+        game.selected = i;
+        this.refresh();
+      });
+      el.addEventListener('mouseup', () => {
+        if (this.dragFrom === null || this.dragFrom === i) return;
+        game.inv.swap(this.dragFrom, i);
+        game.selected = i;
+        game.emit('inv');
+      });
+      $('hotbar').append(el);
+      return el;
+    });
+    this.refresh();
+  }
+
+  refresh() {
+    const g = this.game, p = g.player;
+    const tile = g.gen.tile(Math.floor(p.x), Math.floor(p.z));
+    $('biome').textContent = BIOMES[tile.biome].name;
+    const goal = g.goals.current;
+    if (goal) {
+      const { done, total } = g.goals.status;
+      $('goal-title').textContent = `GOAL ${g.goals.index + 1}/${GOALS.length}`;
+      $('goal-text').textContent = total > 1 ? `${goal.text} (${done}/${total})` : goal.text;
+    } else {
+      $('goal-title').textContent = 'ALL GOALS COMPLETE';
+      $('goal-text').textContent = 'The glade is yours. Keep building!';
+    }
+    const minutes = Math.floor(((6 + g.time * 24) % 24) * 60);
+    const clock = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    $('day').textContent = `${g.isNight ? '☾' : '☀'} DAY ${g.day} · ${clock}`;
+    const STATUS = {
+      cold: 'Cold: you get hungry faster. Find a campfire, a floor, or armor',
+      warm: 'Warm by the fire',
+      sheltered: 'Sheltered indoors',
+    };
+    const status = $('status');
+    status.className = STATUS[g.status] ? g.status : 'hidden';
+    status.textContent = STATUS[g.status] ?? '';
+    // Eat button: shows what C would eat, and pulses when you are hungry.
+    const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
+    const eatBtn = $('btn-eat');
+    eatBtn.classList.toggle('hidden', !food);
+    eatBtn.classList.toggle('urgent', !!food && p.hunger < 5);
+    if (food && eatBtn.dataset.food !== food.id) {
+      eatBtn.dataset.food = food.id;
+      const img = document.createElement('img');
+      img.src = iconURL(food.id);
+      img.classList.toggle('px', isPixelIcon(food.id));
+      const key = document.createElement('kbd');
+      key.textContent = 'C';
+      eatBtn.replaceChildren(key, `Eat ${ITEMS[food.id].name}`, img);
+    }
+    // Drink button: shown when X would work (next to a pond, or a flask with water in it).
+    const source = g.drinkSource(), drinkBtn = $('btn-drink');
+    drinkBtn.classList.toggle('hidden', !source);
+    drinkBtn.classList.toggle('urgent', !!source && p.thirst < 5);
+    const drinkLabel = source === 'flask' ? `Drink flask (${p.flask})` : 'Drink';
+    if (drinkBtn.dataset.label !== drinkLabel) {
+      drinkBtn.dataset.label = drinkLabel;
+      const key = document.createElement('kbd');
+      key.textContent = 'X';
+      drinkBtn.replaceChildren(key, drinkLabel);
+    }
+    // One prompt at a time: thirst first, since it runs out sooner.
+    const prompt = $('hungry');
+    if (p.thirst < 4) {
+      prompt.textContent = source ? 'You are thirsty. Press X to drink' : 'You are thirsty. Stand next to a pond and press X';
+    } else if (p.hunger < 4) {
+      prompt.textContent = food ? `You are hungry. Press C to eat ${ITEMS[food.id].name}` : 'You are hungry. Pick berries from bushes or apples from oak trees';
+    }
+    prompt.classList.toggle('hidden', p.thirst >= 4 && p.hunger >= 4);
+    setBar(this.hearts, p.health);
+    setBar(this.hunger, p.hunger);
+    setBar(this.thirst, p.thirst);
+    setBar(this.stamina, p.stamina);
+    $('stamina').classList.toggle('winded', !!p.winded);
+    this.slots.forEach((el, i) => {
+      renderSlot(el, g.inv.slots[i]);
+      el.classList.toggle('selected', i === g.selected);
+    });
+  }
+
+  // Bottom line: what is under the cursor and what the held item does.
+  setHint(targetLabel) {
+    const g = this.game, held = g.held;
+    let text = '';
+    if (held) {
+      const def = ITEMS[held.id];
+      text = def.name + (def.hint ? ' — ' + def.hint : '');
+      if (def.tool === 'can') text += ` (${g.player.water}/${CAN_CAPACITY})`;
+      if (def.flask) text += ` (${g.player.flask}/${FLASK_DRINKS})`;
+    }
+    const full = [targetLabel, text].filter(Boolean).join('   •   ');
+    const el = $('hint');
+    if (el.textContent !== full) el.textContent = full;
+    el.style.visibility = full ? 'visible' : 'hidden';
+  }
+
+  toast(text) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    const box = $('toasts');
+    box.append(el);
+    while (box.children.length > 6) box.firstChild.remove();
+    setTimeout(() => el.classList.add('out'), 2200);
+    setTimeout(() => el.remove(), 2700);
+  }
+}

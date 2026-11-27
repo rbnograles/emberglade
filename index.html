@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emberglade</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="topleft">
+        <div id="biome"></div>
+        <div id="goal">
+          <div id="goal-title"></div>
+          <div id="goal-text"></div>
+        </div>
+      </div>
+      <div id="topright">
+        <div id="day"></div>
+        <div id="status" class="hidden"></div>
+      </div>
+      <div id="toasts"></div>
+      <div id="bottom">
+        <div id="hungry" class="hidden"></div>
+        <div id="hint"></div>
+        <div id="bars">
+          <div id="hearts" class="bar" data-label="Health"></div>
+          <div id="hunger" class="bar" data-label="Food"></div>
+          <div id="thirst" class="bar" data-label="Water"></div>
+          <div id="stamina" class="bar" data-label="Energy"></div>
+        </div>
+        <div id="hotbar-row">
+          <div id="hotbar"></div>
+          <button id="btn-craft"><kbd>Tab</kbd> Craft</button>
+          <button id="btn-eat" class="hidden"><kbd>C</kbd> Eat</button>
+          <button id="btn-drink" class="hidden"><kbd>X</kbd> Drink</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel" class="hidden"></div>
+    <div id="cursor" class="slot hidden"></div>
+    <div id="fade"></div>
+    <div id="hurt"></div>
+
+    <div id="menu">
+      <div class="card">
+        <h1>Emberglade</h1>
+        <p id="menu-sub">A cozy voxel survival game</p>
+        <button id="btn-play">Play</button>
+        <button id="btn-new" class="secondary">New world</button>
+        <ul>
+          <li><kbd>W A S D</kbd> move &nbsp; <kbd>Space</kbd> jump up ledges &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Wheel</kbd> zoom</li>
+          <li><kbd>Right-drag</kbd> or <kbd>Q</kbd> <kbd>E</kbd> turn the view, tilt down low to see the sky &nbsp; <kbd>R</kbd> reset view</li>
+          <li><kbd>Left click</kbd> use tool, pick, harvest, attack night creatures</li>
+          <li><kbd>Right click</kbd> place, plant, water, wear armor &nbsp; <kbd>C</kbd> eat &nbsp; <kbd>X</kbd> drink at a pond or from a flask</li>
+          <li><kbd>1</kbd>–<kbd>9</kbd> hotbar (drag a slot onto another to swap) &nbsp; <kbd>Tab</kbd> inventory and crafting</li>
+          <li><kbd>F</kbd> use bed, chest, campfire, workbench &nbsp; <kbd>Esc</kbd> pause</li>
+        </ul>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,183 @@
+:root {
+  --ink: #3b2f2a;
+  --panel: rgba(45, 36, 32, 0.82);
+  --cream: #fff6e3;
+  --accent: #f2c94c;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1c2542;
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  color: var(--cream);
+  user-select: none;
+}
+
+canvas#game { display: block; width: 100%; height: 100%; }
+
+.hidden { display: none !important; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+
+#topleft { position: absolute; top: 12px; left: 12px; max-width: 300px; }
+#biome, #day, #goal, #hint, #toasts > div {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 6px 12px;
+}
+#biome { display: inline-block; font-weight: bold; letter-spacing: 0.5px; }
+#goal { margin-top: 8px; font-size: 14px; }
+#goal-title { color: var(--accent); font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+#topright { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+#day { font-weight: bold; letter-spacing: 0.5px; }
+#status { background: var(--panel); border-radius: 10px; padding: 5px 12px; font-size: 13px; }
+#status.cold { color: #a9d4ff; }
+#status.warm, #status.sheltered { color: #ffd9a0; }
+
+#toasts { position: absolute; left: 12px; bottom: 110px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+#toasts > div { font-size: 14px; transition: opacity 0.5s; }
+#toasts > div.out { opacity: 0; }
+
+#bottom { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#hint { font-size: 13px; white-space: nowrap; }
+#bars { display: grid; grid-template-columns: auto auto; gap: 4px 18px; }
+.bar { display: flex; gap: 2px; background: var(--panel); padding: 4px; border-radius: 6px; }
+.bar i { display: block; width: 14px; height: 10px; background: rgba(0, 0, 0, 0.35); border-radius: 2px; overflow: hidden; }
+.bar b { display: block; height: 100%; }
+#hearts b { background: #e8505b; }
+#hunger b { background: #f2a03d; }
+#thirst b { background: #5ab8f0; }
+#stamina b { background: #9be06a; }
+#thirst::before { color: #8fd0ff; }
+#stamina::before { color: #b9ef95; }
+#stamina.winded b { background: #8a9a80; }
+.bar::before { min-width: 42px; }
+
+#hotbar { display: flex; gap: 4px; pointer-events: auto; background: var(--panel); padding: 5px; border-radius: 12px; }
+
+.slot {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 246, 227, 0.12);
+  border: 2px solid rgba(255, 246, 227, 0.18);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.slot.selected { border-color: var(--accent); background: rgba(242, 201, 76, 0.25); }
+.slot img { width: 34px; height: 34px; }
+.px { image-rendering: pixelated; }
+.slot span { position: absolute; right: 4px; bottom: 1px; font-size: 12px; font-weight: bold; text-shadow: 0 1px 2px #000; }
+.slot[data-key]::before { content: attr(data-key); position: absolute; left: 4px; top: 1px; font-size: 10px; opacity: 0.6; }
+
+/* ---------- inventory / crafting panel ---------- */
+#panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 20px;
+  max-height: 86vh;
+  max-width: 96vw;
+  background: rgba(45, 36, 32, 0.94);
+  border: 3px solid #6b5444;
+  border-radius: 16px;
+  padding: 16px 20px;
+}
+#panel h3 { margin: 6px 0; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); }
+#panel .grid { display: grid; grid-template-columns: repeat(9, 50px); gap: 4px; margin-bottom: 10px; }
+#panel .note { font-size: 12px; opacity: 0.7; margin: 0; max-width: 480px; }
+#panel .col { display: flex; flex-direction: column; min-height: 0; }
+#panel .recipes { width: 340px; }
+#panel .book { overflow-y: auto; padding-right: 6px; min-height: 120px; }
+#panel h4 { margin: 8px 0 4px; font-size: 12px; opacity: 0.8; }
+#panel .armor { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+#panel .armor .slot::after { content: attr(data-label); position: absolute; bottom: 1px; font-size: 9px; opacity: 0.55; }
+#panel .armor b { margin-left: 8px; font-size: 13px; color: var(--accent); }
+#panel .craft { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+#panel .craft .grid { margin-bottom: 0; }
+.arrow { opacity: 0.7; }
+.arrow.big { font-size: 28px; }
+.slot.output { width: 60px; height: 60px; border-color: var(--accent); }
+
+.slot.output.ready { animation: glow 1s ease-in-out infinite alternate; background: rgba(242, 201, 76, 0.3); }
+@keyframes glow { to { box-shadow: 0 0 14px 4px rgba(242, 201, 76, 0.8); } }
+#panel .take { font-size: 13px; color: var(--accent); }
+
+#hotbar-row { display: flex; align-items: center; gap: 8px; }
+#btn-craft, #btn-eat, #btn-drink { pointer-events: auto; font: inherit; font-size: 13px; font-weight: bold; color: var(--cream); background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 8px 10px; cursor: pointer; white-space: nowrap; }
+#btn-craft kbd, #btn-eat kbd, #btn-drink kbd { color: var(--ink); margin-right: 4px; }
+
+/* Narrow windows: stack the inventory above the crafting column and scroll the whole panel. */
+@media (max-width: 940px) {
+  #panel { flex-direction: column; overflow-y: auto; gap: 8px; padding: 12px; }
+  #panel .col { min-height: auto; }
+  #panel .recipes { width: auto; }
+  #panel .book { overflow: visible; }
+  #panel .grid { zoom: 0.8; }
+  #panel .craft .grid { zoom: 1; }
+}
+
+#cursor { position: fixed; z-index: 20; pointer-events: none; transform: translate(-50%, -50%); background: none; border-color: transparent; }
+
+.mini { display: grid; gap: 1px; }
+.mini i { width: 14px; height: 14px; background: rgba(0, 0, 0, 0.3) center / contain no-repeat; border-radius: 2px; }
+
+.recipe {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  text-align: left;
+  font: inherit;
+  color: var(--cream);
+  background: rgba(255, 246, 227, 0.12);
+  border: 2px solid rgba(255, 246, 227, 0.18);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.recipe:hover { border-color: var(--accent); }
+.recipe.dim { opacity: 0.55; }
+.recipe img { width: 28px; height: 28px; }
+.recipe b { display: block; font-size: 14px; }
+.recipe div span { font-size: 12px; }
+.recipe em { font-style: normal; margin-right: 8px; color: #b9e89a; }
+.recipe em.missing { color: #f0a09a; }
+.recipe em.any { color: var(--cream); opacity: 0.6; }
+
+/* ---------- title / pause menu ---------- */
+#menu { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(28, 37, 66, 0.55); backdrop-filter: blur(3px); }
+#menu .card { background: var(--cream); color: var(--ink); border-radius: 20px; padding: 28px 36px; text-align: center; max-width: 92vw; box-shadow: 0 12px 0 rgba(0, 0, 0, 0.18); }
+#menu h1 { margin: 0; font-size: 44px; letter-spacing: 1px; color: #c9623a; }
+#menu p { margin: 4px 0 18px; }
+#menu button { display: block; width: 240px; margin: 8px auto; padding: 12px; font: inherit; font-size: 18px; font-weight: bold; color: #fff; background: #5aa84f; border: 0; border-radius: 12px; box-shadow: 0 4px 0 #3f7d38; cursor: pointer; }
+#menu button:active { transform: translateY(2px); box-shadow: 0 2px 0 #3f7d38; }
+#menu button.secondary { background: #b9a48c; box-shadow: 0 4px 0 #8f7c66; font-size: 15px; }
+#menu ul { list-style: none; padding: 0; margin: 18px 0 0; font-size: 13px; line-height: 2; }
+kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; font-weight: bold; }
+
+#fade { position: fixed; inset: 0; background: #0a0f24; opacity: 0; pointer-events: none; z-index: 15; }
+
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 14; box-shadow: inset 0 0 120px 40px #d9303f; }
+.bar { position: relative; align-items: center; }
+.bar::before { content: attr(data-label); font-size: 11px; font-weight: bold; margin: 0 4px 0 2px; }
+#hearts::before { color: #ff8a93; }
+#hunger::before { color: #f2a03d; }
+#btn-eat { display: flex; align-items: center; gap: 4px; }
+#btn-eat.hidden { display: none; }
+#btn-eat img { width: 22px; height: 22px; }
+#btn-drink.urgent { animation: glow 0.8s ease-in-out infinite alternate; background: #1c4a7a; }
+#hotbar .slot { cursor: grab; }
+#btn-eat.urgent { animation: glow 0.8s ease-in-out infinite alternate; background: #7a4a1c; }
+#hungry { background: #7a4a1c; border: 2px solid var(--accent); border-radius: 10px; padding: 6px 14px; font-size: 14px; font-weight: bold; }
+#hotbar-row { flex-wrap: wrap; justify-content: center; max-width: 98vw; }
