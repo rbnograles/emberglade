@@ -2,7 +2,7 @@ import { settings } from './settings.js';
 
 // All sound is synthesised with the Web Audio API: no audio files.
 let ctx = null, sfxGain = null, musicGain = null, noiseBuffer = null, musicTimer = null;
-let nightMood = false, rainGain = null;
+let nightMood = false, rainGain = null, melodyBus = null;
 
 // Browsers only allow audio after a click or key press; call this from one.
 export function unlockAudio() {
@@ -13,7 +13,20 @@ export function unlockAudio() {
     sfxGain = ctx.createGain();
     musicGain = ctx.createGain();
     sfxGain.connect(ctx.destination);
-    musicGain.connect(ctx.destination);
+    // music goes through a gentle low-pass so nothing is harsh, and the melody gets a soft echo on top
+    const warm = ctx.createBiquadFilter();
+    warm.type = 'lowpass';
+    warm.frequency.value = 2600;
+    musicGain.connect(warm).connect(ctx.destination);
+    melodyBus = ctx.createGain();
+    const echo = ctx.createDelay(1), feedback = ctx.createGain(), wet = ctx.createGain();
+    echo.delayTime.value = 0.42;
+    feedback.gain.value = 0.34;
+    wet.gain.value = 0.4;
+    melodyBus.connect(musicGain);
+    melodyBus.connect(echo);
+    echo.connect(feedback).connect(echo);
+    echo.connect(wet).connect(musicGain);
     noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = noiseBuffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -29,7 +42,7 @@ export function unlockAudio() {
     rain.connect(band).connect(rainGain).connect(sfxGain);
     rain.start();
     applyVolume();
-    musicTimer = setInterval(musicTick, 2600);
+    musicTimer = setInterval(musicTick, 400);
   }
   if (ctx.state === 'suspended') ctx.resume();
 }
@@ -37,7 +50,7 @@ export function unlockAudio() {
 export function applyVolume() {
   if (!ctx) return;
   sfxGain.gain.value = settings.sfx;
-  musicGain.gain.value = settings.music * 0.5;
+  musicGain.gain.value = settings.music * 0.9;
 }
 
 export function setNight(night) { nightMood = night; }
@@ -101,20 +114,103 @@ export function sfx(name) {
   SFX[name]?.();
 }
 
-// Gentle generative music: a few soft notes from a pentatonic scale every couple of seconds,
-// brighter by day, lower and sparser at night.
-const DAY_SCALE = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3];
-const NIGHT_SCALE = [196.0, 220.0, 261.6, 293.7, 329.6, 392.0];
-function musicTick() {
-  if (!ctx || ctx.state !== 'running' || settings.music <= 0) return;
-  const scale = nightMood ? NIGHT_SCALE : DAY_SCALE;
-  const notes = nightMood ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
-  for (let i = 0; i < notes; i++) {
-    if (Math.random() < 0.25) continue; // leave some silence
-    const f = scale[(Math.random() * scale.length) | 0];
-    const delay = i * 0.6 + Math.random() * 0.4;
-    tone(f, 2.4, 'sine', 0.22, 0, delay, musicGain);
-    tone(f * 2, 1.6, 'triangle', 0.05, 0, delay, musicGain);
+// ---------- background music ----------
+// A slow, warm loop in the style of a lullaby: a soft pad holds each chord, a round bass sits under it,
+// and a music-box melody wanders over the top with a little echo. Four chords, eight seconds each.
+// By day it is in C major; at night it moves to the relative minor, slower-feeling and sparser.
+// Around it, birds sing by day and crickets chirp at night.
+const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+const BAR = 8; // seconds per chord
+const DAY_CHORDS = [
+  [48, 55, 59, 64], // Cmaj7
+  [45, 52, 55, 60], // Am7
+  [41, 48, 52, 57], // Fmaj7
+  [43, 50, 55, 59], // G
+];
+const NIGHT_CHORDS = [
+  [45, 52, 55, 59], // Am9
+  [41, 48, 52, 57], // Fmaj7
+  [38, 45, 48, 53], // Dm7
+  [40, 47, 52, 55], // Em7
+];
+const MELODY = [60, 62, 64, 67, 69, 72, 74, 76]; // C major pentatonic, fits every chord above
+let nextBar = 0, barIndex = 0, lastNote = 3;
+
+// One held note with a slow swell and fade: the building block of the pad.
+function swell(freq, start, length, vol, type = 'sine') {
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.linearRampToValueAtTime(vol, start + 2.2);
+  gain.gain.setValueAtTime(vol, start + length - 2.4);
+  gain.gain.linearRampToValueAtTime(0.0001, start + length + 1.2);
+  osc.connect(gain).connect(musicGain);
+  osc.start(start);
+  osc.stop(start + length + 1.3);
+}
+
+// A music-box pluck: bright at the first instant, then a long soft ring.
+function pluck(freq, start, vol) {
+  for (const [mult, level, type] of [[1, 1, 'triangle'], [2, 0.35, 'sine'], [3, 0.08, 'sine']]) {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq * mult;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(vol * level, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.6 / mult);
+    osc.connect(gain).connect(melodyBus);
+    osc.start(start);
+    osc.stop(start + 2.8 / mult);
   }
-  if (Math.random() < 0.3) tone(scale[0] / 2, 3.2, 'sine', 0.16, 0, 0, musicGain);
+}
+
+function scheduleBar(start) {
+  const chords = nightMood ? NIGHT_CHORDS : DAY_CHORDS;
+  const chord = chords[barIndex % chords.length];
+  barIndex++;
+  // pad: each chord tone twice, a few cents apart, so it shimmers gently
+  for (const n of chord) {
+    swell(midi(n) * 1.003, start, BAR, 0.035, 'sine');
+    swell(midi(n) * 0.997, start, BAR, 0.03, 'triangle');
+  }
+  // bass: the root, an octave down
+  swell(midi(chord[0] - 12), start, BAR, 0.07, 'sine');
+
+  // melody: a few plucks on the beat, stepping to nearby notes so it sings instead of jumping around
+  const beats = nightMood ? [0, 3, 6] : [0, 1.5, 3, 4, 6, 7];
+  for (const beat of beats) {
+    if (Math.random() < (nightMood ? 0.35 : 0.25)) continue; // leave room to breathe
+    lastNote = Math.max(0, Math.min(MELODY.length - 1, lastNote + [-2, -1, -1, 0, 1, 1, 2][(Math.random() * 7) | 0]));
+    const note = MELODY[lastNote] - (nightMood ? 12 : 0);
+    pluck(midi(note), start + beat + Math.random() * 0.04, nightMood ? 0.07 : 0.09);
+  }
+}
+
+// A bird: two or three quick rising chirps.
+function bird() {
+  const base = 2600 + Math.random() * 1400, chirps = 2 + ((Math.random() * 3) | 0);
+  for (let i = 0; i < chirps; i++) tone(base + i * 120, 0.09, 'sine', 0.035, 700, i * 0.14, musicGain);
+}
+
+// Crickets: a short run of even, high pulses.
+function crickets() {
+  const pulses = 5 + ((Math.random() * 5) | 0);
+  for (let i = 0; i < pulses; i++) tone(4300, 0.035, 'sine', 0.018, 0, i * 0.075, musicGain);
+}
+
+// Runs a few times a second: keeps the next chord scheduled a little ahead, and sprinkles in the wildlife.
+function musicTick() {
+  if (!ctx || ctx.state !== 'running') return;
+  if (settings.music <= 0) {
+    nextBar = 0;
+    return;
+  }
+  const now = ctx.currentTime;
+  if (nextBar < now) nextBar = now + 0.3;
+  while (nextBar < now + 1.5) {
+    scheduleBar(nextBar);
+    nextBar += BAR;
+  }
+  if (Math.random() < (nightMood ? 0.11 : 0.05)) (nightMood ? crickets : bird)();
 }
