@@ -1,0 +1,11 @@
+{
+  "name": "Emberglade",
+  "short_name": "Emberglade",
+  "description": "A cozy voxel survival game",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1e1815",
+  "theme_color": "#1e1815",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

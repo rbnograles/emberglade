@@ -1,3 +1,5 @@
+<img src="docs/logo/ember-sprout.svg" alt="Emberglade logo" width="96" align="right" />
+
 # Emberglade
 
 A cozy top-down voxel survival game that runs in the browser, built with [three.js](https://threejs.org/) and Vite.

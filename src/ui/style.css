@@ -679,3 +679,75 @@ canvas#game { touch-action: none; }
 #cloud span { font-size: 13px; opacity: 0.8; }
 #cloud .row-buttons { margin: 0 0 0 auto; }
 #cloud button[hidden] { display: none; }
+
+/* ---------- the logo in the menu: a flame that breathes ---------- */
+#menu .brand { display: flex; align-items: center; gap: 10px; }
+#menu .brand img { width: 62px; height: 62px; flex: none; margin: -6px 0 -4px -8px; filter: drop-shadow(0 0 10px rgba(255, 138, 58, 0.55)); animation: ember 2.6s ease-in-out infinite; }
+#menu .brand h1 { font-size: 27px; letter-spacing: 1px; text-transform: uppercase; }
+@keyframes ember { 0%, 100% { filter: drop-shadow(0 0 7px rgba(255, 138, 58, 0.4)); transform: scale(1); } 50% { filter: drop-shadow(0 0 16px rgba(255, 170, 70, 0.8)); transform: scale(1.04); } }
+@media (max-width: 600px) { #menu .brand img { width: 40px; height: 40px; margin: 0; } }
+/* the mark sits above the name, so neither is squeezed */
+#menu .brand { flex-direction: column; align-items: flex-start; gap: 2px; }
+#menu .brand img { width: 84px; height: 84px; margin: -10px 0 -4px -12px; }
+@media (max-width: 600px) { #menu .brand { flex-direction: row; align-items: center; } #menu .brand img { width: 40px; height: 40px; margin: 0; } }
+@media (pointer: coarse) {
+  /* the weather and shelter note sits in the middle, under the button row, clear of the minimap */
+  #status { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); max-width: 46vw; font-size: 11px; padding: 3px 9px; text-align: center; }
+  #touch-controls .touch-pad .tool { font-size: 14px; line-height: 1.05; }
+  #touch-controls .touch-bar button { min-width: 36px; padding: 4px 6px; }
+}
+@media (pointer: coarse) { #toasts > div:nth-last-child(n+4) { display: none; } } /* three messages at most, so they never reach the stick */
+
+/* ---------- phones: every piece of the HUD in its own lane, nothing on top of anything else ----------
+   top row      portrait · place and goal | compass | clock and menu
+   second row   (goal)                    | Pack Map Skills Eat Drink | minimap
+   left edge    view buttons, then the stick
+   centre       notes and messages under the button row; needs, bars and hotbar at the bottom
+   right edge   the action pad */
+@media (pointer: coarse) {
+  #topleft { max-width: calc(50vw - 208px); min-width: 96px; }
+  #biome { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #goal { padding: 3px 8px; }
+  .touch-bar { top: 46px; left: 50%; right: auto; transform: translateX(-50%); gap: 4px; }
+  #touch-controls .touch-bar button { min-width: 0; min-height: 32px; padding: 3px 9px; font-size: 12px; }
+  .touch-view { position: absolute; left: max(10px, env(safe-area-inset-left)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 126px);
+    display: grid; grid-template-columns: repeat(4, 30px); gap: 4px; pointer-events: auto; touch-action: none; }
+  #touch-controls .touch-view button { min-width: 0; min-height: 30px; padding: 0; font-size: 13px; font-weight: 700; border-radius: 9px; background: rgba(54, 43, 35, 0.86); }
+  #touch-controls .touch-view .wide { grid-column: 1 / -1; min-height: 26px; font-size: 11px; }
+  #status { top: 84px; max-width: min(46vw, 330px); }
+  #toasts { top: 108px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%); align-items: center; max-width: 44vw; gap: 3px; pointer-events: none; }
+  #toasts > div { font-size: 11px; padding: 2px 10px; text-align: center; }
+  #toasts > div:nth-last-child(n+3) { display: none; }
+  #bottomright { top: 42px; }
+  #minimap { width: 78px; height: 78px; }
+  #bottom { max-width: calc(100vw - 380px); }
+  #hungry { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .waypoint.far { display: none; } /* the compass already points the way; edge tags would land on the controls */
+}
+@media (pointer: coarse) { #touch-controls .touch-pad .use { right: 88px; bottom: 70px; } #touch-controls .touch-pad .place { right: 96px; } #touch-controls .touch-pad .run { right: 150px; bottom: 58px; } .touch-pad { width: 210px; } }
+@media (pointer: coarse) {
+  /* one line each, so the note never grows down into the messages */
+  #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the bottom strip fills the gap between the stick and the action pad instead of centring under them */
+  #bottom { left: calc(max(14px, env(safe-area-inset-left)) + 128px); right: calc(max(10px, env(safe-area-inset-right)) + 218px); transform: none; max-width: none; align-items: center; }
+  #hotbar-row, #hotbar { width: 100%; max-width: 400px; }
+  #hotbar { display: flex; }
+  #hotbar .slot { flex: 1 1 0; width: auto; min-width: 0; max-width: 42px; height: auto; aspect-ratio: 1; }
+  #bars { grid-template-columns: 1fr 1fr; width: 100%; max-width: 400px; }
+  .bar i { flex: 1; width: auto; }
+  #hint { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+/* narrower phones: a tighter action pad, and the goal gives way to the buttons */
+@media (pointer: coarse) and (max-width: 720px) {
+  .touch-pad { width: 140px; }
+  #touch-controls .touch-pad button { width: 52px; height: 52px; font-size: 12px; }
+  #touch-controls .touch-pad .tool { width: 76px; height: 76px; }
+  #touch-controls .touch-pad .place { right: 82px; bottom: 2px; }
+  #touch-controls .touch-pad .use { right: 74px; bottom: 60px; }
+  #touch-controls .touch-pad .jump { right: 10px; bottom: 84px; }
+  #touch-controls .touch-pad .run { right: 60px; bottom: 120px; }
+  #bottom { right: calc(max(10px, env(safe-area-inset-right)) + 146px); }
+  #walk-stick { width: 108px; height: 108px; }
+  #topleft { min-width: 0; }
+}
+@media (pointer: coarse) and (max-width: 640px) { #goal { display: none; } #topleft { max-width: calc(50vw - 200px); } }

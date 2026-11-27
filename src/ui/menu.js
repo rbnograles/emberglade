@@ -136,7 +136,9 @@ export function buildMenu(game, hooks) {
     saveSettings();
   });
   graphics.append(el('span', '', 'Scene quality'), preset);
-  root.append(el('h4', '', 'Graphics'), graphics);
+  const full = el('button', 'small', 'Full screen on / off');
+  full.addEventListener('click', () => hooks.onFullscreen());
+  root.append(el('h4', '', 'Graphics'), graphics, full);
   root.append(el('h4', '', 'Sound'), slider('Effects', 'sfx'), slider('Music', 'music'));
 
   root.append(el('h4', '', 'Keys: click one, then press the new key'));

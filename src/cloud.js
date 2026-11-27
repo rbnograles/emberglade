@@ -10,7 +10,9 @@ import { summarise } from './game/summary.js';
 //   players - one row of progress per world (day, level, keepers restored), for stats or a leaderboard
 //   events  - a log of milestones (levels gained, keepers found and restored, hoards, faints)
 // The tables and their access rules are in supabase/schema.sql.
-const URL = import.meta.env?.VITE_SUPABASE_URL, KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+// Never under test: the tests must not reach a real project, even on a machine that has the settings.
+const TESTING = import.meta.env?.MODE === 'test';
+const URL = TESTING ? null : import.meta.env?.VITE_SUPABASE_URL, KEY = TESTING ? null : import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
 export const cloud = {
   enabled: !!(URL && KEY),

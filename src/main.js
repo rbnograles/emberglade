@@ -123,6 +123,7 @@ $('minimap').addEventListener('mousedown', (e) => {
 });
 $('minimap').addEventListener('contextmenu', (e) => e.preventDefault());
 const waypoints = new Waypoints(scene, game, $('waypoints'));
+const toolButton = document.querySelector('.touch-pad .tool');
 const compass = new Compass(game);
 const sheet = new Sheet(game);
 drawFace(settings.look);
@@ -298,6 +299,7 @@ buildMenu(game, {
     discardOnExit = true;
   },
   onGraphics: applyGraphics,
+  onFullscreen: toggleFullscreen,
   onLook: () => {
     playerModel.applyLook(settings.look);
     drawFace(settings.look);
@@ -411,7 +413,7 @@ addEventListener('mouseup', (e) => {
 });
 function secondaryAction() {
   camera.updateMatrixWorld();
-  target = pickTarget();
+  target = currentTarget();
   if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach);
   hud.refresh();
 }
@@ -434,7 +436,7 @@ function interact() {
     for (let x = px - 3; x <= px + 3; x++) {
       const t = game.world.get(x, z)?.t;
       const d = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z);
-      if ((t === 'bed' || t === 'chest' || t === 'campfire' || t === 'workbench') && d < bestD) {
+      if (t && usable(t) && d < bestD) {
         best = [x, z];
         bestD = d;
       }
@@ -446,6 +448,74 @@ function interact() {
 // ---------- cursor targeting ----------
 const raycaster = new THREE.Raycaster();
 
+// ---------- touch: no cursor, so the game aims for you ----------
+let touchMode = false; // true once a finger has been used; a real mouse turns it off again
+let tapHold = 0; // seconds a tapped tile stays the target before aiming goes back to automatic
+addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touchMode = true; }, true);
+addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') touchMode = false; }, true);
+
+const USABLE = ['bed', 'chest', 'cabinet', 'campfire', 'workbench', 'gate', 'lostbag'];
+const usable = (t) => USABLE.includes(t) || !!OBJECTS[t]?.cache || !!OBJECTS[t]?.hoard;
+
+// The nearest thing within reach, favouring whatever the character is facing. With something to
+// build or till in hand it is the clear tile just ahead instead; seeds and water go to the nearest soil.
+function autoTarget() {
+  const def = ITEMS[game.held?.id];
+  const fx = Math.sin(playerModel.facing), fz = Math.cos(playerModel.facing);
+  const at = (x, z) => ({ x, z, reach: game.inReach(x, z), px: x + 0.5, pz: z + 0.5 });
+  const wantsSoil = def?.plant || game.held?.id === 'watering_can';
+  if (def?.place || def?.floor || def?.roof || def?.vehicle) {
+    // the first tile ahead the thing could go on, out to arm's length
+    for (const d of [1.3, 2.1, 2.9]) {
+      const tile = at(Math.floor(p.x + fx * d), Math.floor(p.z + fz * d));
+      if (game.canPlace(tile.x, tile.z)) return tile;
+    }
+    return at(Math.floor(p.x + fx * 1.3), Math.floor(p.z + fz * 1.3));
+  }
+  let best = null, bestScore = Infinity;
+  const px = Math.floor(p.x), pz = Math.floor(p.z);
+  for (let z = pz - 4; z <= pz + 4; z++) {
+    for (let x = px - 4; x <= px + 4; x++) {
+      const obj = game.world.get(x, z);
+      if (!obj || !game.inReach(x, z)) continue;
+      if (wantsSoil && obj.t !== 'soil') continue;
+      const dx = x + 0.5 - p.x, dz = z + 0.5 - p.z, d = Math.hypot(dx, dz) || 0.001;
+      // distance, plus a penalty for being off to the side or behind
+      const score = d + (1 - (dx * fx + dz * fz) / d) * 1.4;
+      if (score < bestScore) {
+        best = at(x, z);
+        bestScore = score;
+      }
+    }
+  }
+  if (best) return best;
+  // nothing nearby: a hoe tills the ground just ahead
+  return def?.tool === 'hoe' ? at(Math.floor(p.x + fx * 1.3), Math.floor(p.z + fz * 1.3)) : null;
+}
+const currentTarget = () => (touchMode && tapHold <= 0 ? autoTarget() : pickTarget());
+
+// What the Tool button will do right now, for its label on touch screens.
+function toolVerb() {
+  if (pickFoe()) return 'Attack';
+  const obj = target?.reach ? game.world.get(target.x, target.z) : null;
+  if (!obj) return ITEMS[game.held?.id]?.tool === 'hoe' ? 'Till' : 'Tool';
+  const od = OBJECTS[obj.t];
+  if (obj.t === 'soil') return obj.crop >= cropFor(obj).days ? 'Harvest' : 'Tool';
+  if (od.pick) return 'Pick up';
+  if (od.tool === 'axe') return 'Chop';
+  if (od.tool === 'pickaxe') return 'Mine';
+  return obj.placed ? 'Take' : 'Tool';
+}
+
+function toggleFullscreen() {
+  const root = document.documentElement;
+  if (document.fullscreenElement) return void document.exitFullscreen();
+  if (!root.requestFullscreen) {
+    // iPhones do not let a web page go full screen; adding it to the home screen does
+    return void ask({ title: 'Full screen on iPhone', text: 'Safari on iPhone cannot switch a page to full screen. Tap Share, then "Add to Home Screen", and open Emberglade from its icon: it then runs full screen.' });
+  }
+  root.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')?.catch(() => {})).catch(() => {});
+}
 function pickTarget() {
   raycaster.setFromCamera(mouse, camera);
   // under water the cursor points at the seabed, not the surface above it
@@ -585,6 +655,13 @@ function updateGhost() {
 
 const controllers = installControllers(canvas, {
   aim: (x, y) => mouse.set(2 * x / innerWidth - 1, 1 - 2 * y / innerHeight),
+  // a tap on the world acts on that spot at once, as a click would
+  tap: (x, y) => {
+    if (paused || panels.open || bigmap.open || sheet.open) return;
+    mouse.set(2 * x / innerWidth - 1, 1 - 2 * y / innerHeight);
+    tapHold = 1.6;
+    clicked = true;
+  },
   nudgeAim: (x, y) => mouse.set(Math.max(-1, Math.min(1, mouse.x + x)), Math.max(-1, Math.min(1, mouse.y - y))),
   orbit: (yaw, pitch) => {
     yawGoal += yaw;
@@ -599,6 +676,7 @@ const controllers = installControllers(canvas, {
       else setPaused(!paused);
       return;
     }
+    if (action === 'fullscreen') return void toggleFullscreen();
     if (action === 'sheet' && !paused) return void sheet.toggle();
     if (paused || panels.open || bigmap.open || sheet.open) return;
     if (action === 'strike') clicked = true;
@@ -754,7 +832,8 @@ function step(dt) {
   const buffer = renderer.getDrawingBufferSize(peekSize);
   chunks.peek.value.set((peekPoint.x * 0.5 + 0.5) * buffer.x, (peekPoint.y * 0.5 + 0.5) * buffer.y, (buffer.y * 2.6) / camDist, playerDepth);
 
-  target = panels.open ? null : pickTarget();
+  tapHold -= dt;
+  target = panels.open ? null : currentTarget();
   marker.visible = !!target?.reach;
   if (marker.visible) {
     const tt = game.gen.tile(target.x, target.z);
@@ -854,6 +933,10 @@ function step(dt) {
     hud.refresh();
   }
   hud.setHint(targetLabel());
+  if (touchMode) {
+    const verb = toolVerb();
+    if (toolButton.textContent !== verb) toolButton.textContent = verb;
+  }
   saveTimer += dt;
   if (saveTimer > 30) {
     saveTimer = 0;

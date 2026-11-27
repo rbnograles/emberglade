@@ -89,6 +89,16 @@ export function drawFace(look) {
   fill(shade(look.skin, 0.72), 7, 11, 2, 1); // mouth
 }
 
+// On a touch screen there are no keys or mouse buttons, so messages name the on-screen buttons instead.
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+const TOUCH_WORDS = [
+  [/\bLMB\b/g, 'Tool'], [/\bRMB\b/g, 'Place'], [/\b([Pp])ress F\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Use'], [/\bF: /g, 'Use: '], [/\(F to /g, '(Use to '],
+  [/\b([Pp])ress X\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Drink'], [/\b([Pp])ress C\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Eat'],
+  [/\b([Pp])ress K\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Skills'], [/\b([Pp])ress M\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Map'],
+  [/\bclick\b/g, 'tap'], [/\bClick\b/g, 'Tap'], [/\bhold Space\b/g, 'hold Jump'], [/\bHold Shift\b/g, 'Hold Run'], [/\bShift\b/g, 'Run'], [/\bSpace\b/g, 'Jump'],
+];
+export const touchWords = (text) => (TOUCH ? TOUCH_WORDS.reduce((s, [from, to]) => s.replace(from, to), text) : text);
+
 export class Hud {
   constructor(game) {
     this.game = game;
@@ -173,9 +183,9 @@ export class Hud {
     // One prompt at a time: thirst first, since it runs out sooner.
     const prompt = $('hungry');
     if (p.thirst < 4) {
-      prompt.textContent = source ? 'You are thirsty. Press X to drink' : 'You are thirsty. Stand next to a pond and press X';
+      prompt.textContent = touchWords(source ? 'You are thirsty. Press X to drink' : 'You are thirsty. Stand next to a pond and press X');
     } else if (p.hunger < 4) {
-      prompt.textContent = food ? `You are hungry. Press C to eat ${ITEMS[food.id].name}` : 'You are hungry. Pick berries from bushes or apples from oak trees';
+      prompt.textContent = touchWords(food ? `You are hungry. Press C to eat ${ITEMS[food.id].name}` : 'You are hungry. Pick berries from bushes or apples from oak trees');
     }
     prompt.classList.toggle('hidden', p.thirst >= 4 && p.hunger >= 4);
     setBar(this.hearts, p.health, g.maxHealth);
@@ -212,7 +222,7 @@ export class Hud {
     let text = '';
     if (held) {
       const def = ITEMS[held.id];
-      text = def.name + (def.hint ? ' — ' + def.hint : '');
+      text = def.name + (def.hint ? ' — ' + touchWords(def.hint) : '');
       if (def.tool === 'can') text += ` (${g.player.water}/${CAN_CAPACITY})`;
       if (def.flask) text += ` (${g.player.flask}/${FLASK_DRINKS})`;
     }
@@ -224,7 +234,7 @@ export class Hud {
 
   toast(text) {
     const el = document.createElement('div');
-    el.textContent = text;
+    el.textContent = touchWords(text);
     const box = $('toasts');
     box.append(el);
     while (box.children.length > 6) box.firstChild.remove();

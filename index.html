@@ -2,8 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <title>Emberglade</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#1e1815" />
     <link rel="stylesheet" href="/src/ui/style.css" />
   </head>
   <body>
@@ -59,8 +61,11 @@
       <div class="touch-bar">
         <button data-action="inventory">Pack</button><button data-action="map">Map</button><button data-action="sheet">Skills</button>
         <button data-action="eat">Eat</button><button data-action="drink">Drink</button>
+      </div>
+      <div class="touch-view" aria-label="View">
         <button data-action="camLeft" aria-label="Turn view left">&#9664;</button><button data-action="camRight" aria-label="Turn view right">&#9654;</button>
         <button data-action="zoomIn" aria-label="Zoom in">+</button><button data-action="zoomOut" aria-label="Zoom out">&minus;</button>
+        <button data-action="fullscreen" class="wide">Full screen</button>
       </div>
       <div class="touch-pad">
         <button data-action="strike" class="tool">Tool</button>
@@ -83,7 +88,7 @@
     <div id="menu">
       <div class="shell">
         <aside>
-          <h1>Emberglade</h1>
+          <div class="brand"><img src="/logo.svg" alt="" width="64" height="64" /><h1>Emberglade</h1></div>
           <p id="menu-sub">A cozy voxel survival game</p>
           <button id="btn-play" class="primary">Play</button>
           <nav>

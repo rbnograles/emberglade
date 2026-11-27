@@ -66,19 +66,25 @@ export function installControllers(canvas, actions) {
     const name = button.dataset.action;
     if (HELD.includes(name)) {
       button.addEventListener('pointerdown', e => {
-        button.setPointerCapture(e.pointerId);
+        try { button.setPointerCapture(e.pointerId); } catch { /* the finger is already gone: the release below still fires */ }
         held.add(name);
         if (name === 'strike') actions.command('strike');
       });
-      button.addEventListener('lostpointercapture', () => held.delete(name));
+      for (const end of ['lostpointercapture', 'pointerup', 'pointercancel']) button.addEventListener(end, () => held.delete(name));
     } else button.addEventListener('click', () => actions.command(name));
   }
   // One finger aims. Two fingers orbit and pinch to zoom.
+  let tap = null; // a single finger that has not moved far: lifting it quickly is a tap
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType !== 'touch') return;
     e.preventDefault(); canvas.setPointerCapture(e.pointerId);
     touches.set(e.pointerId, [e.clientX, e.clientY]);
+    tap = touches.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY, at: performance.now() } : null;
     if (touches.size === 1) actions.aim(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('pointerup', e => {
+    if (tap && tap.id === e.pointerId && performance.now() - tap.at < 400 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 14) actions.tap(e.clientX, e.clientY);
+    tap = null;
   });
   canvas.addEventListener('pointermove', e => {
     const prev = touches.get(e.pointerId);
