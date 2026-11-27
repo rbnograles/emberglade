@@ -42,9 +42,9 @@ BIOMES.winter = {
   name: 'Frozen Wastes', ground: [0xeef4f8, 0xdfe9f0],
   spawn: [['tree_snowpine', 0.05], ['boulder', 0.012], ['stick', 0.02], ['pebble', 0.015], ['rock_coal', 0.006]],
 };
-BIOMES.winter.spawn.push(['rock_rime', 0.016], ['weather_cairn', 0.0009]);
-BIOMES.ash.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009]);
-BIOMES.volcano.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009]);
+BIOMES.winter.spawn.push(['rock_rime', 0.016], ['weather_cairn', 0.0009], ['frost_hoard', 0.0007]);
+BIOMES.ash.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009], ['ember_hoard', 0.0007]);
+BIOMES.volcano.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009], ['ember_hoard', 0.0007]);
 // sea tiles; ground is only used by the minimap
 BIOMES.ocean = { name: 'Open Ocean', ground: [0x4f9fd6, 0x4a98cf], spawn: [] };
 

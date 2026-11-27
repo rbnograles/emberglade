@@ -5,6 +5,16 @@ const POWER = { stone: 3, copper: 5, iron: 7 };
 const DISCOVERY = 20;
 export const RESTORATION = 'Twelve hearths glow again. The long dusk lifts, and Emberglade is yours to tend.';
 
+// What a keeper leaves behind: metal for the next tier, or the glass of its harsh region.
+const SPOILS = {
+  stone: [['copper_bar', 4, 4], ['coal', 4, 4]],
+  copper: [['iron_bar', 3, 3], ['crystal', 1, 1]],
+  iron: [['iron_bar', 4, 4], ['crystal', 3, 3], ['pearl', 2, 2]],
+  frost: [['rimeglass', 8, 8], ['crystal', 3, 3]],
+  heat: [['emberglass', 8, 8], ['crystal', 3, 3]],
+};
+export const rewardFor = (k) => SPOILS[k.biome] ?? SPOILS[k.tier];
+
 export function suitsSite(k, tile) {
   if (k.biome === 'deep') return tile.salt && tile.water && tile.bed <= -6 && !tile.boiling;
   if (tile.water || tile.lava || tile.ice || tile.shore) return false;
@@ -152,6 +162,7 @@ export class Encounters {
       this.active = null;
       game.record('keeper:restore');
       game.toast(k.site + ' restored. Workbench recipe learned: ' + carvingName(k) + '.');
+      game.giveDrops(rewardFor(k));
       if (this.complete) game.emit('restored');
     }
     return true;

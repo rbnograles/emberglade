@@ -5,8 +5,9 @@ const CELLS = 44; // tiles sampled across
 const STEP = 3; // world tiles per cell: the map shows a 132 x 132 tile area
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-// North-up map of the land around the player, with markers for home and a dropped pack
-// and a line showing which way the camera is facing.
+// North-up map of the land around the player. An arrow shows which way the character faces and a
+// faint wedge shows where the camera looks. Home, a dropped pack, vehicles, creatures and the
+// player's own markers are drawn on it; anything off the map is pinned to its edge.
 export class Minimap {
   constructor(game) {
     this.game = game;
@@ -14,6 +15,12 @@ export class Minimap {
     this.canvas.width = this.canvas.height = SIZE;
     this.ctx = this.canvas.getContext('2d');
     this.label = document.getElementById('home-label');
+  }
+
+  // World position under a point of the canvas, given in CSS pixels from its top-left corner.
+  worldAt(cssX, cssY) {
+    const p = this.game.player, span = CELLS * STEP, shown = this.canvas.getBoundingClientRect().width;
+    return [p.x + (cssX / shown - 0.5) * span, p.z + (cssY / shown - 0.5) * span];
   }
 
   // Marker position on the canvas, pinned to the edge when it is off the map.
@@ -41,7 +48,24 @@ export class Minimap {
     c.stroke();
   }
 
-  draw(camYaw) {
+  // The player's own markers are diamonds, so they never look like anything else on the map.
+  pin(wx, wz, color) {
+    const [x, y, off] = this.place(wx, wz), c = this.ctx, r = off ? 5 : 6.5;
+    c.fillStyle = color;
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(x, y - r);
+    c.lineTo(x + r, y);
+    c.lineTo(x, y + r);
+    c.lineTo(x - r, y);
+    c.closePath();
+    c.fill();
+    c.stroke();
+  }
+
+  // camYaw: where the camera looks from. facing: the way the character is turned.
+  draw(camYaw, facing) {
     const g = this.game, p = g.player, c = this.ctx;
     const cell = SIZE / CELLS;
     const ox = Math.floor(p.x) - (CELLS / 2) * STEP, oz = Math.floor(p.z) - (CELLS / 2) * STEP;
@@ -59,23 +83,40 @@ export class Minimap {
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a');
     for (const e of g.enemies) this.marker(e.x, e.z, '#7a4fd0');
     for (const v of g.vehicles) if (v.id !== p.riding) this.marker(v.x, v.z, '#ff9a3a'); // where you left your boat
+    for (const m of g.markers) this.pin(m.x, m.z, m.color);
 
-    // player and the way the camera looks
-    c.strokeStyle = '#ffffff';
-    c.lineWidth = 2;
+    const mid = SIZE / 2;
+    // the camera's view: a faint wedge opening away from where the camera stands
+    const look = Math.atan2(-Math.cos(camYaw), -Math.sin(camYaw));
+    c.fillStyle = 'rgba(255, 255, 255, 0.22)';
     c.beginPath();
-    c.moveTo(SIZE / 2, SIZE / 2);
-    c.lineTo(SIZE / 2 - Math.sin(camYaw) * 12, SIZE / 2 - Math.cos(camYaw) * 12);
-    c.stroke();
+    c.moveTo(mid, mid);
+    c.arc(mid, mid, 26, look - 0.5, look + 0.5);
+    c.closePath();
+    c.fill();
+
+    // the player: an arrow pointing the way the character faces
+    c.save();
+    c.translate(mid, mid);
+    c.rotate(Math.atan2(Math.cos(facing), Math.sin(facing)) + Math.PI / 2);
     c.fillStyle = '#ffffff';
     c.strokeStyle = '#2b2b33';
+    c.lineWidth = 2;
+    c.lineJoin = 'round';
     c.beginPath();
-    c.arc(SIZE / 2, SIZE / 2, 4, 0, Math.PI * 2);
-    c.fill();
+    c.moveTo(0, -9);
+    c.lineTo(6.5, 7);
+    c.lineTo(0, 3.5);
+    c.lineTo(-6.5, 7);
+    c.closePath();
     c.stroke();
+    c.fill();
+    c.restore();
 
-    const dist = Math.round(Math.hypot(home.x + 0.5 - p.x, home.z + 0.5 - p.z));
-    const text = `${p.bed ? 'Bed' : 'Start'} ${dist} m` + (p.lost ? ` · pack ${Math.round(Math.hypot(p.lost.x - p.x, p.lost.z - p.z))} m` : '');
+    const dist = (x, z) => Math.round(Math.hypot(x - p.x, z - p.z));
+    let text = `${p.bed ? 'Bed' : 'Start'} ${dist(home.x + 0.5, home.z + 0.5)} m`;
+    if (p.lost) text += ` · pack ${dist(p.lost.x, p.lost.z)} m`;
+    if (g.markers.length) text += ` · marker ${Math.min(...g.markers.map((m) => dist(m.x, m.z)))} m`;
     if (this.label.textContent !== text) this.label.textContent = text;
   }
 }

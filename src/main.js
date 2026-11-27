@@ -9,6 +9,7 @@ import { sfx, unlockAudio, setNight, setRain } from './audio.js';
 import { Rain, Flurry } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
 import { KeeperView } from './render/keeper-view.js';
+import { Waypoints } from './render/waypoints.js';
 import { RESTORATION } from './game/encounters.js';
 import { BigMap } from './ui/bigmap.js';
 import { buildMenu } from './ui/menu.js';
@@ -97,10 +98,15 @@ if (game.relocated) setTimeout(() => hud.toast('The world has been reshaped, so 
 const minimap = new Minimap(game);
 const keeperView = new KeeperView(scene, game, $('keeper-hud'));
 const bigmap = new BigMap(game);
+// the minimap: click opens the world map, right click pins a marker on that spot (or removes the one there)
 $('minimap').addEventListener('mousedown', (e) => {
   e.stopPropagation();
-  bigmap.toggle();
+  if (e.button !== 2) return void bigmap.toggle();
+  const box = e.currentTarget.getBoundingClientRect();
+  game.toggleMarker(...minimap.worldAt(e.clientX - box.left, e.clientY - box.top), 6);
 });
+$('minimap').addEventListener('contextmenu', (e) => e.preventDefault());
+const waypoints = new Waypoints(scene, game, $('waypoints'));
 const torch = new THREE.PointLight(0xffb060, 0, 17, 1.4);
 scene.add(torch);
 
@@ -755,7 +761,8 @@ function step(dt) {
   hudTimer -= dt;
   if (hudTimer <= 0) {
     hudTimer = 0.25;
-    minimap.draw(camYaw);
+    minimap.draw(camYaw, playerModel.facing);
+  waypoints.update(camera, clock);
     hud.refresh();
   }
   hud.setHint(targetLabel());

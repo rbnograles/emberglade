@@ -6,7 +6,7 @@ import { RECIPES } from '../src/game/crafting.js';
 import { CROPS } from '../src/world/crops.js';
 import { WILDLIFE } from '../src/game/wildlife.js';
 import { KEEPERS, carvingId } from '../src/game/keepers.js';
-import { suitsSite, attackWarnings, inWarning } from '../src/game/encounters.js';
+import { suitsSite, attackWarnings, inWarning, rewardFor } from '../src/game/encounters.js';
 import { buildModels, buildItemModels } from '../src/render/models.js';
 
 const newGame = () => new Game({ seed: 1 });
@@ -296,7 +296,49 @@ describe('keepers', () => {
   });
 });
 
+describe('map markers', () => {
+  it('pins, removes, cycles colours, drops the oldest and is saved', () => {
+    const g = newGame();
+    const first = g.toggleMarker(40.2, -17.9);
+    expect(first).toMatchObject({ x: 40.5, z: -17.5 });
+    expect(g.toggleMarker(42, -17, 4)).toBe(null); // close enough to the first: it comes off
+    expect(g.markers.length).toBe(0);
+    for (let i = 0; i < 5; i++) g.toggleMarker(i * 100, 0);
+    expect(new Set(g.markers.map((m) => m.color)).size).toBe(5);
+    g.toggleMarker(900, 900); // a sixth pushes out the oldest and takes its colour
+    expect(g.markers.length).toBe(5);
+    expect(g.markers.some((m) => m.x === 0.5)).toBe(false);
+    expect(new Set(g.markers.map((m) => m.color)).size).toBe(5);
+    const again = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(again.markers).toEqual(g.markers);
+  });
+});
+
 describe('harsh regions', () => {
+  it('pay off: glass tools, one-time hoards and keeper spoils', () => {
+    const g = newGame();
+    expect(ITEMS.rime_pickaxe.power).toBeGreaterThan(ITEMS.iron_pickaxe.power);
+    expect(ITEMS.ember_axe.power).toBeGreaterThan(ITEMS.iron_axe.power);
+    expect(recipeFor('rime_pickaxe').shapeless).toContain('rimeglass');
+    expect(recipeFor('ember_axe').shapeless).toContain('emberglass');
+    const [x, z] = clearing(g, 2);
+    standAt(g, x + 1, z + 1);
+    g.world.set(x, z, { t: 'frost_hoard' });
+    expect(g.interact(x, z)).toBe(true);
+    expect(g.inv.count('rimeglass')).toBeGreaterThanOrEqual(5);
+    expect(g.inv.count('iron_bar')).toBeGreaterThanOrEqual(2);
+    expect(g.world.get(x, z)).toBe(null); // gone for good
+    // every keeper leaves something, and the harsh ones leave their region's glass
+    for (const k of KEEPERS) expect(rewardFor(k).length, k.id).toBeGreaterThan(0);
+    const frost = KEEPERS.find((k) => k.biome === 'frost');
+    hold(g, 'ember_pike');
+    g.armor.slots[1] = { id: frost.gear, n: 1 };
+    const before = g.inv.count('rimeglass');
+    g.encounters.active = { x: g.player.x + 1, z: g.player.z, y: g.player.y, spec: frost, hp: 1, beat: 0, timer: 1, warnings: [], engaged: false, hit: 0 };
+    g.encounters.strike(g, g.encounters.active);
+    expect(g.inv.count('rimeglass')).toBe(before + 8);
+  });
+
   it('hold their own ore, caches and creatures', () => {
     const g = newGame();
     expect(OBJECTS.rock_rime.drops[0][0]).toBe('rimeglass');

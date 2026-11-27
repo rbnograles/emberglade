@@ -55,6 +55,8 @@ const COLD_HUNGER = 1; // extra hunger drain when cold with no armor (x2 in tota
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
+export const MARKER_COLORS = ['#ff5a7a', '#4fd0ff', '#ffd24a', '#8be06a', '#c58bff'];
+
 export function needsRelocation(save) {
   return !!save?.player && save.gen !== GEN_VERSION;
 }
@@ -84,6 +86,8 @@ export class Game {
     this.cursor = null; // stack being carried by the mouse in the inventory panel
     this.goals = new Goals(save?.goals);
     this.encounters = new Encounters(save?.encounters);
+    // places the player has pinned on the map: [{x, z, color}], also shown as beacons in the world
+    this.markers = (save?.markers ?? []).map((m) => ({ ...m }));
     this.day = save?.day ?? 1;
     this.time = save?.time ?? 0.08; // 0 = 6:00, 0.25 = noon, 0.5 = 18:00
     this.selected = save?.selected ?? 0;
@@ -168,7 +172,7 @@ export class Game {
   serialize() {
     return {
       seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs),
-      livestock: this.wildlife.list.filter(a => a.tame),
+      livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers,
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
@@ -433,6 +437,23 @@ export class Game {
     if (left > 0) this.toast('Inventory full');
     this.emit('inv');
     return got;
+  }
+
+  // Pin a place on the map, or take the pin away if one is already within `near` tiles of it.
+  // Returns the new marker, or null when one was removed. The oldest goes when all colours are in use.
+  toggleMarker(x, z, near = 4) {
+    const old = this.markers.findIndex((m) => Math.hypot(m.x - x, m.z - z) <= near);
+    if (old >= 0) {
+      this.markers.splice(old, 1);
+      this.toast('Marker removed');
+      return null;
+    }
+    if (this.markers.length >= MARKER_COLORS.length) this.markers.shift();
+    const color = MARKER_COLORS.find((c) => !this.markers.some((m) => m.color === c));
+    const marker = { x: Math.floor(x) + 0.5, z: Math.floor(z) + 0.5, color };
+    this.markers.push(marker);
+    this.toast('Marker placed. Follow its beacon.');
+    return marker;
   }
 
   giveDrops(drops) {
@@ -1034,6 +1055,14 @@ export class Game {
   interact(tx, tz) {
     const obj = this.world.get(tx, tz);
     if (!obj) return false;
+    if (OBJECTS[obj.t].hoard) {
+      // a one-time treasure: it is gone for good once opened
+      this.world.set(tx, tz, { t: 'empty' });
+      this.toast(OBJECTS[obj.t].name + ' opened!');
+      this.giveDrops(OBJECTS[obj.t].hoard);
+      this.record('hoard');
+      return true;
+    }
     if (OBJECTS[obj.t].cache) {
       if (obj.claimedDay === this.day) { this.toast('Return after daybreak for more'); return true; }
       if (this.give(OBJECTS[obj.t].cache, 2)) this.world.set(tx, tz, { ...obj, claimedDay: this.day });

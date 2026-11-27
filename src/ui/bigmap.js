@@ -27,6 +27,15 @@ export class BigMap {
       e.stopPropagation();
       if (e.target === this.root) this.hide();
     });
+    // click the map to pin a marker there; click a marker again to take it away
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (this.row < CELLS) return; // still drawing
+      const box = this.canvas.getBoundingClientRect(), step = ZOOMS[this.zoom];
+      const wx = this.centre.x + ((e.clientX - box.left) / box.width - 0.5) * CELLS * step;
+      const wz = this.centre.z + ((e.clientY - box.top) / box.height - 0.5) * CELLS * step;
+      this.game.toggleMarker(wx, wz, step * 5);
+      this.drawMarkers();
+    });
   }
 
   get open() { return !this.root.classList.contains('hidden'); }
@@ -51,7 +60,7 @@ export class BigMap {
     this.ctx.fillStyle = '#1c2542';
     this.ctx.fillRect(0, 0, CELLS * PX, CELLS * PX);
     const span = CELLS * ZOOMS[this.zoom];
-    this.info.textContent = `${span} × ${span} tiles · scroll to zoom · M or Esc to close`;
+    this.info.textContent = `${span} × ${span} tiles · click to place or remove a marker · scroll to zoom · M or Esc to close`;
   }
 
   colour(t) {
@@ -73,18 +82,26 @@ export class BigMap {
     return [((wx - this.centre.x) / step + CELLS / 2) * PX, ((wz - this.centre.z) / step + CELLS / 2) * PX];
   }
 
-  marker(wx, wz, color, label) {
+  // diamond: the player's own markers are diamonds, everything else a dot
+  marker(wx, wz, color, label, diamond = false) {
     const [x, y] = this.toCanvas(wx, wz), c = this.ctx, max = CELLS * PX - 8;
     const cx = Math.max(8, Math.min(max, x)), cy = Math.max(8, Math.min(max, y));
     c.fillStyle = color;
-    c.strokeStyle = '#1c2542';
+    c.strokeStyle = diamond ? '#ffffff' : '#1c2542';
     c.lineWidth = 2;
     c.beginPath();
-    c.arc(cx, cy, 6, 0, Math.PI * 2);
+    if (diamond) {
+      c.moveTo(cx, cy - 8);
+      c.lineTo(cx + 8, cy);
+      c.lineTo(cx, cy + 8);
+      c.lineTo(cx - 8, cy);
+      c.closePath();
+    } else c.arc(cx, cy, 6, 0, Math.PI * 2);
     c.fill();
     c.stroke();
     c.font = 'bold 12px sans-serif';
     c.lineWidth = 3;
+    c.strokeStyle = '#1c2542';
     // near the right edge the label goes to the left of its dot, so it is never cut off
     const left = cx + 9 + c.measureText(label).width > CELLS * PX;
     c.textAlign = left ? 'right' : 'left';
@@ -107,8 +124,14 @@ export class BigMap {
     }
     this.row = end;
     if (this.row < CELLS) return;
-    // finished: draw the markers on top
-    const p = g.player;
+    // finished: keep the bare terrain, so markers can be redrawn without generating it again
+    this.terrain = c.getImageData(0, 0, CELLS * PX, CELLS * PX);
+    this.drawMarkers();
+  }
+
+  drawMarkers() {
+    const g = this.game, p = g.player, c = this.ctx;
+    c.putImageData(this.terrain, 0, 0);
     for (const v of g.vehicles) this.marker(v.x, v.z, '#ff9a3a', v.kind === 'boat' ? 'Boat' : 'Submarine');
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a', 'Dropped pack');
     this.marker(p.spawn.x + 0.5, p.spawn.z + 0.5, '#b9e89a', 'Start');
@@ -123,6 +146,7 @@ export class BigMap {
       else if (g.encounters.discovered.has(id)) this.marker(site.x, site.z, '#ff6a8a', k.name);
       else this.marker(site.x, site.z, '#9a92a6', '? ' + k.habitat);
     }
+    g.markers.forEach((m, i) => this.marker(m.x, m.z, m.color, 'Marker ' + (i + 1), true));
     this.marker(p.x, p.z, '#ffffff', 'You');
   }
 }

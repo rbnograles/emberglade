@@ -325,6 +325,8 @@ export function buildItemModels(world) {
   m.set('woven_bag', bag(STRAW));
   m.set('trail_pack', bag(0x8a5a34));
   addFieldItemModels(m);
+  m.set('rime_pickaxe', pickaxe(0x90d7e8));
+  m.set('ember_axe', axe(0xff9845));
   m.set('diving_mask', new Vox().box(0, 0, 0, 6, 3, 0, 0x2b2b33).box(1, 1, 0, 2, 2, 0, 0x6fc3e8).box(4, 1, 0, 5, 2, 0, 0x6fc3e8).box(-1, 1, 1, -1, 2, 3, 0x2b2b33).box(7, 1, 1, 7, 2, 3, 0x2b2b33).build(0.1));
   return m;
 }

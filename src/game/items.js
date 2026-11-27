@@ -39,6 +39,8 @@ export const ITEMS = {
   rimeglass: { name: 'Rimeglass', hint: 'From the Frozen Wastes. Weave into an insulated pack.' },
   emberglass: { name: 'Emberglass', hint: 'From the Volcanic Lands. Forge into an ember pike.' },
   rime_pack: { name: 'Rimeglass pack', armor: 'back', bag: 18, warm: 1, color: 0x90d4e8, stack: 1, hint: 'Wear for warmth and 18 storage slots' },
+  rime_pickaxe: { name: 'Rimeglass pickaxe', tool: 'pickaxe', power: 4, uses: 1200, stack: 1, hint: 'LMB: mine rocks. The hardest pick there is' },
+  ember_axe: { name: 'Emberglass axe', tool: 'axe', power: 4, uses: 1200, stack: 1, hint: 'LMB: chop trees. Fells one in a couple of blows' },
   ember_pike: { name: 'Ember pike', weapon: 9, uses: 550, stack: 1, hint: 'Attack with a forged emberglass tip' },
   coal: { name: 'Coal' },
   copper_ore: { name: 'Copper ore' },

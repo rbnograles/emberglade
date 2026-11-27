@@ -1,17 +1,7 @@
 import { Vox } from './voxel.js';
+import { addAnimalModels } from './animals.js';
 
 const shale = 0x4b4954, bone = 0xf5e7cd, eye = 0x282338, bark = 0x73472f;
-
-function bird(white) {
-  const plumage = white ? 0xe6edf3 : 0xb88751, wing = white ? 0xb8c6cb : 0x6c493e;
-  const v = new Vox().box(-1,0,-1,-1,2,-1,0xc09557).box(1,0,1,1,2,1,0xc09557)
-    .blob(0,4,0,3.8,2.7,2.4,plumage).box(1,5,-1,3,7,1,plumage)
-    .box(4,6,-1,4,6,0,0xd8a759).set(3,7,-1,eye).set(3,7,1,eye)
-    .box(-3,5,0,-2,6,1,wing).box(-4,6,0,-3,8,0,wing)
-    .box(-2,3,-2,0,4,-2,wing).box(-2,3,2,0,4,2,wing);
-  if (!white) v.box(1,8,0,3,8,0,0xc85642).set(2,9,0,0xc85642);
-  return v.build(0.11);
-}
 
 function quadruped(body, legs) {
   const v = new Vox().blob(0,4,0,4,2.5,2.6,body);
@@ -30,17 +20,7 @@ function crab() {
 }
 
 export function addFieldModels(m) {
-  m.set('hen', bird(false));
-  m.set('ptarmigan', bird(true));
-  const ram = quadruped(0xe4dac5, 0x685347).box(2,5,-1,4,7,1,0x75625b).set(4,6,-1,eye).set(4,6,1,eye);
-  for (const z of [-2,2]) ram.box(1,7,z,3,8,z,0xaa8962).box(1,5,z,1,7,z,0x9a7551).set(2,5,z,bone);
-  m.set('ram',ram.build(0.15));
-  m.set('hare',quadruped(0xdab486,0xb68b6c).box(2,4,-1,4,6,1,0xdab486)
-    .box(2,7,-1,2,10,-1,0xb68b6c).box(3,7,1,3,11,1,0xb68b6c)
-    .set(4,6,-1,eye).set(4,6,1,eye).set(-4,5,0,bone).build(0.105));
-  m.set('salamander',quadruped(0x77594e,0xb95b38).box(2,2,-2,5,3,2,0x77594e)
-    .box(-6,2,-1,-3,3,0,0xbb6a44).box(-8,1,0,-6,2,0,0xd88b54)
-    .box(-2,6,0,1,6,0,0xf4ae51).set(4,4,-1,eye).set(4,4,1,eye).build(0.105));
+  addAnimalModels(m);
   m.set('frostprowler',quadruped(0x88bbcc,0x467e94).box(2,5,-2,5,7,1,0xcae9eb)
     .set(3,8,-2,0x73b3c5).set(3,8,1,0x73b3c5).box(5,5,-1,6,6,0,0x507386)
     .box(-6,5,0,-3,5,0,0x8fcbd7).box(-7,6,0,-6,6,0,bone)

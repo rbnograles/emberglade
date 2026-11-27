@@ -11,6 +11,8 @@ export const RECIPES = [
   { out: 'fiber', n: 4, shapeless: ['fleece'], station: null },
   { out: 'omelet', n: 1, shapeless: ['egg', 'egg'], station: 'campfire' },
   { out: 'rime_pack', n: 1, shapeless: ['trail_pack', 'fleece', 'rimeglass', 'rimeglass'], station: 'workbench' },
+  { out: 'rime_pickaxe', n: 1, shapeless: ['iron_pickaxe', 'rimeglass', 'rimeglass', 'rimeglass'], station: 'workbench' },
+  { out: 'ember_axe', n: 1, shapeless: ['iron_axe', 'emberglass', 'emberglass', 'emberglass'], station: 'workbench' },
   { out: 'ember_pike', n: 1, shapeless: ['iron_bar', 'emberglass', 'emberglass', 'stick'], station: 'workbench' },
   { out: 'stick', n: 2, shapeless: ['wood'], station: null },
   { out: 'stone_axe', n: 1, pattern: ['##', '#|'], station: null },
