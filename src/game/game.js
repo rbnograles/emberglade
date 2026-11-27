@@ -1,3 +1,4 @@
+import { DIFFICULTIES } from './survival.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
 import { WorldState } from '../world/worldstate.js';
@@ -53,6 +54,7 @@ const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 export class Game {
   constructor(save = null) {
     this.seed = save?.seed ?? ((Math.random() * 2 ** 31) | 0);
+    this.difficulty = Object.hasOwn(DIFFICULTIES, save?.difficulty) ? save.difficulty : 'standard';
     this.gen = new Worldgen(this.seed);
     this.world = new WorldState(this.gen, save?.world, save?.floors);
     this.armor = new Inventory(ARMOR_SLOTS.length, save?.armor); // worn items: head, body, feet
@@ -153,7 +155,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
+      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
@@ -1282,10 +1284,11 @@ export class Game {
     } else pl.breath = Math.min(MAX_BREATH, pl.breath + (dt * MAX_BREATH) / 3);
     if (under !== this.wasUnder) this.emit(under ? 'dive' : 'surface');
     this.wasUnder = under;
+    const drain = DIFFICULTIES[this.difficulty].drain;
     if (this.swimming) {
       // swimming uses energy; with none left you start to drown
       const p = this.player;
-      p.stamina = Math.max(0, p.stamina - (dt * MAX_STAMINA) / SWIM_SECONDS);
+      p.stamina = Math.max(0, p.stamina - (dt * drain * MAX_STAMINA) / SWIM_SECONDS);
       if (p.stamina <= 0) {
         p.health = Math.max(0, p.health - dt / DROWN_SECONDS);
         if (!this.drowning) this.toast('You are drowning! Get to land');
@@ -1293,9 +1296,9 @@ export class Game {
       }
     } else {
       this.drowning = false;
-      if (tickStamina(this.player, dt, sprinting)) this.toast('Out of breath. Walk for a moment to recover');
+      if (tickStamina(this.player, dt, sprinting, drain)) this.toast('Out of breath. Walk for a moment to recover');
     }
-    if (tickSurvival(this.player, dt, sprinting, this.hungerRate)) this.faint();
+    if (tickSurvival(this.player, dt, sprinting, this.hungerRate, drain)) this.faint();
   }
 
   // Everything outside the hotbar is left in a pack where you fell (hotbar and worn items stay with you).

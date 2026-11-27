@@ -216,8 +216,8 @@ addEventListener('mousedown', unlockAudio);
 addEventListener('keydown', unlockAudio);
 buildMenu(game, {
   beforeLeave: (discard) => {
-    if (discard) discardOnExit = true;
-    else writeSave(game);
+    if (!discard) writeSave(game);
+    discardOnExit = true;
   },
   onLook: () => playerModel.applyLook(settings.look),
 });

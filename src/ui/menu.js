@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { settings, saveSettings, DEFAULT_KEYS, DEFAULT_LOOK, KEY_LABELS, keyName } from '../settings.js';
 import { applyVolume, sfx, unlockAudio } from '../audio.js';
-import { SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
+import { DIFFICULTIES } from '../game/survival.js';
+import { writeSave, SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
 import { PlayerModel } from '../render/characters.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,6 +50,20 @@ export function buildMenu(game, hooks) {
     });
     worlds.append(card);
   }
+  const difficulty = $('difficulty');
+  for (const [id, preset] of Object.entries(DIFFICULTIES)) {
+    difficulty.add(new Option(preset.name, id));
+  }
+  difficulty.value = game.difficulty;
+  const describeDifficulty = () => {
+    $('difficulty-help').textContent = `Food, water and energy drain at ${DIFFICULTIES[game.difficulty].drain}× the standard rate.`;
+  };
+  describeDifficulty();
+  difficulty.addEventListener('change', () => {
+    game.difficulty = difficulty.value;
+    describeDifficulty();
+    writeSave(game);
+  });
   $('btn-export').addEventListener('click', () => exportSave(game));
   const file = el('input');
   file.type = 'file';

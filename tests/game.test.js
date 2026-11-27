@@ -1014,3 +1014,21 @@ describe('game rules', () => {
     expect(copy.serialize()).toEqual(g.serialize());
   });
 });
+
+
+describe('world difficulty', () => {
+  it('scales survival needs and exertion and persists the choice per world', () => {
+    const levels = ['relaxed', 'standard', 'challenging'];
+    for (const [i, difficulty] of levels.entries()) {
+      const g = new Game({ seed: 1, difficulty });
+      g.tick(1, true);
+      const rate = (i + 1) / 2;
+      expect(10 - g.player.hunger).toBeCloseTo(2 * rate / 52);
+      expect(10 - g.player.thirst).toBeCloseTo(2 * rate / 44);
+      expect(10 - g.player.stamina).toBeCloseTo(10 * rate / 6.5);
+      expect(new Game(g.serialize()).difficulty).toBe(difficulty);
+    }
+    expect(new Game({ seed: 1 }).difficulty).toBe('standard');
+    expect(new Game({ seed: 1, difficulty: 'unknown' }).difficulty).toBe('standard');
+  });
+});
