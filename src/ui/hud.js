@@ -57,6 +57,38 @@ function segments(parent) {
 // Ten segments always stand for the whole bar, however large max has grown.
 const setBar = (segs, value, max = 10) => segs.forEach((s, i) => (s.style.width = Math.round(Math.max(0, Math.min(1, (value * 10) / max - i)) * 100) + '%'));
 
+const RING = 2 * Math.PI * 45; // length of the portrait's experience ring, in its own units
+
+// The character's face as 16 x 16 pixel art in the colours chosen on the character screen.
+export function drawFace(look) {
+  const c = $('face').getContext('2d');
+  const css = (n) => '#' + n.toString(16).padStart(6, '0');
+  const fill = (color, x, y, w, h) => {
+    c.fillStyle = css(color);
+    c.fillRect(x, y, w, h);
+  };
+  const shade = (n, k) => (((n >> 16) * k) << 16) | ((((n >> 8) & 255) * k) << 8) | ((n & 255) * k);
+  c.clearRect(0, 0, 16, 16);
+  fill(look.shirt, 3, 14, 10, 2); // shoulders
+  fill(shade(look.skin, 0.86), 6, 13, 4, 1); // neck
+  fill(look.skin, 3, 4, 10, 9); // face
+  if (look.style !== 'bald') {
+    fill(look.hair, 3, 2, 10, 3); // hair on top
+    fill(look.hair, 2, 3, 1, 4);
+    fill(look.hair, 13, 3, 1, 4);
+    if (look.style === 'long') {
+      fill(look.hair, 2, 5, 2, 9);
+      fill(look.hair, 12, 5, 2, 9);
+    } else if (look.style === 'tuft') fill(look.hair, 6, 0, 4, 2);
+    else fill(look.hair, 3, 5, 2, 1); // a short fringe
+  }
+  fill(0x2b2b33, 5, 8, 2, 2); // eyes
+  fill(0x2b2b33, 9, 8, 2, 2);
+  fill(0xffffff, 5, 8, 1, 1);
+  fill(0xffffff, 9, 8, 1, 1);
+  fill(shade(look.skin, 0.72), 7, 11, 2, 1); // mouth
+}
+
 export class Hud {
   constructor(game) {
     this.game = game;
@@ -143,10 +175,12 @@ export class Hud {
     setBar(this.thirst, p.thirst);
     setBar(this.stamina, p.stamina, g.maxStamina);
     const pr = g.progress, need = xpToNext(pr.level), points = pr.statPoints + pr.skillPoints;
+    // the portrait: the ring fills with experience toward the next level
+    const full = pr.level >= MAX_LEVEL ? 1 : pr.xp / need;
+    $('xp-ring').style.strokeDashoffset = RING * (1 - full);
     $('level').textContent = 'Lv ' + pr.level;
-    $('xp-fill').style.width = (pr.level >= MAX_LEVEL ? 100 : Math.round((pr.xp / need) * 100)) + '%';
-    $('level-points').textContent = points ? '+' + points : '';
-    $('levelbar').title = pr.level >= MAX_LEVEL ? 'Highest level reached' : pr.xp + ' / ' + need + ' experience. Press K for your character sheet.';
+    $('level-points').textContent = points > 0 ? '+' + points : '';
+    $('portrait').title = (pr.level >= MAX_LEVEL ? 'Highest level reached' : pr.xp + ' / ' + need + ' experience') + '. Press K for your character sheet.';
     setBar(this.air, p.breath);
     $('air').classList.toggle('hidden', p.breath >= 10 && !g.submerged); // only shown while diving or catching breath
     $('stamina').classList.toggle('winded', !!p.winded);

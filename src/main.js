@@ -25,11 +25,11 @@ import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
 import { PlayerModel, Animals, Enemies, Fish, Vehicles } from './render/characters.js';
 import { VEHICLES } from './game/game.js';
-import { Particles, Fires } from './render/effects.js';
+import { Particles, Sparks, Fires } from './render/effects.js';
 import '@fontsource/pixelify-sans/400.css';
 import '@fontsource/pixelify-sans/600.css';
 import '@fontsource/pixelify-sans/700.css';
-import { Hud } from './ui/hud.js';
+import { Hud, drawFace } from './ui/hud.js';
 import { setRenderedIcons } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
@@ -74,6 +74,7 @@ setRenderedIcons(renderItemIcons(itemModels));
 const chunks = new Chunks(scene, game, models);
 const sky = new Sky(scene);
 const particles = new Particles(scene);
+const sparks = new Sparks(scene);
 const fires = new Fires(scene);
 const animals = new Animals(scene, game, models);
 const enemies = new Enemies(scene, game, models);
@@ -111,7 +112,8 @@ $('minimap').addEventListener('contextmenu', (e) => e.preventDefault());
 const waypoints = new Waypoints(scene, game, $('waypoints'));
 const compass = new Compass(game);
 const sheet = new Sheet(game);
-$('levelbar').addEventListener('mousedown', (e) => {
+drawFace(settings.look);
+$('portrait').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   sheet.toggle();
 });
@@ -128,7 +130,11 @@ let playerY = p.y;
 game.on((type, data) => {
   if (type === 'toast') hud.toast(data.text);
   if (type === 'levelup' || type === 'progress') {
-    if (type === 'levelup') sfx('goal');
+    if (type === 'levelup') {
+      sfx('goal');
+      sparks.rise(p.x, p.y + 0.1, p.z, 0xffd24a, 22, 0.8, 3);
+      sparks.rise(p.x, p.y + 0.6, p.z, 0xffffff, 8, 0.5, 2.4);
+    } else sparks.rise(p.x, p.y + 0.4, p.z, 0x8be06a, 8, 0.5);
     hud.refresh();
     sheet.render();
   }
@@ -147,9 +153,21 @@ game.on((type, data) => {
     if (game.goals.index !== goalSeen) {
       goalSeen = game.goals.index;
       sfx('goal');
+      sparks.rise(p.x, p.y + 0.2, p.z, 0x8be06a, 12);
     }
+    // the moments worth a flourish
+    if (data.key === 'hoard') sparks.rise(p.x, p.y + 0.2, p.z, 0xffd24a, 18, 1);
+    else if (data.key === 'keeper:found') sparks.rise(p.x, p.y + 0.2, p.z, 0xff6a8a, 14, 0.9);
+    else if (data.key === 'keeper:restore') {
+      for (const hex of [0xffd24a, 0xffffff, 0xff8a3a]) sparks.rise(p.x, p.y + 0.3, p.z, hex, 20, 1.6, 3.5);
+    } else if (data.key === 'sleep') sparks.rise(p.x, p.y + 0.3, p.z, 0xbfe6f5, 8, 0.5);
   } else if (type === 'newday') sfx('morning');
-  else if (type === 'hit') particles.burst(data.x + 0.5, game.gen.tile(data.x, data.z).h + 0.4, data.z + 0.5, hitColor);
+  else if (type === 'charm') sparks.rise(data.x, game.ground(data.x, data.z) + 0.5, data.z, 0xff8ab0, data.born ? 14 : 7, 0.4, 1.6);
+  else if (type === 'hit') {
+    const y = game.gen.tile(data.x, data.z).h + 0.4;
+    particles.burst(data.x + 0.5, y, data.z + 0.5, hitColor);
+    sparks.burst(data.x + 0.5, y + 0.2, data.z + 0.5, 0xfff6e3, 4, 2.2);
+  }
   else if (type === 'swing') {
     playerModel.startSwing();
     playerModel.facing = Math.atan2(data.x + 0.5 - p.x, data.z + 0.5 - p.z);
@@ -204,9 +222,14 @@ game.on((type, data) => {
     }));
     playerModel.flash();
     particles.burst(p.x, p.y + 0.9, p.z, 0xe8303f, 14);
+    sparks.burst(p.x, p.y + 1, p.z, 0xff5a5a, 10);
     shake = 0.3;
     hud.refresh();
-  } else if (type === 'enemygone') particles.burst(data.x, game.ground(data.x, data.z) + 0.4, data.z, 0x46336b, 12);
+  } else if (type === 'enemygone') {
+    const y = game.ground(data.x, data.z) + 0.4;
+    particles.burst(data.x, y, data.z, 0x46336b, 12);
+    sparks.rise(data.x, y, data.z, 0xb08cff, 9, 0.4, 1.8);
+  }
   if (type === 'newday' && data.skipped) {
     // Sleeping or fainting jumps the clock: cover the jump with a quick fade from black.
     const fade = $('fade');
@@ -253,7 +276,10 @@ buildMenu(game, {
     discardOnExit = true;
   },
   onGraphics: applyGraphics,
-  onLook: () => playerModel.applyLook(settings.look),
+  onLook: () => {
+    playerModel.applyLook(settings.look);
+    drawFace(settings.look);
+  },
 });
 $('btn-pause').addEventListener('mousedown', (e) => {
   e.stopPropagation();
@@ -730,8 +756,13 @@ function step(dt) {
       particles.burst(foe.x, foe.fish.y, foe.z, 0xf2a03d, 6);
       sfx('hit');
     } else if (foe.animal) game.wildlife.hit(foe.animal); // it bolts when hit and leaves its drops when it falls
-    else if (foe === game.encounters.active) game.encounters.strike(game, foe);
-    else game.attack(foe);
+    else if (foe === game.encounters.active) {
+      // a blow that lands on a keeper throws sparks in its own colour
+      if (game.encounters.strike(game, foe)) sparks.burst(foe.x, foe.y + 1.2, foe.z, foe.spec.accent, 14, 4);
+    } else {
+      game.attack(foe);
+      sparks.burst(foe.x, foe.y + 0.6, foe.z, 0xfff6e3, 8);
+    }
   } else if (wantUse && target?.reach && swingCooldown <= 0 && !riding) {
     swingCooldown = 0.32;
     const obj = game.world.get(target.x, target.z);
@@ -750,6 +781,15 @@ function step(dt) {
   torch.intensity = lamp ? 12 : lit ? (game.isNight ? 9 : 2) * (1 + Math.sin(clock * 12) * 0.06) : 0;
   setNight(game.isNight);
   particles.update(dt);
+  sparks.update(dt);
+  // motes: drifting up each marker's beam, and gathering round a keeper as it winds up a blow
+  for (const m of game.markers) {
+    if (Math.random() < dt * 5 && Math.hypot(m.x - p.x, m.z - p.z) < 60) sparks.mote(m.x, game.ground(m.x, m.z) + 0.3 + Math.random() * 3, m.z, new THREE.Color(m.color).getHex(), 0.35);
+  }
+  const stirring = game.encounters.active;
+  if (stirring && Math.random() < dt * (stirring.warnings.length ? 26 : stirring.engaged ? 5 : 2)) {
+    sparks.mote(stirring.x, stirring.y + 0.4 + Math.random() * 1.6, stirring.z, stirring.spec.accent, 1.3);
+  }
   animals.update(dt, clock);
   enemies.update(dt, clock);
   keeperView.update(clock);

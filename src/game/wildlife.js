@@ -4,6 +4,8 @@ export const WILDLIFE = {
   ram: { name: 'Bramble ram', biomes: ['pine', 'mountain', 'autumn'], hp: 8, speed: 0.7, shy: 2, feed: 'wheat', produce: 'fleece', drops: [['raw_meat', 1, 2], ['fleece', 1, 2]] },
   hare: { name: 'Dune hare', biomes: ['sand', 'autumn', 'blossom'], hp: 3, speed: 1.7, shy: 5, feed: 'wheat', drops: [['hide', 1, 1]] },
   ptarmigan: { name: 'Rime grouse', biomes: ['snow', 'winter'], hp: 4, speed: 1.1, shy: 4, feed: 'wheat', produce: 'egg', drops: [['raw_meat', 1, 2]] },
+  fox: { name: 'Red fox', biomes: ['autumn', 'pine', 'meadow'], hp: 5, speed: 1.6, shy: 5, drops: [['hide', 1, 2]] },
+  boar: { name: 'Wild boar', biomes: ['autumn', 'pine', 'blossom'], hp: 9, speed: 1.0, shy: 1.5, drops: [['raw_meat', 2, 3], ['hide', 1, 1]] },
   salamander: { name: 'Cinder newt', biomes: ['ash', 'volcano'], hp: 4, speed: 0.85, shy: 2.5, drops: [['emberglass', 1, 1]] },
 };
 
@@ -67,7 +69,11 @@ export class Wildlife {
         a.bred = mate.bred = g.day;
         this.spawn(a.kind, a.x, a.z, { tame: true, grownDay: g.day + 2, fed: g.day });
         g.toast('A new ' + spec.name.toLowerCase() + ' was born!');
-      } else g.toast(spec.name + ' fed. Lead a pair into a closed pen with wheat.');
+        g.emit('charm', { x: a.x, z: a.z, born: true });
+      } else {
+        g.toast(spec.name + ' fed. Lead a pair into a closed pen with wheat.');
+        g.emit('charm', { x: a.x, z: a.z });
+      }
       g.emit('inv');
       return true;
     }

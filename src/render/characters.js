@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toGeometry } from './chunks.js';
 import { ENEMY_KINDS } from '../game/game.js';
-import { WILDLIFE } from '../game/wildlife.js';
+import { ANIMAL_RIGS } from './animals.js';
 import { WATER_Y } from '../world/worldgen.js';
 
 const EAT_TIME = 1.1, EAT_BITES = 4;
@@ -269,47 +269,96 @@ export class PlayerModel {
   }
 }
 
-// Animals: one mesh per entry in game.wildlife.list. They trot with a small bounce, the young are
-// smaller, tame ones show a soft glow, and a struck animal flinches.
+// Animals: one jointed figure per entry in game.wildlife.list. Legs step in diagonal pairs, heads nod
+// down to graze or peck, tails wag, hares hop and newts wriggle. The young are smaller, tame ones
+// show a soft glow, and a struck animal flinches.
 export class Animals {
-  constructor(scene, game, models) {
+  constructor(scene, game) {
     this.scene = scene;
     this.game = game;
-    this.geometries = Object.fromEntries(Object.keys(WILDLIFE).map((kind) => [kind, toGeometry(models.get(kind))]));
     this.wild = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.tame = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x3a2a12 });
-    this.meshes = new Map(); // animal id -> mesh
+    // per kind: the body geometry, and each part's geometry moved so its pivot is the origin
+    this.kinds = Object.fromEntries(Object.entries(ANIMAL_RIGS).map(([kind, rig]) => [kind, {
+      gait: rig.gait,
+      body: toGeometry(rig.body),
+      parts: rig.parts.map((p) => ({ ...p, geometry: toGeometry(p.model).translate(-p.pivot[0], -p.pivot[1], -p.pivot[2]) })),
+    }]));
+    this.shown = new Map(); // animal id -> { group, legs, head, tail, step, graze }
+  }
+
+  add(a) {
+    const kind = this.kinds[a.kind], group = new THREE.Group();
+    const entry = { group, legs: [], head: null, tail: null, step: 0, graze: 0, gait: kind.gait };
+    const mesh = (geometry) => {
+      const m = new THREE.Mesh(geometry, this.wild);
+      m.castShadow = true;
+      group.add(m);
+      return m;
+    };
+    mesh(kind.body);
+    for (const p of kind.parts) {
+      const m = mesh(p.geometry);
+      m.position.set(...p.pivot);
+      if (p.kind === 'leg') entry.legs.push({ mesh: m, phase: p.phase });
+      else entry[p.kind] = m;
+    }
+    group.rotation.y = a.dir;
+    this.scene.add(group);
+    this.shown.set(a.id, entry);
+    return entry;
   }
 
   update(dt, clock) {
     const g = this.game, alive = new Set();
     for (const a of g.wildlife.list) {
       alive.add(a.id);
-      let mesh = this.meshes.get(a.id);
-      if (!mesh) {
-        mesh = new THREE.Mesh(this.geometries[a.kind], this.wild);
-        mesh.castShadow = true;
-        mesh.rotation.y = a.dir;
-        this.scene.add(mesh);
-        this.meshes.set(a.id, mesh);
+      const e = this.shown.get(a.id) ?? this.add(a);
+      const material = a.tame ? this.tame : this.wild;
+      if (e.group.children[0].material !== material) for (const m of e.group.children) m.material = material;
+      const t = clock + a.id * 1.7, running = a.flee > 0;
+      // ease in and out of the walk, so legs never snap to rest
+      e.step += ((a.moving ? 1 : 0) - e.step) * Math.min(1, dt * 8);
+      const pace = running ? 15 : 9, stride = Math.sin(t * pace) * e.step;
+      for (const leg of e.legs) leg.mesh.rotation.z = stride * leg.phase * (e.gait === 'crawl' ? 0.5 : running ? 0.85 : 0.6);
+
+      // standing still: grazers lower their heads for a while, birds peck in quick dips
+      const wants = !a.moving && e.gait !== 'crawl' && Math.sin(t * 0.45) > 0.25 ? 1 : 0;
+      e.graze += (wants - e.graze) * Math.min(1, dt * 3);
+      let nod = Math.sin(t * 1.6) * 0.04; // breathing
+      if (e.gait === 'peck') nod -= e.graze * (0.35 + Math.max(0, Math.sin(t * 7)) ** 3 * 0.75);
+      else if (e.gait === 'hop') nod -= e.graze * 0.35;
+      else nod -= e.graze * 0.85;
+      if (e.head) {
+        e.head.rotation.z = nod + stride * 0.06;
+        e.head.rotation.y = e.gait === 'crawl' ? Math.sin(t * pace * 0.5) * 0.25 * e.step : 0;
       }
-      mesh.material = a.tame ? this.tame : this.wild;
+      if (e.tail) {
+        e.tail.rotation.y = Math.sin(t * (running ? 14 : 5)) * (e.gait === 'crawl' ? 0.5 * e.step + 0.08 : 0.35);
+        e.tail.rotation.z = running ? 0.5 : 0;
+      }
+
+      // the whole body: hares bound, newts wriggle, the rest bob gently with each step
+      let lift = Math.abs(stride) * 0.04, pitch = 0, wriggle = 0;
+      if (e.gait === 'hop') {
+        const bound = Math.max(0, Math.sin(t * (running ? 13 : 8))) * e.step;
+        lift = bound * 0.3;
+        pitch = (bound - 0.4) * 0.35 * e.step;
+      } else if (e.gait === 'crawl') wriggle = Math.sin(t * pace * 0.5) * 0.18 * e.step;
       const young = (a.grownDay ?? 0) > g.day;
       const flinch = a.flee > 2.7 ? 1.2 : 1;
       const s = (young ? 0.6 : 1) * flinch;
-      mesh.scale.set(s, s / (flinch * flinch), s);
-      // legs bounce while moving; at rest the body breathes
-      const bob = a.moving ? Math.abs(Math.sin(clock * 11 + a.id)) * 0.09 : Math.sin(clock * 2 + a.id) * 0.012;
-      mesh.position.set(a.x, g.ground(a.x, a.z) + bob, a.z);
-      let turn = a.dir - mesh.rotation.y;
+      e.group.scale.set(s, s / (flinch * flinch), s);
+      e.group.position.set(a.x, g.ground(a.x, a.z) + lift, a.z);
+      let turn = a.dir - (e.heading ?? a.dir);
       turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
-      mesh.rotation.y += turn * Math.min(1, dt * 10);
-      mesh.rotation.z = a.moving ? Math.sin(clock * 11 + a.id) * 0.05 : 0;
+      e.heading = (e.heading ?? a.dir) + turn * Math.min(1, dt * 10);
+      e.group.rotation.set(0, e.heading + wriggle, pitch);
     }
-    for (const [id, mesh] of this.meshes) {
+    for (const [id, e] of this.shown) {
       if (!alive.has(id)) {
-        this.scene.remove(mesh);
-        this.meshes.delete(id);
+        this.scene.remove(e.group);
+        this.shown.delete(id);
       }
     }
   }

@@ -93,3 +93,90 @@ export class Fires {
     });
   }
 }
+
+const SQUARE_URL = new URL('../../assets/kenney_voxel-pack/PNG/Particles/square_white.png', import.meta.url).href;
+const SWIRL_URL = new URL('../../assets/kenney_voxel-pack/PNG/Particles/swirl_white.png', import.meta.url).href;
+
+// Flat pixel sprites that always face the camera: square sparks that fly out and fall, and swirls
+// that drift upward turning. They mark the moments that matter (a level gained, a goal done, a blow
+// landed, treasure opened, a keeper stirring) on top of the little cubes used for everyday hits.
+export class Sparks {
+  constructor(scene, count = 160) {
+    const load = (url) => {
+      const t = new THREE.TextureLoader().load(url);
+      t.magFilter = t.minFilter = THREE.NearestFilter; // keep the pixels crisp
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    };
+    this.maps = { square: load(SQUARE_URL), swirl: load(SWIRL_URL) };
+    this.items = Array.from({ length: count }, () => {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.maps.square, transparent: true, depthWrite: false, fog: false }));
+      sprite.visible = false;
+      sprite.renderOrder = 6;
+      scene.add(sprite);
+      return { sprite, life: 0, span: 1, v: new THREE.Vector3(), gravity: 0, spin: 0, size: 0.2 };
+    });
+    this.next = 0;
+  }
+
+  // One particle. kind: 'square' or 'swirl'. gravity pulls it down; spin turns the sprite as it flies.
+  one(kind, x, y, z, hex, { vx = 0, vy = 0, vz = 0, life = 0.7, size = 0.22, gravity = 0, spin = 0 } = {}) {
+    const it = this.items[this.next];
+    this.next = (this.next + 1) % this.items.length;
+    it.sprite.material.map = this.maps[kind];
+    it.sprite.material.color.setHex(hex);
+    it.sprite.material.rotation = Math.random() * Math.PI * 2;
+    it.sprite.position.set(x, y, z);
+    it.sprite.visible = true;
+    it.v.set(vx, vy, vz);
+    it.life = it.span = life;
+    it.size = size;
+    it.gravity = gravity;
+    it.spin = spin;
+  }
+
+  // Square sparks thrown outward from a point, falling back down: a blow landing.
+  burst(x, y, z, hex, n = 10, force = 3.2) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, f = force * (0.4 + Math.random() * 0.6);
+      this.one('square', x, y, z, hex, { vx: Math.cos(a) * f, vy: 1.5 + Math.random() * 3, vz: Math.sin(a) * f, life: 0.45 + Math.random() * 0.3, size: 0.14 + Math.random() * 0.12, gravity: 11, spin: (Math.random() - 0.5) * 10 });
+    }
+  }
+
+  // Swirls rising in a ring around a point: something good has happened here.
+  rise(x, y, z, hex, n = 14, radius = 0.7, height = 2.2) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.4, r = radius * (0.7 + Math.random() * 0.5);
+      this.one('swirl', x + Math.cos(a) * r, y + Math.random() * 0.5, z + Math.sin(a) * r, hex, {
+        vx: -Math.sin(a) * 0.9, vy: height * (0.5 + Math.random() * 0.5), vz: Math.cos(a) * 0.9,
+        life: 0.9 + Math.random() * 0.6, size: 0.26 + Math.random() * 0.16, spin: 3 + Math.random() * 3,
+      });
+    }
+  }
+
+  // A single slow mote drifting up: a beacon, or a keeper gathering itself.
+  mote(x, y, z, hex, spread = 0.4) {
+    this.one('swirl', x + (Math.random() - 0.5) * spread * 2, y, z + (Math.random() - 0.5) * spread * 2, hex, {
+      vy: 0.9 + Math.random() * 0.8, life: 1.1 + Math.random() * 0.7, size: 0.2 + Math.random() * 0.12, spin: 2.5,
+    });
+  }
+
+  update(dt) {
+    for (const it of this.items) {
+      if (it.life <= 0) continue;
+      it.life -= dt;
+      if (it.life <= 0) {
+        it.sprite.visible = false;
+        continue;
+      }
+      it.v.y -= it.gravity * dt;
+      it.sprite.position.addScaledVector(it.v, dt);
+      it.sprite.material.rotation += it.spin * dt;
+      const k = it.life / it.span; // 1 -> 0
+      // pop in quickly, then shrink and fade away
+      const s = it.size * Math.min(1, (1 - k) * 8) * (0.45 + 0.55 * k);
+      it.sprite.scale.set(s, s, 1);
+      it.sprite.material.opacity = Math.min(1, k * 2.2);
+    }
+  }
+}
