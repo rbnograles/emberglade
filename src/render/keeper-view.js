@@ -61,7 +61,7 @@ export class KeeperView {
     this.body.rotation.x = b.hit > 0 ? -b.hit * 0.8 : windup ? -0.14 : Math.sin(clock*1.7)*0.024;
     this.body.position.set(b.x, b.y + Math.abs(Math.sin(clock*(windup ? 8 : 1.6))) * (windup ? 0.16 : 0.035), b.z);
     this.material.emissive.setHex(b.hit ? 0xbd7561 : windup ? 0x6e3221 : 0);
-    const text = b.engaged ? k.name + '  ' + b.hp + ' / ' + k.hp + (windup ? '  ·  ' + k.attack : '') :
+    const text = b.engaged ? k.name + '  ' + Math.ceil(b.hp) + ' / ' + k.hp + (windup ? '  ·  ' + k.attack : '') :
       k.name + ' sleeps at ' + k.site + '. Wake with ' + gearHint(k) + '.';
     if (this.hud.textContent !== text) this.hud.textContent = text;
   }

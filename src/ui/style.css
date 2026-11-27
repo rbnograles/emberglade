@@ -508,3 +508,51 @@ canvas#game { touch-action: none; }
   #bottomright { top: 56px; bottom: auto; right: max(8px, env(safe-area-inset-right)); }
   #minimap { width: 72px; height: 72px; }
 }
+
+/* ---------- compass, level bar, character sheet ---------- */
+#compass { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 46vw; height: 38px;
+  background: linear-gradient(90deg, transparent, rgba(30, 24, 21, 0.62) 18%, rgba(30, 24, 21, 0.62) 82%, transparent); border-radius: 10px; }
+#levelbar { pointer-events: auto; display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 8px; font: inherit; font-size: 12px; color: var(--cream);
+  background: var(--panel); border: 0; border-radius: 6px; cursor: pointer; }
+#levelbar b { color: var(--accent); white-space: nowrap; }
+#levelbar i { flex: 1; height: 6px; background: rgba(0, 0, 0, 0.35); border-radius: 3px; overflow: hidden; }
+#levelbar i span { display: block; height: 100%; background: linear-gradient(90deg, #8be06a, #f2c94c); transition: width 0.3s; }
+#levelbar em { font-style: normal; font-weight: bold; color: #2b2420; background: var(--accent); border-radius: 6px; padding: 0 6px; animation: glow 0.8s ease-in-out infinite alternate; }
+#levelbar em:empty { display: none; }
+#sheet { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; background: rgba(12, 10, 9, 0.6); backdrop-filter: blur(3px); }
+.sheet-card { width: min(900px, 96vw); max-height: 92dvh; display: flex; flex-direction: column; padding: 18px 22px; color: var(--cream);
+  background: var(--card); border: 3px solid var(--card-edge); border-radius: 18px; box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3); }
+.sheet-card header { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.sheet-card .title { display: flex; align-items: baseline; gap: 10px; }
+.sheet-card h2 { margin: 0; font-size: 24px; color: var(--accent); }
+.sheet-card .lv { font-size: 16px; }
+.sheet-card .xp { flex: 1; height: 10px; background: rgba(0, 0, 0, 0.35); border-radius: 5px; overflow: hidden; }
+.sheet-card .xp span { display: block; height: 100%; background: linear-gradient(90deg, #8be06a, #f2c94c); }
+.sheet-card .xp-text { font-size: 12px; opacity: 0.8; white-space: nowrap; }
+.sheet-body { display: grid; grid-template-columns: 290px 1fr; gap: 22px; overflow-y: auto; min-height: 0; }
+.sheet-card h3 { margin: 0; font-size: 17px; color: var(--accent); }
+.sheet-card .points { margin: 2px 0 10px; font-size: 12px; opacity: 0.7; }
+.sheet-card .points.have { opacity: 1; color: #8be06a; }
+.sheet-card .stat { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px; background: rgba(255, 246, 227, 0.07); border-radius: 10px; }
+.sheet-card .stat .text { flex: 1; min-width: 0; }
+.sheet-card .stat em { font-style: normal; font-weight: normal; opacity: 0.7; }
+.sheet-card .pips { height: 6px; margin: 4px 0; background: rgba(0, 0, 0, 0.35); border-radius: 3px; overflow: hidden; }
+.sheet-card .pips span { display: block; height: 100%; background: var(--accent); }
+.sheet-card small { display: block; font-size: 11px; opacity: 0.75; line-height: 1.35; }
+.sheet-card .plus { width: 34px; height: 34px; font: inherit; font-size: 20px; font-weight: bold; color: #2b2420; background: var(--accent); border: 0; border-radius: 9px; box-shadow: 0 3px 0 #b8922c; cursor: pointer; }
+.sheet-card .plus:disabled { color: rgba(255, 246, 227, 0.3); background: rgba(255, 246, 227, 0.08); box-shadow: none; cursor: default; }
+.sheet-card .branches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.sheet-card h4 { margin: 0 0 8px; font-size: 14px; text-align: center; letter-spacing: 1px; }
+.sheet-card .branch { display: flex; flex-direction: column; }
+.sheet-card .node { position: relative; margin-bottom: 16px; padding: 8px 10px; font: inherit; text-align: left; color: var(--cream);
+  background: rgba(255, 246, 227, 0.05); border: 2px solid rgba(255, 246, 227, 0.14); border-radius: 10px; opacity: 0.6; }
+.sheet-card .node:not(:last-child)::after { content: ''; position: absolute; left: 50%; top: 100%; width: 2px; height: 18px; margin-top: 2px; background: rgba(255, 246, 227, 0.2); }
+.sheet-card .node.have::after { background: var(--accent); }
+.sheet-card .node b { display: block; font-size: 13px; }
+.sheet-card .node em { display: block; margin-top: 4px; font-size: 11px; font-style: normal; color: var(--accent); }
+.sheet-card .node.can { opacity: 1; border-color: var(--accent); cursor: pointer; }
+.sheet-card .node.can:hover { background: rgba(242, 201, 76, 0.16); }
+.sheet-card .node.have { opacity: 1; color: #2b2420; background: var(--accent); border-color: #ffdf82; }
+.sheet-card .node.have em { color: #2b2420; }
+.sheet-card .note { margin: 12px 0 0; font-size: 11px; opacity: 0.65; }
+@media (max-width: 760px) { .sheet-body { grid-template-columns: 1fr; } #compass { top: 52px; max-width: 70vw; } }

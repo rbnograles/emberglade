@@ -1,5 +1,6 @@
 import { ITEMS, FLASK_DRINKS } from '../game/items.js';
 import { GOALS } from '../game/goals.js';
+import { xpToNext, MAX_LEVEL } from '../game/progress.js';
 import { BIOMES } from '../world/biomes.js';
 import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
 import { iconURL } from './icons.js';
@@ -53,7 +54,8 @@ function segments(parent) {
   });
 }
 
-const setBar = (segs, value) => segs.forEach((s, i) => (s.style.width = Math.round(Math.max(0, Math.min(1, value - i)) * 100) + '%'));
+// Ten segments always stand for the whole bar, however large max has grown.
+const setBar = (segs, value, max = 10) => segs.forEach((s, i) => (s.style.width = Math.round(Math.max(0, Math.min(1, (value * 10) / max - i)) * 100) + '%'));
 
 export class Hud {
   constructor(game) {
@@ -136,10 +138,15 @@ export class Hud {
       prompt.textContent = food ? `You are hungry. Press C to eat ${ITEMS[food.id].name}` : 'You are hungry. Pick berries from bushes or apples from oak trees';
     }
     prompt.classList.toggle('hidden', p.thirst >= 4 && p.hunger >= 4);
-    setBar(this.hearts, p.health);
+    setBar(this.hearts, p.health, g.maxHealth);
     setBar(this.hunger, p.hunger);
     setBar(this.thirst, p.thirst);
-    setBar(this.stamina, p.stamina);
+    setBar(this.stamina, p.stamina, g.maxStamina);
+    const pr = g.progress, need = xpToNext(pr.level), points = pr.statPoints + pr.skillPoints;
+    $('level').textContent = 'Lv ' + pr.level;
+    $('xp-fill').style.width = (pr.level >= MAX_LEVEL ? 100 : Math.round((pr.xp / need) * 100)) + '%';
+    $('level-points').textContent = points ? '+' + points : '';
+    $('levelbar').title = pr.level >= MAX_LEVEL ? 'Highest level reached' : pr.xp + ' / ' + need + ' experience. Press K for your character sheet.';
     setBar(this.air, p.breath);
     $('air').classList.toggle('hidden', p.breath >= 10 && !g.submerged); // only shown while diving or catching breath
     $('stamina').classList.toggle('winded', !!p.winded);

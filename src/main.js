@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { installControllers } from './ui/controllers.js';
 import { ask } from './ui/dialog.js';
+import { Sheet } from './ui/sheet.js';
+import { Compass } from './ui/compass.js';
 import { confirmRelocation } from './ui/relocation.js';
 import { Game, needsRelocation } from './game/game.js';
 import { loadSave, writeSave, clearSave } from './game/save.js';
@@ -107,6 +109,12 @@ $('minimap').addEventListener('mousedown', (e) => {
 });
 $('minimap').addEventListener('contextmenu', (e) => e.preventDefault());
 const waypoints = new Waypoints(scene, game, $('waypoints'));
+const compass = new Compass(game);
+const sheet = new Sheet(game);
+$('levelbar').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  sheet.toggle();
+});
 const torch = new THREE.PointLight(0xffb060, 0, 17, 1.4);
 scene.add(torch);
 
@@ -119,6 +127,11 @@ let playerY = p.y;
 
 game.on((type, data) => {
   if (type === 'toast') hud.toast(data.text);
+  if (type === 'levelup' || type === 'progress') {
+    if (type === 'levelup') sfx('goal');
+    hud.refresh();
+    sheet.render();
+  }
   // sounds
   if (type === 'hit') sfx(hitSound);
   else if (type === 'eat' || type === 'drink' || type === 'hurt' || type === 'break') sfx(type);
@@ -272,6 +285,7 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'Escape') {
     if (bigmap.open) bigmap.hide();
+    else if (sheet.open) sheet.hide();
     else if (panels.open) panels.hide();
     else setPaused(!paused);
     return;
@@ -283,6 +297,9 @@ addEventListener('keydown', (e) => {
     sfx('ui');
   } else if (e.code === K.inventory) {
     panels.toggle();
+    sfx('ui');
+  } else if (e.code === K.sheet) {
+    sheet.toggle();
     sfx('ui');
   }
   else if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
@@ -585,7 +602,7 @@ function step(dt) {
   const swimming = game.swimming;
   const riding = game.vehicle;
   playerModel.gliding = game.gliding;
-  const speed = riding ? VEHICLES[riding.kind].speed : game.gliding ? 7.5 : swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
+  const speed = riding ? VEHICLES[riding.kind].speed : game.gliding ? 7.5 : (swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2) * game.progress.speedScale;
   if (!panels.open) {
     yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
     if (keys.has(K.camReset)) {
@@ -763,6 +780,7 @@ function step(dt) {
     hudTimer = 0.25;
     minimap.draw(camYaw, playerModel.facing);
   waypoints.update(camera, clock);
+  compass.draw(camYaw);
     hud.refresh();
   }
   hud.setHint(targetLabel());

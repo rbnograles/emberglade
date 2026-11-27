@@ -19,30 +19,33 @@ const WINDED_UNTIL = 3; // stamina needed before sprinting again after running d
 
 // Advances food, water and health; returns true when the player has fainted.
 // hungerRate: extra multiplier on hunger drain (being cold makes you hungrier).
-export function tickSurvival(p, dt, sprinting = false, hungerRate = 1, drain = 1) {
+// mods: { maxHealth, regen } from the player's level-up choices.
+export function tickSurvival(p, dt, sprinting = false, hungerRate = 1, drain = 1, mods = {}) {
   p.thirst ??= MAX_THIRST;
   const effort = (sprinting ? 2 : 1) * drain;
   p.hunger = Math.max(0, p.hunger - (dt * effort * hungerRate) / HUNGER_SECONDS);
   p.thirst = Math.max(0, p.thirst - (dt * effort) / THIRST_SECONDS);
   if (p.hunger <= 0) p.health = Math.max(0, p.health - dt / STARVE_SECONDS);
   if (p.thirst <= 0) p.health = Math.max(0, p.health - dt / STARVE_SECONDS);
-  if (p.hunger >= 7 && p.thirst >= 3) p.health = Math.min(MAX_HEALTH, p.health + dt / REGEN_SECONDS);
+  if (p.hunger >= 7 && p.thirst >= 3) p.health = Math.min(mods.maxHealth ?? MAX_HEALTH, p.health + (dt * (mods.regen ?? 1)) / REGEN_SECONDS);
   return p.health <= 0;
 }
 
 // Sprinting drains stamina; resting restores it (slowly when starving or parched).
 // Running dry leaves the player winded until some stamina is back. Returns true the moment that happens.
-export function tickStamina(p, dt, sprinting, drain = 1) {
+// mods: { max, regen, sprintCost }. A bigger pool drains at the same speed, so it lasts longer.
+export function tickStamina(p, dt, sprinting, drain = 1, mods = {}) {
+  const max = mods.max ?? MAX_STAMINA;
   p.stamina ??= MAX_STAMINA;
   if (sprinting) {
-    p.stamina = Math.max(0, p.stamina - (dt * drain * MAX_STAMINA) / SPRINT_SECONDS);
+    p.stamina = Math.max(0, p.stamina - (dt * drain * (mods.sprintCost ?? 1) * MAX_STAMINA) / SPRINT_SECONDS);
     if (p.stamina <= 0 && !p.winded) {
       p.winded = true;
       return true;
     }
   } else {
     const weak = p.hunger <= 2 || (p.thirst ?? MAX_THIRST) <= 2;
-    p.stamina = Math.min(MAX_STAMINA, p.stamina + (dt * MAX_STAMINA * (weak ? 0.4 : 1)) / REST_SECONDS);
+    p.stamina = Math.min(max, p.stamina + (dt * max * (mods.regen ?? 1) * (weak ? 0.4 : 1)) / REST_SECONDS);
     if (p.winded && p.stamina >= WINDED_UNTIL) p.winded = false;
   }
   return false;

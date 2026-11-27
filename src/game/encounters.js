@@ -154,11 +154,12 @@ export class Encounters {
     }
     game.emit('swing', { x: b.x - 0.5, z: b.z - 0.5 });
     b.engaged = true;
-    b.hp -= game.attackPower;
+    b.hp -= game.attackPower * (game.progress.has('giant_slayer') ? 1.3 : 1);
     b.hit = 0.25;
     game.wearTool();
     if (b.hp <= 0) {
       this.restored.add(k.id);
+      b.hp = 0;
       this.active = null;
       game.record('keeper:restore');
       game.toast(k.site + ' restored. Workbench recipe learned: ' + carvingName(k) + '.');

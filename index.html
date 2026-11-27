@@ -23,6 +23,7 @@
         <div id="status" class="hidden"></div>
       </div>
       <div id="waypoints"></div>
+      <canvas id="compass"></canvas>
       <div id="bottomright">
         <div id="home-label"></div>
         <canvas id="minimap" title="Click: open the world map. Right click: place or remove a marker"></canvas>
@@ -31,6 +32,7 @@
       <div id="bottom">
         <div id="hungry" class="hidden"></div>
         <div id="hint"></div>
+        <button id="levelbar" title="Character sheet (K)"><b id="level"></b><i><span id="xp-fill"></span></i><em id="level-points"></em></button>
         <div id="bars">
           <div id="hearts" class="bar" data-label="Health"></div>
           <div id="hunger" class="bar" data-label="Food"></div>
@@ -55,6 +57,7 @@
     </div>
     <button id="close-pack" class="touch-close">Close pack</button>
     <div id="panel" class="hidden"></div>
+    <div id="sheet" class="hidden"></div>
     <div id="cursor" class="slot hidden"></div>
     <div id="bigmap" class="hidden"><div class="frame"><canvas></canvas><div class="map-actions"><button id="map-in" aria-label="Zoom in">+</button><button id="map-out" aria-label="Zoom out">−</button><button id="map-close">Close map</button></div><div class="info"></div></div></div>
     <div id="fade"></div>
@@ -108,7 +111,7 @@
               <li><kbd>Right click</kbd> place, plant, water, wear</li>
               <li><kbd>Right-drag</kbd> or <kbd>Q</kbd> <kbd>E</kbd> turn and tilt the view &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>Wheel</kbd> zoom</li>
               <li><kbd>1</kbd>–<kbd>9</kbd> hotbar (drag a slot onto another to swap)</li>
-              <li><kbd>Tab</kbd> inventory and crafting &nbsp; <kbd>M</kbd> world map</li>
+              <li><kbd>Tab</kbd> inventory and crafting &nbsp; <kbd>M</kbd> world map &nbsp; <kbd>K</kbd> character sheet (level, stats, skills)</li>
               <li><kbd>C</kbd> eat &nbsp; <kbd>X</kbd> drink at a pond or from a flask</li>
               <li><kbd>F</kbd> use bed, chest, campfire, workbench; board or leave a boat or submarine</li>
               <li>In deep water: <kbd>Shift</kbd> dives, <kbd>Space</kbd> swims up</li>

@@ -7,6 +7,8 @@ import { CROPS } from '../src/world/crops.js';
 import { WILDLIFE } from '../src/game/wildlife.js';
 import { KEEPERS, carvingId } from '../src/game/keepers.js';
 import { suitsSite, attackWarnings, inWarning, rewardFor } from '../src/game/encounters.js';
+import { Progress, SKILLS, STAT_CAP, MAX_LEVEL, xpToNext } from '../src/game/progress.js';
+import { tickSurvival, tickStamina } from '../src/game/survival.js';
 import { buildModels, buildItemModels } from '../src/render/models.js';
 
 const newGame = () => new Game({ seed: 1 });
@@ -293,6 +295,90 @@ describe('keepers', () => {
     }
     expect(g.encounters.complete).toBe(true);
     expect(ended).toBe(1);
+  });
+});
+
+describe('levels, stats and skills', () => {
+  it('levels up to 100 and hands out stat and skill points', () => {
+    const pr = new Progress();
+    expect(pr.level).toBe(1);
+    expect(pr.addXp(xpToNext(1) - 1)).toBe(0);
+    expect(pr.addXp(1)).toBe(1);
+    expect(pr.statPoints).toBe(1);
+    expect(pr.skillPoints).toBe(0);
+    pr.addXp(xpToNext(2));
+    expect(pr.skillPoints).toBe(1); // level 3
+    expect(pr.addXp(1e9)).toBe(MAX_LEVEL - 3);
+    expect(pr.level).toBe(100);
+    expect(pr.addXp(500)).toBe(0); // nothing past the top
+    expect(pr.statPoints).toBe(99);
+    // a stat stops at its cap, and every skill in the tree can be afforded by level 100
+    for (let i = 0; i < 30; i++) pr.raise('vitality');
+    expect(pr.stats.vitality).toBe(STAT_CAP);
+    expect(pr.maxHealth).toBe(20);
+    expect(pr.learn('keen_edge')).toBe(false); // needs Tough hide first
+    for (const s of SKILLS) expect(pr.learn(s.id), s.id).toBe(true);
+    expect(pr.skillPoints).toBeGreaterThanOrEqual(0);
+    const again = new Progress(JSON.parse(JSON.stringify(pr)));
+    expect(again.level).toBe(100);
+    expect(again.has('giant_slayer')).toBe(true);
+    expect(again.stats.vitality).toBe(STAT_CAP);
+  });
+
+  it('earns experience from play, and the points change the game', () => {
+    const g = newGame();
+    let ups = 0;
+    g.on((type) => { if (type === 'levelup') ups++; });
+    for (let i = 0; i < 30; i++) g.record('craft:stick');
+    expect(g.progress.level).toBeGreaterThan(1);
+    expect(ups).toBe(g.progress.level - 1);
+    g.gainXp(1e9);
+    expect(g.raiseStat('nonsense')).toBe(false);
+
+    // vitality: more health to fill
+    for (let i = 0; i < 10; i++) g.raiseStat('vitality');
+    expect(g.maxHealth).toBe(15);
+    g.player.health = 10;
+    g.player.hunger = g.player.thirst = 10;
+    for (let i = 0; i < 400; i++) tickSurvival(g.player, 0.5, false, 1, 0, { maxHealth: g.maxHealth });
+    expect(g.player.health).toBe(15);
+
+    // endurance: a bigger pool lasts longer at a sprint
+    const plain = { stamina: 10, hunger: 10 }, fit = { stamina: 15, hunger: 10 };
+    let a = 0, b = 0;
+    while (!tickStamina(plain, 0.1, true)) a++;
+    while (!tickStamina(fit, 0.1, true, 1, { max: 15 })) b++;
+    expect(b).toBeGreaterThan(a * 1.4);
+
+    // hardiness: hunger comes slower
+    for (let i = 0; i < 20; i++) g.raiseStat('hardiness');
+    expect(g.progress.needsScale).toBeCloseTo(0.6);
+
+    // strength and Keen edge: harder blows. Tough hide: armor without wearing any.
+    hold(g, 'iron_sword');
+    const base = g.attackPower;
+    for (let i = 0; i < 5; i++) g.raiseStat('strength');
+    expect(g.attackPower).toBeCloseTo(base * 1.2);
+    expect(g.defense).toBe(0);
+    expect(g.learnSkill('tough_hide')).toBe(true);
+    expect(g.defense).toBe(1);
+    g.learnSkill('keen_edge');
+    expect(g.attackPower).toBeCloseTo(base * 1.2 * 1.15);
+
+    // Hearty meals: food fills more
+    g.learnSkill('forager');
+    g.learnSkill('iron_stomach');
+    g.player.hunger = 0;
+    hold(g, 'berries');
+    const plainMeal = ITEMS.berries.food;
+    g.eatHeld();
+    expect(g.player.hunger).toBeCloseTo(plainMeal * 1.25);
+
+    // it all comes back from a save
+    const again = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(again.progress.level).toBe(100);
+    expect(again.maxHealth).toBe(15);
+    expect(again.defense).toBe(1);
   });
 });
 

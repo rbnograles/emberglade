@@ -3,7 +3,7 @@ const KEY = 'emberglade-settings';
 
 export const DEFAULT_KEYS = {
   up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', sprint: 'ShiftLeft', jump: 'Space',
-  inventory: 'Tab', eat: 'KeyC', drink: 'KeyX', use: 'KeyF', camLeft: 'KeyQ', camRight: 'KeyE', camReset: 'KeyR', map: 'KeyM',
+  inventory: 'Tab', eat: 'KeyC', drink: 'KeyX', use: 'KeyF', camLeft: 'KeyQ', camRight: 'KeyE', camReset: 'KeyR', map: 'KeyM', sheet: 'KeyK',
 };
 
 export const DEFAULT_LOOK = { skin: 0xf2c7a0, hair: 0x6b3f24, shirt: 0x4fa56a, pants: 0x5a4634, style: 'short' };
@@ -11,7 +11,7 @@ export const DEFAULT_LOOK = { skin: 0xf2c7a0, hair: 0x6b3f24, shirt: 0x4fa56a, p
 export const KEY_LABELS = {
   up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', sprint: 'Sprint', jump: 'Jump',
   inventory: 'Inventory / craft', eat: 'Eat', drink: 'Drink', use: 'Use (bed, chest...)',
-  camLeft: 'Turn view left', camRight: 'Turn view right', camReset: 'Reset view', map: 'World map',
+  camLeft: 'Turn view left', camRight: 'Turn view right', camReset: 'Reset view', map: 'World map', sheet: 'Character sheet',
 };
 
 function load() {

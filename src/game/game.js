@@ -1,4 +1,5 @@
 import { Encounters } from './encounters.js';
+import { Progress, xpFor } from './progress.js';
 import { DIFFICULTIES } from './survival.js';
 import { Wildlife } from './wildlife.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
@@ -86,6 +87,7 @@ export class Game {
     this.cursor = null; // stack being carried by the mouse in the inventory panel
     this.goals = new Goals(save?.goals);
     this.encounters = new Encounters(save?.encounters);
+    this.progress = new Progress(save?.progress);
     // places the player has pinned on the map: [{x, z, color}], also shown as beacons in the world
     this.markers = (save?.markers ?? []).map((m) => ({ ...m }));
     this.day = save?.day ?? 1;
@@ -172,7 +174,7 @@ export class Game {
   serialize() {
     return {
       seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs),
-      livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers,
+      livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
@@ -458,10 +460,40 @@ export class Game {
 
   giveDrops(drops) {
     // [item, min, max] or [item, min, max, chance]
-    for (const [id, min, max, chance = 1] of drops) if (Math.random() < chance) this.give(id, rand(min, max));
+    const bonus = this.progress.has('forager') && Math.random() < 0.2 ? 1 : 0; // Bountiful: one extra of the first thing
+    drops.forEach(([id, min, max, chance = 1], i) => {
+      if (Math.random() < chance) this.give(id, rand(min, max) + (i === 0 ? bonus : 0));
+    });
+  }
+
+  get maxHealth() { return this.progress.maxHealth; }
+  get maxStamina() { return this.progress.maxStamina; }
+  get mealScale() { return this.progress.has('iron_stomach') ? 1.25 : 1; }
+
+  // Experience toward the next level; each level brings a stat point, every third a skill point.
+  gainXp(n) {
+    const gained = this.progress.addXp(n);
+    if (!gained) return;
+    this.player.health = this.maxHealth; // a new level restores you
+    this.toast('Level ' + this.progress.level + '! Press K to spend your points.');
+    this.emit('levelup', { level: this.progress.level });
+  }
+
+  // Spend a stat point or learn a skill. Returns true when it was spent.
+  raiseStat(stat) {
+    if (!this.progress.raise(stat)) return false;
+    this.emit('progress');
+    return true;
+  }
+
+  learnSkill(id) {
+    if (!this.progress.learn(id)) return false;
+    this.emit('progress');
+    return true;
   }
 
   record(key, n = 1) {
+    this.gainXp(xpFor(key));
     const previous = this.goals.index;
     this.goals.record(key, n);
     // Discoveries and victories can happen before the guide reaches that chapter.
@@ -473,6 +505,7 @@ export class Game {
       if (!this.goals.record(goal.milestone, 0)) break;
     }
     if (this.goals.index !== previous) {
+      this.gainXp(xpFor('goal') * (this.goals.index - previous));
       this.toast(this.goals.current ? 'Goal complete!' : 'All goals complete. Enjoy your homestead!');
     }
     this.emit('goal');
@@ -682,7 +715,7 @@ export class Game {
       this.toast('Select some food in the hotbar first');
       return false;
     }
-    if (!eat(this.player, food, ITEMS[held.id].water)) {
+    if (!eat(this.player, food * this.mealScale, ITEMS[held.id].water)) {
       this.toast("You're full");
       return false;
     }
@@ -719,7 +752,7 @@ export class Game {
       return false;
     }
     const s = this.inv.slots[i];
-    if (!eat(this.player, ITEMS[s.id].food, ITEMS[s.id].water)) {
+    if (!eat(this.player, ITEMS[s.id].food * this.mealScale, ITEMS[s.id].water)) {
       this.toast("You're full");
       return false;
     }
@@ -781,7 +814,7 @@ export class Game {
   updateCapacity() { this.inv.limit = this.capacity; }
 
   get defense() {
-    return this.armor.slots.reduce((sum, s) => sum + (s ? ITEMS[s.id].def ?? 0 : 0), 0);
+    return this.armor.slots.reduce((sum, s) => sum + (s ? ITEMS[s.id].def ?? 0 : 0), 0) + (this.progress.has('tough_hide') ? 1 : 0);
   }
 
   // ---- water ----
@@ -955,6 +988,7 @@ export class Game {
   wearTool() {
     const s = this.held, uses = s && ITEMS[s.id].uses;
     if (!uses) return;
+    if (this.progress.has('tool_care') && Math.random() < 0.35) return;
     s.d = (s.d ?? uses) - 1;
     if (s.d > 0) return;
     this.inv.slots[this.selected] = null;
@@ -1086,7 +1120,7 @@ export class Game {
       return false;
     }
     this.startDay(true);
-    this.player.health = Math.min(MAX_HEALTH, this.player.health + 3);
+    this.player.health = Math.min(this.maxHealth, this.player.health + 3);
     this.toast(`Good morning! Day ${this.day}`);
     this.record('sleep');
     return true;
@@ -1281,7 +1315,7 @@ export class Game {
   // Strength of a swing with the held item.
   get attackPower() {
     const def = this.held ? ITEMS[this.held.id] : null;
-    return def?.weapon ?? (def?.tool === 'axe' || def?.tool === 'pickaxe' ? 2 : 1);
+    return (def?.weapon ?? (def?.tool === 'axe' || def?.tool === 'pickaxe' ? 2 : 1)) * this.progress.damageScale;
   }
 
   attack(e) {
@@ -1363,7 +1397,7 @@ export class Game {
     const ex = this.exposure();
     this.exposed = ex;
     if (ex.short > 0) {
-      this.player.health = Math.max(0, this.player.health - (dt * ex.short) / EXPOSURE_SECONDS);
+      this.player.health = Math.max(0, this.player.health - (dt * ex.short * (this.progress.has('weatherproof') ? 0.65 : 1)) / EXPOSURE_SECONDS);
       this.exposureTimer = (this.exposureTimer ?? 0) - dt;
       if (this.exposureTimer <= 0) {
         this.exposureTimer = 1.6;
@@ -1379,7 +1413,7 @@ export class Game {
     if (under) {
       // a diving mask stretches each breath
       const head = this.armor.slots[0];
-      const stretch = (head && ITEMS[head.id].air) || 1;
+      const stretch = ((head && ITEMS[head.id].air) || 1) * (this.progress.has('deep_lungs') ? 1.5 : 1);
       pl.breath = Math.max(0, pl.breath - (dt * MAX_BREATH) / (BREATH_SECONDS * stretch));
       if (pl.breath <= 0) pl.health = Math.max(0, pl.health - dt / SUFFOCATE_SECONDS);
     } else pl.breath = Math.min(MAX_BREATH, pl.breath + (dt * MAX_BREATH) / 3);
@@ -1389,7 +1423,7 @@ export class Game {
     if (this.swimming) {
       // swimming uses energy; with none left you start to drown
       const p = this.player;
-      p.stamina = Math.max(0, p.stamina - (dt * drain * MAX_STAMINA) / SWIM_SECONDS);
+      p.stamina = Math.max(0, p.stamina - (dt * drain * (this.progress.has('swimmer') ? 0.6 : 1) * MAX_STAMINA) / SWIM_SECONDS);
       if (p.stamina <= 0) {
         p.health = Math.max(0, p.health - dt / DROWN_SECONDS);
         if (!this.drowning) this.toast('You are drowning! Get to land');
@@ -1397,9 +1431,11 @@ export class Game {
       }
     } else {
       this.drowning = false;
-      if (tickStamina(this.player, dt, sprinting, drain)) this.toast('Out of breath. Walk for a moment to recover');
+      const mods = { max: this.maxStamina, regen: this.progress.has('second_wind') ? 1.4 : 1, sprintCost: this.progress.has('pathfinder') ? 0.7 : 1 };
+      if (tickStamina(this.player, dt, sprinting, drain, mods)) this.toast('Out of breath. Walk for a moment to recover');
     }
-    if (tickSurvival(this.player, dt, sprinting, this.hungerRate, drain)) this.faint();
+    const needs = drain * this.progress.needsScale;
+    if (tickSurvival(this.player, dt, sprinting, this.hungerRate, needs, { maxHealth: this.maxHealth, regen: this.progress.has('mender') ? 2 : 1 })) this.faint();
   }
 
   // Everything outside the hotbar is left in a pack where you fell (hotbar and worn items stay with you).
@@ -1430,7 +1466,7 @@ export class Game {
     p.health = 6;
     p.hunger = 6;
     p.thirst = 6;
-    p.stamina = MAX_STAMINA;
+    p.stamina = this.maxStamina;
     p.winded = false;
     p.breath = MAX_BREATH;
     if (p.bed) {

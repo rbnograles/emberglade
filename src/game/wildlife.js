@@ -86,6 +86,7 @@ export class Wildlife {
     if (a.hp <= 0) {
       this.list.splice(this.list.indexOf(a), 1);
       g.giveDrops(WILDLIFE[a.kind].drops);
+      g.record('hunt');
     }
     g.wearTool();
     g.emit('swing', { x: a.x - 0.5, z: a.z - 0.5 });

@@ -34,6 +34,8 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Animals:** deer, hens, rams, hares, grouse and cinder newts, each in its own biomes. Lead farm animals with wheat, feed a pair inside a closed pen to breed them, and gather eggs and fleece from tame ones.
 - **Homestead:** roofs that lift out of view when you step under them, stairs, windows, brick walls and floors, tables, chairs, bookcases, cabinets, lamps and flower boxes. Turnips and pumpkins grow alongside wheat at their own pace, gates close a pen, and a cistern waters the crops beside it.
 - **Built from parts:** boats, submarines and the land-going trail cart are assembled from hulls, oars, propellers and axles.
+- **Levels, stats and skills:** earn experience from everything you do, up to level 100. Each level gives a stat point (Vitality, Endurance, Hardiness, Strength, Agility) and every third a skill point for a three-branch tree (Survivor, Explorer, Warrior). Press K for the character sheet.
+- **Compass:** a strip across the top shows where the camera looks, with home, your markers and found keepers at their bearings.
 - **Map markers:** click the world map, or right click the minimap, to pin up to five markers. Each one stands in the world as a beam of light with a turning gem, and a tag on screen shows the distance and points the way when it is out of view.
 - **Harsh-region rewards:** rimeglass and emberglass make the best pickaxe and axe in the game, one-time hoards lie hidden in both regions, and every keeper leaves spoils.
 - **Touch and gamepad** controls, a graphics quality setting, and a per-world difficulty.
