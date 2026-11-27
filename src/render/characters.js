@@ -153,20 +153,42 @@ export class PlayerModel {
     this.heldId = id;
     this.held.visible = !!id;
     if (!id) return;
-    if (!this.heldCache.has(id)) {
+    const key = id + (isTool ? ':grip' : '');
+    if (!this.heldCache.has(key)) {
       const geometry = toGeometry(this.itemModels.get(id)).clone();
       geometry.computeBoundingBox();
       const bounds = geometry.boundingBox;
       const size = bounds.getSize(new THREE.Vector3());
       const centre = bounds.getCenter(new THREE.Vector3());
       const scale = 0.6 / Math.max(size.x, size.y, size.z);
-      geometry.translate(-centre.x, -bounds.min.y, -centre.z);
+      if (isTool) {
+        // A tool is gripped by its handle: the origin goes on the handle (found as the middle of the
+        // model's lowest part), a little way up from its end, so the fist closes around it.
+        const pos = geometry.getAttribute('position');
+        let hx = 0, hz = 0, n = 0;
+        for (let i = 0; i < pos.count; i++) {
+          if (pos.getY(i) > bounds.min.y + size.y * 0.12) continue;
+          hx += pos.getX(i);
+          hz += pos.getZ(i);
+          n++;
+        }
+        geometry.translate(-hx / n, -(bounds.min.y + size.y * 0.16), -hz / n);
+      } else geometry.translate(-centre.x, -bounds.min.y, -centre.z);
       geometry.scale(scale, scale, scale);
-      this.heldCache.set(id, geometry);
+      this.heldCache.set(key, geometry);
     }
-    this.held.geometry = this.heldCache.get(id);
-    this.held.scale.setScalar(isTool ? 1.15 : 0.65);
-    this.held.position.set(isTool ? 0.2 : 0.12, isTool ? -0.62 : -0.56, isTool ? 0.22 : 0.16);
+    this.held.geometry = this.heldCache.get(key);
+    if (isTool) {
+      // in the fist at the end of the arm, blade edge forward, shaft leaning ahead of the body
+      this.held.scale.setScalar(1.25);
+      this.held.position.set(0, -0.43, 0.03);
+      this.held.rotation.set(1.05, -Math.PI / 2, 0);
+    } else {
+      // anything else is carried in the palm, just in front of the hand
+      this.held.scale.setScalar(0.55);
+      this.held.position.set(0, -0.56, 0.2);
+      this.held.rotation.set(0, -Math.PI / 4, 0);
+    }
   }
 
   update(dt, moving, speed, swimming = false, clock = 0, submerged = false) {

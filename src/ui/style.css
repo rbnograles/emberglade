@@ -510,8 +510,9 @@ canvas#game { touch-action: none; }
 }
 
 /* ---------- compass, level bar, character sheet ---------- */
-#compass { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 46vw; height: 38px;
-  background: linear-gradient(90deg, transparent, rgba(30, 24, 21, 0.62) 18%, rgba(30, 24, 21, 0.62) 82%, transparent); border-radius: 10px; }
+#compass { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(420px, 46vw); aspect-ratio: 420 / 38;
+  background: radial-gradient(ellipse at center, rgba(30, 24, 21, 0.7), rgba(30, 24, 21, 0.45) 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
 #levelbar { pointer-events: auto; display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 8px; font: inherit; font-size: 12px; color: var(--cream);
   background: var(--panel); border: 0; border-radius: 6px; cursor: pointer; }
 #levelbar b { color: var(--accent); white-space: nowrap; }
@@ -555,4 +556,4 @@ canvas#game { touch-action: none; }
 .sheet-card .node.have { opacity: 1; color: #2b2420; background: var(--accent); border-color: #ffdf82; }
 .sheet-card .node.have em { color: #2b2420; }
 .sheet-card .note { margin: 12px 0 0; font-size: 11px; opacity: 0.65; }
-@media (max-width: 760px) { .sheet-body { grid-template-columns: 1fr; } #compass { top: 52px; max-width: 70vw; } }
+@media (max-width: 760px) { .sheet-body { grid-template-columns: 1fr; } #compass { top: 52px; width: min(420px, 70vw); } }
