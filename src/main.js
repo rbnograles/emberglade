@@ -55,7 +55,8 @@ resize();
 
 await loadIcons();
 const models = buildModels();
-setRenderedIcons(renderItemIcons(buildItemModels(models)));
+const itemModels = buildItemModels(models);
+setRenderedIcons(renderItemIcons(itemModels));
 const chunks = new Chunks(scene, game, models);
 const sky = new Sky(scene);
 const particles = new Particles(scene);
@@ -66,7 +67,7 @@ const enemies = new Enemies(scene, game, {
 });
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
-const playerModel = new PlayerModel(settings.look);
+const playerModel = new PlayerModel(settings.look, itemModels);
 const rain = new Rain(scene);
 const snow = new Flurry(scene, 0xffffff, 0.075);
 const ash = new Flurry(scene, 0x4a4246, 0.06);

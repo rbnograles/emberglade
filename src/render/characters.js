@@ -1,7 +1,5 @@
 import * as THREE from 'three';
-import { Vox } from './voxel.js';
 import { toGeometry } from './chunks.js';
-import { iconPixels } from '../ui/icons.js';
 import { ENEMY_KINDS } from '../game/game.js';
 import { WATER_Y } from '../world/worldgen.js';
 
@@ -26,7 +24,8 @@ const limb = (w, h, d, color, x, y) => {
 // Blocky character facing +z. update() animates walking and tool swings.
 export class PlayerModel {
   // look: {skin, hair, shirt, pants, style} from the character screen
-  constructor(look = null) {
+  constructor(look, itemModels) {
+    this.itemModels = itemModels;
     const g = (this.group = new THREE.Group());
     g.rotation.order = 'YXZ'; // so leaning forward or back follows the way the character faces
     const skin = 0xf2c7a0, shirt = 0x4fa56a, pants = 0x5a4634, hair = 0x6b3f24;
@@ -154,11 +153,15 @@ export class PlayerModel {
     this.held.visible = !!id;
     if (!id) return;
     if (!this.heldCache.has(id)) {
-      const v = new Vox();
-      const { size, pixels } = iconPixels(id);
-      const depth = size / 8; // keep the sprite the same thickness whatever its resolution
-      for (const { x, y, color } of pixels) for (let z = 0; z < depth * 2; z++) v.set(x, y, z, color);
-      this.heldCache.set(id, toGeometry(v.build(0.6 / size, { jitter: 0 })));
+      const geometry = toGeometry(this.itemModels.get(id)).clone();
+      geometry.computeBoundingBox();
+      const bounds = geometry.boundingBox;
+      const size = bounds.getSize(new THREE.Vector3());
+      const centre = bounds.getCenter(new THREE.Vector3());
+      const scale = 0.6 / Math.max(size.x, size.y, size.z);
+      geometry.translate(-centre.x, -bounds.min.y, -centre.z);
+      geometry.scale(scale, scale, scale);
+      this.heldCache.set(id, geometry);
     }
     this.held.geometry = this.heldCache.get(id);
     this.held.scale.setScalar(isTool ? 1.15 : 0.65);
