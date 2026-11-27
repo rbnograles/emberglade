@@ -111,9 +111,12 @@ export class Hud {
       sheltered: 'Sheltered indoors',
       swim: 'Swimming: your energy drains. Hold Shift to dive',
       dive: 'Under water: watch your air. Space swims up',
+      boat: 'Sailing. F to get off',
+      submarine: 'Submarine: Shift dives, Space rises, F to get out',
     };
     const status = $('status');
-    const state = g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
+    const ride = g.vehicle;
+    const state = ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
     status.className = STATUS[state] ? state : 'hidden';
     status.textContent = STATUS[state] ?? '';
     // Eat button: shows what C would eat, and pulses when you are hungry.

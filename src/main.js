@@ -11,7 +11,8 @@ import { ITEMS } from './game/items.js';
 import { buildModels } from './render/models.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
-import { PlayerModel, Deer, Enemies, Fish } from './render/characters.js';
+import { PlayerModel, Deer, Enemies, Fish, Vehicles } from './render/characters.js';
+import { VEHICLES } from './game/game.js';
 import { Particles, Fires } from './render/effects.js';
 import { Hud } from './ui/hud.js';
 import { loadIcons, iconPixels } from './ui/icons.js';
@@ -55,6 +56,7 @@ const fires = new Fires(scene);
 const deer = new Deer(scene, game, models.get('deer'));
 const enemies = new Enemies(scene, game, { gloomling: models.get('gloomling'), snapper: models.get('snapper') });
 const fish = new Fish(scene, game, models.get('fish'));
+const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
 const playerModel = new PlayerModel();
 scene.add(playerModel.group);
 
@@ -147,6 +149,10 @@ game.on((type, data) => {
         particles.burst(p.x + Math.sin(a) * reach, p.y + (data.source === 'pond' ? 0.4 : 1.0), p.z + Math.cos(a) * reach, 0x6fc3e8, 3);
       }, delay);
     }
+  }
+  if (type === 'ride') {
+    sfx('place');
+    hud.refresh();
   }
   if (type === 'hurt') {
     const flash = $('hurt');
@@ -302,6 +308,9 @@ addEventListener('wheel', (e) => {
 
 // E: use what the cursor is on, otherwise the nearest usable thing.
 function interact() {
+  // vehicles first: get off the one you are riding, or on the nearest one
+  if (game.player.riding) return void game.dismount();
+  if (game.board()) return;
   if (target?.reach && game.interact(target.x, target.z)) return;
   const px = Math.floor(p.x), pz = Math.floor(p.z);
   let best = null, bestD = 2.6;
@@ -462,7 +471,8 @@ function step(dt) {
   const moving = dx !== 0 || dz !== 0;
   const sprinting = moving && keys.has(K.sprint) && game.canSprint;
   const swimming = game.swimming;
-  const speed = swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
+  const riding = game.vehicle;
+  const speed = riding ? VEHICLES[riding.kind].speed : swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
   if (!panels.open) {
     yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
     if (keys.has(K.camReset)) {
@@ -481,7 +491,9 @@ function step(dt) {
   const wasGrounded = p.vy === 0;
   // in deep water the jump key swims up and the sprint key dives
   game.physics(dt, !panels.open && keys.has(K.jump), !panels.open && keys.has(K.sprint));
-  const submerged = game.submerged;
+  const submerged = game.underwater; // diving, or below the surface in a submarine
+  // on a boat you stand on deck facing the way it sails; inside a submarine you are out of sight
+  playerModel.group.visible = !(riding && riding.kind === 'submarine');
   $('underwater').style.opacity = submerged ? Math.min(0.38, 0.16 + (WATER_Y - p.y) * 0.03) : 0;
   // from below, the surface thins out so the diver and the seabed stay clear
   const waterOpacity = chunks.waterMat.opacity;
@@ -494,7 +506,7 @@ function step(dt) {
   if (wasGrounded && p.vy > 0) sfx('jump');
   // footsteps, quicker when sprinting
   stepTimer -= dt;
-  if (moving && p.vy === 0 && !game.swimming && stepTimer <= 0) {
+  if (moving && p.vy === 0 && !game.swimming && !riding && stepTimer <= 0) {
     stepTimer = sprinting ? 0.24 : 0.34;
     sfx('step');
   }
@@ -502,7 +514,7 @@ function step(dt) {
   wasWinded = !!p.winded;
   playerY = p.y;
   playerModel.group.position.set(p.x, playerY, p.z);
-  playerModel.update(dt, moving, speed, swimming, clock, submerged);
+  playerModel.update(dt, moving && !riding, speed, swimming, clock, game.submerged);
   playerModel.setHeld(game.held?.id ?? null, !!(game.held && (ITEMS[game.held.id].tool || ITEMS[game.held.id].weapon)));
   const worn = game.armor.slots.map((s) => s?.id ?? '').join();
   if (worn !== wornKey) {
@@ -560,7 +572,16 @@ function step(dt) {
   swingCooldown -= dt;
   const wantUse = (lmb || clicked) && !panels.open;
   if (swingCooldown <= 0) clicked = false;
-  const foe = wantUse && swingCooldown <= 0 ? pickFoe() : null;
+  // a vehicle under the cursor is picked back up with a click (not while riding it)
+  if (wantUse && swingCooldown <= 0 && !riding && target) {
+    const v = game.vehicles.find((x) => Math.hypot(x.x - target.px, x.z - target.pz) < 1.3 && Math.hypot(x.x - p.x, x.z - p.z) < 3.2);
+    if (v) {
+      swingCooldown = 0.4;
+      game.pickupVehicle(v);
+      hud.refresh(); // the cooldown just set keeps this click from also swinging at something
+    }
+  }
+  const foe = wantUse && swingCooldown <= 0 && !riding ? pickFoe() : null;
   if (foe) {
     swingCooldown = 0.32;
     hitColor = 0x6b4f9a;
@@ -582,7 +603,7 @@ function step(dt) {
       game.emit('swing', { x: foe.x - 0.5, z: foe.z - 0.5 });
       game.emit('hit', { x: Math.floor(foe.x), z: Math.floor(foe.z) });
     } else game.attack(foe);
-  } else if (wantUse && target?.reach && swingCooldown <= 0) {
+  } else if (wantUse && target?.reach && swingCooldown <= 0 && !riding) {
     swingCooldown = 0.32;
     const obj = game.world.get(target.x, target.z);
     hitColor = obj ? colorFor(obj.t) : 0xffffff;
@@ -595,12 +616,15 @@ function step(dt) {
   // a held torch lights the way
   const lit = game.held && ITEMS[game.held.id].light;
   torch.position.set(p.x, playerY + 1.7, p.z);
-  torch.intensity = lit ? (game.isNight ? 9 : 2) * (1 + Math.sin(clock * 12) * 0.06) : 0;
+  // a submarine carries its own lamp
+  const lamp = riding && riding.kind === 'submarine';
+  torch.intensity = lamp ? 12 : lit ? (game.isNight ? 9 : 2) * (1 + Math.sin(clock * 12) * 0.06) : 0;
   setNight(game.isNight);
   particles.update(dt);
   deer.update(dt, p.x, p.z);
   enemies.update(dt, clock);
   fish.update(dt, p.x, p.y, p.z);
+  vehicles.update(clock);
 
   hudTimer -= dt;
   if (hudTimer <= 0) {

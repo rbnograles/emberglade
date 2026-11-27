@@ -54,6 +54,8 @@ export const ITEMS = {
   // bags are worn on the back and add inventory slots
   woven_bag: { name: 'Woven bag', armor: 'back', bag: 9, color: 0xd9c27a, stack: 1, hint: 'RMB: wear (+9 slots)' },
   trail_pack: { name: 'Trail pack', armor: 'back', bag: 18, color: 0x8a5a34, stack: 1, hint: 'RMB: wear (+18 slots)' },
+  boat: { name: 'Boat', vehicle: 'boat', stack: 1, hint: 'RMB on water: launch. F next to it: get on' },
+  submarine: { name: 'Submarine', vehicle: 'submarine', stack: 1, hint: 'RMB on deep water: launch. F next to it: get in' },
   // armor: which body slot it goes on, its armor points and the colour shown on the character
   woven_hat: { name: 'Woven hat', armor: 'head', def: 1, color: 0xd9c27a, stack: 1, hint: 'RMB: wear' },
   woven_tunic: { name: 'Woven tunic', armor: 'body', def: 1, color: 0xd9c27a, stack: 1, hint: 'RMB: wear' },

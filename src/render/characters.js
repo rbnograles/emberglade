@@ -387,3 +387,38 @@ export class Fish {
     }
   }
 }
+// Boats and submarines: one mesh per entry in game.vehicles.
+export class Vehicles {
+  constructor(scene, game, models) {
+    this.scene = scene;
+    this.game = game;
+    this.geometries = { boat: toGeometry(models.boat), submarine: toGeometry(models.submarine) };
+    this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.meshes = new Map();
+  }
+
+  update(clock) {
+    const seen = new Set();
+    for (const v of this.game.vehicles) {
+      seen.add(v.id);
+      let mesh = this.meshes.get(v.id);
+      if (!mesh) {
+        mesh = new THREE.Mesh(this.geometries[v.kind], this.material);
+        mesh.castShadow = true;
+        this.scene.add(mesh);
+        this.meshes.set(v.id, mesh);
+      }
+      // a boat rocks gently on the water
+      const bob = v.kind === 'boat' ? Math.sin(clock * 2 + v.id) * 0.04 : 0;
+      mesh.position.set(v.x, v.y + bob, v.z);
+      mesh.rotation.y = v.dir ?? 0;
+      mesh.rotation.z = v.kind === 'boat' ? Math.sin(clock * 1.6 + v.id) * 0.03 : 0;
+    }
+    for (const [id, mesh] of this.meshes) {
+      if (!seen.has(id)) {
+        this.scene.remove(mesh);
+        this.meshes.delete(id);
+      }
+    }
+  }
+}

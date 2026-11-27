@@ -552,6 +552,77 @@ describe('game rules', () => {
     expect(g.deepAt(far.x, far.z)).toBe(true); // it never leaves deep water
   });
 
+  it('sails a boat and dives a submarine', () => {
+    const g = newGame();
+    const p = g.player;
+    g.spawnTimer = g.seaTimer = Infinity;
+    // a stretch of deep sea, starting out swimming in it
+    let deep = null;
+    for (let z = -700; z < 700 && !deep; z += 5) {
+      for (let x = -700; x < 700; x += 5) {
+        if ([0, 1, 2, 3, 4, 5, 6].every((i) => g.gen.tile(x + i, z).bed <= -3.5)) { deep = [x, z]; break; }
+      }
+    }
+    const [x, z] = deep;
+    const toStart = () => Object.assign(p, { x: x + 0.5, z: z + 0.5, y: g.standY(x + 0.5, z + 0.5), vy: 0, stamina: 10, health: 10, breath: 10 });
+    toStart();
+
+    // boat: launch, board, sail without tiring, never dive
+    g.inv.slots[0] = { id: 'boat', n: 1 };
+    g.selected = 0;
+    g.secondary(x + 5, z, false);
+    expect(g.vehicles.length).toBe(0); // too far away
+    g.secondary(x + 1, z, true);
+    expect(g.vehicles.length).toBe(1);
+    expect(g.inv.count('boat')).toBe(0);
+    expect(g.board()).toBe(true);
+    expect(g.swimming).toBe(false);
+    for (let i = 0; i < 40; i++) { g.move(0.1, 0); g.physics(0.05, false, true); g.tick(0.05); }
+    expect(p.x).toBeGreaterThan(x + 4);
+    expect(p.stamina).toBe(10);
+    expect(g.vehicle.y).toBeCloseTo(-0.5);
+
+    // sail for the start point until land stops the boat, then step ashore
+    const len = Math.hypot(p.x, p.z), ux = (-p.x / len) * 0.25, uz = (-p.z / len) * 0.25;
+    for (let i = 0; i < 6000; i++) {
+      const before = p.x + p.z;
+      g.move(ux, uz);
+      if (p.x + p.z === before) break;
+    }
+    expect(g.gen.tile(Math.floor(p.x), Math.floor(p.z)).water).toBe(true); // the boat stays on water
+    expect(g.dismount()).toBe(true);
+    expect(g.gen.tile(Math.floor(p.x), Math.floor(p.z)).water).toBe(false);
+    expect(g.pickupVehicle(g.vehicles[0])).toBe(true);
+    expect(g.inv.count('boat')).toBe(1);
+    // submarine: needs deep water, dives and holds depth, keeps you breathing and safe
+    toStart();
+    g.inv.slots[1] = { id: 'submarine', n: 1 };
+    g.selected = 1;
+    g.secondary(x + 1, z, true);
+    expect(g.vehicles.length).toBe(1);
+    g.board();
+    for (let i = 0; i < 60; i++) { g.move(0.05, 0); g.physics(0.05, false, true); g.tick(0.05); }
+    const depth = g.vehicle.y;
+    expect(depth).toBeLessThan(-2);
+    expect(g.underwater).toBe(true);
+    expect(g.submerged).toBe(false);
+    expect(p.breath).toBe(10);
+    for (let i = 0; i < 20; i++) g.physics(0.05, false, false);
+    expect(g.vehicle.y).toBe(depth); // it stays where you leave it
+    const e = g.spawnEnemy(p.x + 1, p.z, 'snapper');
+    e.y = p.y;
+    for (let i = 0; i < 60; i++) g.updateEnemies(1 / 30);
+    expect(p.health).toBe(10);
+    g.removeEnemy(e);
+    for (let i = 0; i < 60; i++) g.physics(0.05, true, false);
+    expect(g.vehicle.y).toBeCloseTo(-1.05); // back at the surface
+    // getting out far from land leaves you swimming beside it
+    g.dismount();
+    expect(g.swimming).toBe(true);
+    const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(copy.vehicles.length).toBe(1);
+  });
+
   it('tires from sprinting and recovers', () => {    const g = newGame();
     const p = g.player;
     expect(g.canSprint).toBe(true);

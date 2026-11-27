@@ -11,6 +11,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Infinite seeded world** with oceans, mountain ranges with snowy peaks, ponds, and five lowland biomes (Green Meadow, Autumn Woods, Blossom Grove, Pine Forest, Sandy Flats). Everything is generated as you walk and nature regrows over time.
 - **Water:** wade through ponds and shallows and swim in deep water, which drains your energy. Dive under the surface on a limited breath of air. Sea water is too salty to drink.
 - **The sea floor:** kelp, clams with the odd pearl, coral, and iron ore in the deep. Fish to catch, and snappers that hunt swimmers. A diving mask doubles your air.
+- **Vehicles:** a boat to cross open water without tiring, and a submarine that dives, holds its depth, carries its own air and lamp, and keeps sea creatures off you.
 - **Gathering and tools:** pick sticks, stones, flowers, fiber and berries by hand; chop trees with an axe; mine stone, coal and copper with a pickaxe.
 - **Grid crafting:** a 2×2 grid by hand and 3×3 at a workbench, with a recipe book that shows every pattern. Campfires smelt copper and cook food.
 - **Farming:** till soil, plant seeds, water them and harvest wheat to bake bread.
@@ -24,7 +25,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Minimap** with markers for home, your dropped pack and nearby creatures.
 - **Sound and music** synthesised in the browser, with volume sliders.
 - **Settings:** rebindable keys, three world slots, and export / import of a world as a file.
-- **25 guided goals** to learn every system, and autosave in the browser.
+- **27 guided goals** to learn every system, and autosave in the browser.
 
 ## Controls
 
@@ -42,7 +43,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 | `Tab` | Inventory and crafting |
 | `C` | Eat |
 | `X` | Drink (next to a pond, or from a flask) |
-| `F` | Use a bed, chest, campfire or workbench |
+| `F` | Use a bed, chest, campfire or workbench; get on or off a boat or submarine |
 | `Esc` | Pause |
 
 ## Run it

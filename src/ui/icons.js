@@ -14,6 +14,8 @@ const boots = (h) => `........ .${h}${h}..${h}${h}. .${h}${h}..${h}${h}. .${h}${
 const bag = (h) => `..${h}${h}${h}${h}.. .${h}....${h}. ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}bb${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} .${h}${h}${h}${h}${h}${h}. ........`;
 
 const ART = {
+  boat: '........ ........ b......b bb....bb bbbbbbbb .bbbbbb. ........ ........',
+  submarine: '....G... ...yy... ..yyyy.. .yyyyyyG yycyycyG .yyyyyyG ..oooo.. ........',
   kelp: '...L.... ..LL.... ..L..L.. .LL..L.. .L..LL.. .LL.L... ..L.LL.. ..L..L..',
   clam: '........ ........ .wwwwww. wwtwwtww wtwwwwtw .wppppw. ..wwww.. ........',
   pearl: '........ ..wwww.. .wwwwww. .wwcwww. .wwwwww. .wwwwww. ..wwww.. ........',

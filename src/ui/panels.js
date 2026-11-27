@@ -28,7 +28,7 @@ const categoryOf = (r) => {
   const def = ITEMS[r.out];
   if (def.armor) return 'wear';
   if (def.place || def.floor) return 'build';
-  if (def.tool || def.weapon || def.flask) return 'tools';
+  if (def.tool || def.weapon || def.flask || def.vehicle) return 'tools';
   return 'other';
 };
 const TABS = [['ready', 'Can make'], ['all', 'All'], ['tools', 'Tools'], ['build', 'Build'], ['wear', 'Wear'], ['other', 'Food & materials']];

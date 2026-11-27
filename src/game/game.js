@@ -18,6 +18,11 @@ const GRAVITY = 20;
 const FLOAT_SINK = 0.95; // how far below the surface a swimmer's feet hang
 const BANK_LIP = 1.45; // bank height you can climb out of the water onto
 const DIVE_SPEED = 2.6, RISE_SPEED = 3, BUOYANCY = 0.7; // vertical speeds under water
+// float: hull height relative to the water surface. seat: where the rider sits relative to the hull.
+export const VEHICLES = {
+  boat: { speed: 6.2, dive: false, float: -0.2, seat: 0.25 },
+  submarine: { speed: 5, dive: true, float: -0.75, seat: 0 },
+};
 export const MAX_BREATH = 10;
 const BREATH_SECONDS = 26; // seconds of air on a full breath
 const SUFFOCATE_SECONDS = 1.2; // seconds per heart lost once the air is gone
@@ -50,6 +55,8 @@ export class Game {
     this.spawnTimer = 3;
     this.seaTimer = 6;
     this.knock = null;
+    this.vehicles = save?.vehicles ?? []; // boats and submarines: {id, kind, x, z, y, dir}
+    this.nextVehicleId = 1 + Math.max(0, ...this.vehicles.map((v) => v.id));
     this.inv = new Inventory(36, save?.inv);
     this.craftGrid = new Inventory(GRID * GRID, save?.craft);
     this.cursor = null; // stack being carried by the mouse in the inventory panel
@@ -80,19 +87,117 @@ export class Game {
   toast(text) { this.emit('toast', { text }); }
 
   get held() { return this.inv.slots[this.selected]; }
-  get canSprint() { return !this.player.winded && this.player.stamina > 0 && !this.inWater; }
+  get canSprint() { return !this.player.winded && this.player.stamina > 0 && !this.inWater && !this.player.riding; }
   get isNight() { return this.time > 0.56 && this.time < 0.96; }
 
   serialize() {
     return {
       seed: this.seed, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors),
-      armor: this.armor.slots, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(),
+      armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
   }
 
-  // ---- movement ----
-  // animal: doors count as walls for animals
+  // ---- vehicles ----
+  // The vehicle the player is riding, or null.
+  get vehicle() {
+    const id = this.player.riding;
+    return id ? this.vehicles.find((v) => v.id === id) ?? null : null;
+  }
+
+  // In a submarine below the surface (for the underwater look; the crew still has air).
+  get underwater() {
+    const v = this.vehicle;
+    return this.submerged || (!!v && v.kind === 'submarine' && v.y < WATER_Y - 1.4);
+  }
+
+  // Right click with a boat or submarine held: put it on the water at the targeted tile.
+  launch(tx, tz) {
+    const held = this.held, kind = held && ITEMS[held.id].vehicle;
+    if (!kind) return false;
+    const p = this.player, t = this.gen.tile(tx, tz);
+    if (!t.water || Math.hypot(tx + 0.5 - p.x, tz + 0.5 - p.z) > REACH + 0.5) {
+      this.toast('Aim at water close to you to launch it');
+      return false;
+    }
+    if (VEHICLES[kind].dive && WATER_Y - t.bed < 2) {
+      this.toast('A submarine needs deeper water');
+      return false;
+    }
+    this.inv.removeAt(this.selected, 1);
+    this.vehicles.push({ id: this.nextVehicleId++, kind, x: tx + 0.5, z: tz + 0.5, y: WATER_Y + VEHICLES[kind].float, dir: 0 });
+    this.toast(`${ITEMS[held.id].name} launched. Press F next to it to get ${kind === 'boat' ? 'on' : 'in'}`);
+    this.record('place:' + kind);
+    this.emit('inv');
+    return true;
+  }
+
+  // The nearest vehicle within reach of the player (a submarine may be below you).
+  vehicleNear(range = 2.6) {
+    const p = this.player;
+    let best = null, bestD = range;
+    for (const v of this.vehicles) {
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d < bestD && Math.abs(v.y - p.y) < 3) {
+        best = v;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  board(v = this.vehicleNear()) {
+    if (!v || this.player.riding) return false;
+    const p = this.player;
+    p.riding = v.id;
+    p.x = v.x;
+    p.z = v.z;
+    p.vy = 0;
+    this.record('ride:' + v.kind);
+    this.emit('ride', { kind: v.kind });
+    return true;
+  }
+
+  // Step out: onto land beside the vehicle if there is any, otherwise into the water where it floats.
+  dismount() {
+    const v = this.vehicle, p = this.player;
+    if (!v) return false;
+    p.riding = null;
+    const px = Math.floor(v.x), pz = Math.floor(v.z);
+    // generous reach, so a boat nosed up to a ragged coast can always be left
+    let best = null, bestD = 3;
+    for (let z = pz - 3; z <= pz + 3; z++) {
+      for (let x = px - 3; x <= px + 3; x++) {
+        const d = Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z);
+        if (d < bestD && !this.gen.tile(x, z).water && !this.blocked(x + 0.5, z + 0.5)) {
+          best = [x, z];
+          bestD = d;
+        }
+      }
+    }
+    if (best && v.y > WATER_Y - 1.4) {
+      p.x = best[0] + 0.5;
+      p.z = best[1] + 0.5;
+      p.y = this.ground(p.x, p.z);
+    } else p.y = this.deepAt(v.x, v.z) ? Math.min(WATER_Y - FLOAT_SINK, v.y) : this.standY(v.x, v.z);
+    this.emit('ride', { kind: null });
+    return true;
+  }
+
+  // Take a vehicle you are not riding back into the inventory.
+  pickupVehicle(v) {
+    if (this.player.riding === v.id) return false;
+    if (this.inv.add(v.kind, 1) > 0) {
+      this.toast('Inventory full');
+      return false;
+    }
+    this.vehicles.splice(this.vehicles.indexOf(v), 1);
+    this.toast(`Picked up the ${ITEMS[v.kind].name.toLowerCase()}`);
+    this.emit('inv');
+    return true;
+  }
+
+  // ---- movement ----  // animal: doors count as walls for animals
   blocked(x, z, r = 0.28, animal = false) {
     const cx = Math.floor(x), cz = Math.floor(z);
     for (let tz = cz - 1; tz <= cz + 1; tz++) {
@@ -132,8 +237,9 @@ export class Game {
     return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
   }
 
-  get inWater() { return this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)).water; }
-  get swimming() { return this.deepAt(this.player.x, this.player.z); }
+  // riding a vehicle keeps you out of the water
+  get inWater() { return !this.player.riding && this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)).water; }
+  get swimming() { return !this.player.riding && this.deepAt(this.player.x, this.player.z); }
   // head under the surface
   get submerged() { return this.swimming && this.player.y < WATER_Y - FLOAT_SINK - 0.35; }
 
@@ -147,6 +253,17 @@ export class Game {
 
   move(dx, dz) {
     const p = this.player;
+    const v = this.vehicle;
+    if (v) {
+      // a boat goes anywhere there is water; a submarine needs room to dive
+      const ok = (x, z) => (VEHICLES[v.kind].dive ? this.deepAt(x, z) : this.gen.tile(Math.floor(x), Math.floor(z)).water);
+      if (ok(p.x + dx, p.z)) p.x += dx;
+      if (ok(p.x, p.z + dz)) p.z += dz;
+      if (dx || dz) v.dir = Math.atan2(-dz, dx);
+      v.x = p.x;
+      v.z = p.z;
+      return;
+    }
     const stuck = this.blocked(p.x, p.z); // e.g. something regrew on top of us: let the player walk out
     if (stuck || this.canEnter(p.x + dx, p.z)) p.x += dx;
     if (stuck || this.canEnter(p.x, p.z + dz)) p.z += dz;
@@ -156,6 +273,21 @@ export class Game {
   // In deep water there is no gravity: dive goes down, jump goes up, and you drift up slowly otherwise.
   physics(dt, jump, dive = false) {
     const p = this.player;
+    const v = this.vehicle;
+    if (v) {
+      // a boat rides the surface; a submarine holds whatever depth you leave it at
+      const spec = VEHICLES[v.kind];
+      if (spec.dive) {
+        const bed = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).bed ?? WATER_Y;
+        const rate = dive ? -DIVE_SPEED : jump ? RISE_SPEED : 0;
+        v.y = Math.min(WATER_Y + spec.float, Math.max(bed + 0.3, v.y + rate * dt));
+      } else v.y = WATER_Y + spec.float;
+      v.x = p.x;
+      v.z = p.z;
+      p.y = v.y + spec.seat;
+      p.vy = 0;
+      return;
+    }
     if (this.swimming) {
       const top = WATER_Y - FLOAT_SINK, bed = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).bed;
       if (p.y > top + 0.05) {
@@ -665,6 +797,7 @@ export class Game {
     if (def?.food) return void this.eatHeld();
     if (def?.armor) return void this.wear(this.selected);
     if (def?.flask) return void this.drinkWater();
+    if (def?.vehicle) return void this.launch(tx, tz);
     if (!hasTarget) return;
     const obj = this.world.get(tx, tz);
     const tile = this.gen.tile(tx, tz);
@@ -982,6 +1115,7 @@ export class Game {
 
   faint() {
     const p = this.player;
+    p.riding = null;
     const dropped = this.dropPack();
     p.health = 6;
     p.hunger = 6;

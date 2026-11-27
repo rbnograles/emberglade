@@ -34,6 +34,8 @@ export const RECIPES = [
   { out: 'copper_helmet', n: 1, pattern: ['CCC', 'C.C'], station: 'workbench' },
   { out: 'copper_chestplate', n: 1, pattern: ['C.C', 'CCC', 'CCC'], station: 'workbench' },
   { out: 'copper_boots', n: 1, pattern: ['C.C', 'C.C'], station: 'workbench' },
+  { out: 'boat', n: 1, pattern: ['W.W', 'WWW'], station: 'workbench' },
+  { out: 'submarine', n: 1, pattern: ['III', 'IPI', 'CCC'], station: 'workbench' },
   { out: 'iron_axe', n: 1, pattern: ['II', 'I|', '.|'], station: 'workbench' },
   { out: 'iron_pickaxe', n: 1, pattern: ['III', '.|.', '.|.'], station: 'workbench' },
   { out: 'iron_sword', n: 1, pattern: ['I', 'I', '|'], station: 'workbench' },

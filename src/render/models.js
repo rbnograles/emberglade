@@ -165,6 +165,20 @@ export function buildModels() {
       .box(0, 0, 0, 3, 1, 0, mix([0xf2a03d, 0xf7b85c, 0xe88a2a], 45)).set(-1, 0, 0, 0xe88a2a).set(-1, 1, 0, 0xe88a2a).set(3, 1, 0, 0x2b2b33)
       .build(0.12));
   }
+  // ---- vehicles (facing +x) ----
+  m.set('boat', new Vox()
+    .box(0, 0, 1, 8, 0, 4, WOOD_DARK).box(0, 1, 0, 8, 1, 0, WOOD).box(0, 1, 5, 8, 1, 5, WOOD)
+    .box(0, 1, 1, 0, 1, 4, WOOD).box(8, 1, 1, 8, 1, 4, WOOD).box(9, 1, 2, 9, 1, 3, WOOD_LIGHT).box(3, 1, 1, 3, 1, 4, WOOD_LIGHT)
+    .build(0.2));
+  {
+    const hull = mix([0xe8b83a, 0xf2c94c, 0xd9a82a], 51);
+    m.set('submarine', new Vox()
+      .box(1, 1, 0, 9, 4, 3, hull).box(0, 2, 1, 0, 3, 2, hull).box(10, 2, 1, 10, 3, 2, hull)
+      .box(4, 5, 1, 6, 6, 2, hull).box(5, 7, 1, 5, 8, 1, 0x6b7078)
+      .box(8, 2, 0, 9, 3, 0, 0x9fdcf5).box(8, 2, 3, 9, 3, 3, 0x9fdcf5).box(10, 2, 1, 10, 3, 2, 0x9fdcf5)
+      .box(1, 0, 1, 9, 0, 2, 0xd9803a).box(-1, 1, 1, -1, 4, 2, 0x6b7078)
+      .build(0.2));
+  }
   m.set('deer', deer());
   // gloomling: a dark blob facing +x with two bright eyes
   m.set('gloomling', new Vox()

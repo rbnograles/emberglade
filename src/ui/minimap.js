@@ -58,6 +58,7 @@ export class Minimap {
     this.marker(home.x + 0.5, home.z + 0.5, '#ffd24a');
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a');
     for (const e of g.enemies) this.marker(e.x, e.z, '#7a4fd0');
+    for (const v of g.vehicles) if (v.id !== p.riding) this.marker(v.x, v.z, '#ff9a3a'); // where you left your boat
 
     // player and the way the camera looks
     c.strokeStyle = '#ffffff';

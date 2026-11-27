@@ -25,6 +25,8 @@ export const GOALS = [
   { text: 'Find the sea and dive to the seabed (hold Shift in deep water)', need: { dive: 1 } },
   { text: 'Find a pearl: open clams on the seabed', need: { 'collect:pearl': 1 } },
   { text: 'Mine iron ore in the deep sea and smelt an iron bar', need: { 'craft:iron_bar': 1 } },
+  { text: 'Build a boat, launch it on water and sail (F to get on)', need: { 'ride:boat': 1 } },
+  { text: 'Build a submarine and take it under the sea', need: { 'ride:submarine': 1 } },
 ];
 
 export class Goals {
