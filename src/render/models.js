@@ -137,6 +137,7 @@ export function buildModels() {
     .build(0.125, { center: false }));
   m.set('wood_floor', new Vox().box(0, 0, 0, 3, 0, 3, (x) => (x % 2 ? 0xc9955a : 0xb9834a)).build(0.25, { ysize: 0.06, jitter: 0.04 }));
   m.set('stone_floor', new Vox().box(0, 0, 0, 3, 0, 3, (x, y, z) => GRAYS[(x + z) % 3]).build(0.25, { ysize: 0.06, jitter: 0.04 }));
+  m.set('lostbag', new Vox().blob(0, 1.6, 0, 2.2, 2.0, 2.0, mix([0xc9a56a, 0xb9955a, 0xd9b57a], 31), 0.2, 31).box(-1, 3, -1, 0, 4, 0, 0x8a5a34).build(0.16));
   m.set('soil', soil(0x7a5233, 0x6b4529));
   m.set('soil_wet', soil(0x4f3320, 0x432a19));
   for (let s = 0; s < 4; s++) m.set('crop' + s, crop(s));

@@ -11,7 +11,8 @@ export class Worldgen {
   }
 
   tile(x, z) {
-    const k = (x + 32768) * 65536 + (z + 32768);
+    // one number per tile; good for about 33 million tiles in every direction
+    const k = (x + 33554432) * 67108864 + (z + 33554432);
     let t = this.cache.get(k);
     if (t) return t;
     const s = this.seed;

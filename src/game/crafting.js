@@ -2,7 +2,7 @@
 // pattern: rows of legend characters, '.' = empty. Shaped recipes may sit anywhere in the grid and may be mirrored.
 // shapeless: list of items, any arrangement. station: null, 'workbench' or 'campfire' (must be standing near one).
 export const GRID = 3;
-const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber' };
+const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber', K: 'coal', H: 'hide' };
 
 export const RECIPES = [
   { out: 'stick', n: 2, shapeless: ['wood'], station: null },
@@ -11,6 +11,7 @@ export const RECIPES = [
   { out: 'hoe', n: 1, pattern: ['#', '|'], station: null },
   { out: 'campfire', n: 1, pattern: ['WW', '##'], station: null },
   { out: 'flask', n: 1, pattern: ['F', 'W'], station: null },
+  { out: 'torch', n: 2, pattern: ['K', '|'], station: null },
   { out: 'workbench', n: 1, pattern: ['WW', 'WW'], station: null },
   { out: 'watering_can', n: 1, pattern: ['C.C', '.W.'], station: 'workbench' },
   { out: 'fence', n: 4, pattern: ['W|W', 'W|W'], station: 'workbench' },
@@ -26,7 +27,7 @@ export const RECIPES = [
   { out: 'stone_floor', n: 4, pattern: ['###'], station: 'workbench' },
   { out: 'door', n: 1, pattern: ['WW', 'WW', 'WW'], station: 'workbench' },
   { out: 'woven_bag', n: 1, pattern: ['F.F', 'FFF'], station: 'workbench' },
-  { out: 'trail_pack', n: 1, pattern: ['F|F', 'FCF', 'FFF'], station: 'workbench' },
+  { out: 'trail_pack', n: 1, pattern: ['F|F', 'FHF', 'FFF'], station: 'workbench' },
   { out: 'woven_hat', n: 1, pattern: ['FFF', 'F.F'], station: 'workbench' },
   { out: 'woven_tunic', n: 1, pattern: ['F.F', 'FFF', 'FFF'], station: 'workbench' },
   { out: 'woven_boots', n: 1, pattern: ['F.F', 'F.F'], station: 'workbench' },
@@ -35,6 +36,7 @@ export const RECIPES = [
   { out: 'copper_boots', n: 1, pattern: ['C.C', 'C.C'], station: 'workbench' },
   { out: 'copper_bar', n: 1, shapeless: ['copper_ore', 'coal'], station: 'campfire' },
   { out: 'roasted_apple', n: 1, shapeless: ['apple'], station: 'campfire' },
+  { out: 'cooked_meat', n: 1, shapeless: ['raw_meat'], station: 'campfire' },
   { out: 'bread', n: 1, shapeless: ['wheat', 'wheat', 'wheat'], station: 'campfire' },
 ];
 

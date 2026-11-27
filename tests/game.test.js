@@ -441,6 +441,83 @@ describe('game rules', () => {
     expect(copy.capacity).toBe(18);
   });
 
+  it('wears tools out, and the wear travels with the tool', () => {
+    const g = newGame();
+    g.inv.slots[0] = { id: 'stone_sword', n: 1, d: 2 };
+    g.time = 0.7;
+    g.spawnTimer = Infinity;
+    const e = g.spawnEnemy(1.5, 0.5, 'brute');
+    expect(e.hp).toBe(14);
+    g.attack(e);
+    expect(g.inv.slots[0].d).toBe(1);
+    const chest = new Inventory(4);
+    g.inv.moveTo(0, chest); // into a chest and back keeps the wear
+    expect(chest.slots[0]).toEqual({ id: 'stone_sword', n: 1, d: 1 });
+    chest.moveTo(0, g.inv);
+    g.attack(e);
+    expect(g.inv.slots[0]).toBe(null); // broke on its last use
+    expect(e.hp).toBe(8);
+    // an axe wears while chopping
+    g.inv.slots[0] = { id: 'stone_axe', n: 1 };
+    const [x, z] = findTile(g, (o) => o?.t.startsWith('tree_'));
+    g.primary(x, z);
+    expect(g.inv.slots[0].d).toBe(59);
+  });
+
+  it('leaves a pack behind when you faint, and gives it back', () => {
+    const g = newGame();
+    const p = g.player;
+    g.inv.slots[0] = { id: 'stone_axe', n: 1 };
+    g.inv.slots[10] = { id: 'wood', n: 12 };
+    g.inv.slots[11] = { id: 'coal', n: 3 };
+    Object.assign(p, { x: 6.5, z: 6.5 });
+    g.hurt(99);
+    expect(p.lost).toBeTruthy();
+    expect(g.inv.slots[0].id).toBe('stone_axe'); // the hotbar stays with you
+    expect(g.inv.count('wood')).toBe(0);
+    const { x, z } = p.lost;
+    const bag = g.world.get(x, z);
+    expect(bag.t).toBe('lostbag');
+    g.primary(x, z); // cannot be broken while full
+    expect(g.world.get(x, z)).toBe(bag);
+    const view = new Inventory(0, bag.items);
+    view.moveTo(0, g.inv);
+    view.moveTo(1, g.inv);
+    expect(g.inv.count('wood')).toBe(12);
+    expect(g.inv.count('coal')).toBe(3);
+    g.primary(x, z);
+    expect(g.world.get(x, z)).toBe(null);
+    expect(p.lost).toBe(null);
+  });
+
+  it('tracks the later goals', () => {
+    const g = newGame();
+    const goalIndex = (text) => GOALS.findIndex((x) => x.text.startsWith(text));
+    g.goals.index = goalIndex('Wear a bag');
+    g.inv.slots[0] = { id: 'woven_bag', n: 1 };
+    g.wear(0);
+    expect(g.goals.index).toBe(goalIndex('Wear any piece'));
+    g.inv.slots[0] = { id: 'woven_hat', n: 1 };
+    g.wear(0);
+    expect(g.goals.index).toBe(goalIndex('Build a shelter'));
+    g.inv.slots[0] = { id: 'wood_wall', n: 6 };
+    g.inv.slots[1] = { id: 'door', n: 1 };
+    g.inv.slots[2] = { id: 'wood_floor', n: 2 };
+    g.selected = 0;
+    const walls = [[-1, -2], [0, -2], [1, -2], [-1, 2], [0, 2], [1, 2]];
+    for (const [x, z] of [...walls, [1, 1], [0, 1], [-1, 1]]) g.world.set(x, z, { t: 'empty' }); // clear the site
+    for (const [x, z] of walls) g.secondary(x, z, true);
+    g.selected = 1;
+    g.secondary(1, 1, true);
+    g.selected = 2;
+    g.secondary(0, 1, true);
+    g.secondary(-1, 1, true);
+    expect(g.goals.index).toBe(goalIndex('Sleep in a bed'));
+    g.time = 0.7;
+    g.sleep();
+    expect(g.goals.current).toBe(null);
+  });
+
   it('builds walls, floors and doors', () => {
     const g = newGame();
     g.inv.slots[0] = { id: 'wood_wall', n: 2 };

@@ -17,7 +17,12 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Night creatures:** gloomlings hunt you after dark. Fight them with swords, or stay near campfire light.
 - **Armor and bags:** woven and copper armor reduce damage and night cold; bags add inventory rows.
 - **Base building:** walls, doors, floors, fences, beds and chests, with a placement preview. Creatures cannot cross walls or step on built floors.
-- **Guided goals** to learn the basics, and autosave in the browser.
+- **Hunting and light:** hunt deer for meat and hide, and carry a torch to see at night.
+- **Wear and loss:** tools wear out, and fainting leaves your pack where you fell for you to fetch.
+- **Minimap** with markers for home, your dropped pack and nearby creatures.
+- **Sound and music** synthesised in the browser, with volume sliders.
+- **Settings:** rebindable keys, three world slots, and export / import of a world as a file.
+- **22 guided goals** to learn every system, and autosave in the browser.
 
 ## Controls
 

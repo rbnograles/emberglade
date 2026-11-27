@@ -33,6 +33,8 @@ export const OBJECTS = {
   wood_wall: { name: 'Wood wall', block: true, hp: 2, tool: null, pickR: 0.75, item: 'wood_wall' },
   stone_wall: { name: 'Stone wall', block: true, hp: 3, tool: null, pickR: 0.75, item: 'stone_wall' },
   door: { name: 'Door', door: true, hp: 2, tool: null, pickR: 0.6, item: 'door' },
+  // what you were carrying when you fainted; opens like a chest and vanishes once emptied
+  lostbag: { name: 'Your dropped pack', hp: 1, tool: null, pickR: 0.55 },
   soil: { name: 'Soil' },
 };
 

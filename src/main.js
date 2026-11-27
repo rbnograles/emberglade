@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { Game } from './game/game.js';
 import { loadSave, writeSave, clearSave } from './game/save.js';
+import { settings } from './settings.js';
+import { sfx, unlockAudio, setNight } from './audio.js';
+import { Minimap } from './ui/minimap.js';
+import { buildSettings } from './ui/menu.js';
 import { OBJECTS, CROP_RIPE } from './world/objects.js';
 import { ITEMS } from './game/items.js';
 import { buildModels } from './render/models.js';
@@ -63,6 +67,9 @@ marker.visible = false;
 scene.add(marker);
 
 const hud = new Hud(game);
+const minimap = new Minimap(game);
+const torch = new THREE.PointLight(0xffb060, 0, 17, 1.4);
+scene.add(torch);
 $('btn-drink').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   game.drinkWater();
@@ -82,6 +89,18 @@ let playerY = p.y;
 
 game.on((type, data) => {
   if (type === 'toast') hud.toast(data.text);
+  // sounds
+  if (type === 'hit') sfx(hitSound);
+  else if (type === 'eat' || type === 'drink' || type === 'hurt' || type === 'break') sfx(type);
+  else if (type === 'enemygone') sfx('gone');
+  else if (type === 'record') {
+    if (data.key.startsWith('craft:')) sfx('craft');
+    else if (data.key.startsWith('place:') || data.key === 'plant') sfx('place');
+    if (game.goals.index !== goalSeen) {
+      goalSeen = game.goals.index;
+      sfx('goal');
+    }
+  } else if (type === 'newday') sfx('morning');
   else if (type === 'hit') particles.burst(data.x + 0.5, game.gen.tile(data.x, data.z).h + 0.4, data.z + 0.5, hitColor);
   else if (type === 'swing') {
     playerModel.startSwing();
@@ -153,6 +172,8 @@ game.on((type, data) => {
 });
 
 // ---------- menu ----------
+let goalSeen = game.goals.index; // to chime when a goal is completed
+let hitSound = 'pick';
 let paused = true;
 const menu = $('menu');
 $('btn-play').textContent = save ? `Continue (day ${game.day})` : 'Play';
@@ -169,6 +190,13 @@ function setPaused(v) {
   }
 }
 $('btn-play').addEventListener('click', () => setPaused(false));
+addEventListener('mousedown', unlockAudio);
+addEventListener('keydown', unlockAudio);
+buildSettings(game, (discard = false) => {
+  if (discard) discardOnExit = true;
+  else writeSave(game);
+});
+$('btn-settings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 // ?play in the address skips the title menu (handy for screenshots and quick testing)
 if (new URLSearchParams(location.search).has('play')) setPaused(false);
 $('btn-new').addEventListener('click', () => {
@@ -190,7 +218,8 @@ let clicked = false; // a press not yet handled, so even a very short click coun
 let target = null; // {x, z, reach}
 
 addEventListener('keydown', (e) => {
-  if (e.code === 'Tab' || (e.code === 'Space' && !paused)) e.preventDefault();
+  const K = settings.keys;
+  if (e.code === 'Tab' || e.code === K.inventory || (e.code === K.jump && !paused)) e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'Escape') {
     if (panels.open) panels.hide();
@@ -199,20 +228,23 @@ addEventListener('keydown', (e) => {
   }
   if (paused) return;
   keys.add(e.code);
-  if (e.code === 'Tab' || e.code === 'KeyI') panels.toggle();
+  if (e.code === K.inventory) {
+    panels.toggle();
+    sfx('ui');
+  }
   else if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
     const slot = Number(e.code.slice(5)) - 1;
     // Over an inventory slot in the panel: put that item in this hotbar slot and equip it.
     if (panels.open && panels.hover !== null) game.equip(panels.hover, slot);
     else game.selected = slot;
     hud.refresh();
-  } else if (e.code === 'KeyX') {
+  } else if (e.code === K.drink) {
     game.drinkWater();
     hud.refresh();
-  } else if (e.code === 'KeyC') {
+  } else if (e.code === K.eat) {
     game.eatFood();
     hud.refresh();
-  } else if (e.code === 'KeyF') {
+  } else if (e.code === K.use) {
     if (panels.open) panels.hide();
     else interact();
   }
@@ -328,7 +360,13 @@ function pickFoe() {
       bestD = d;
     }
   }
-  return best;
+  if (best) return best;
+  // no creature in range: a deer under the cursor can be hunted
+  for (const d of deer.list) {
+    if (Math.hypot(d.x - p.x, d.z - p.z) > 2.8) continue;
+    if (target && Math.hypot(d.x - target.px, d.z - target.pz) < 1.3) return { deer: d, x: d.x, z: d.z };
+  }
+  return null;
 }
 
 function targetLabel() {
@@ -388,6 +426,7 @@ const lookAt = new THREE.Vector3();
 let last = performance.now();
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
 let shake = 0; // seconds of camera shake left
+let stepTimer = 0, wasWinded = false;
 let wornKey = null; // armor currently shown on the character
 
 chunks.update(p.x, p.z, 999);
@@ -401,19 +440,20 @@ function frame(now) {
 }
 
 function step(dt) {
+  const K = settings.keys;
   clock += dt;
   // movement
   let dx = 0, dz = 0;
   if (!panels.open) {
-    dx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    dz = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    dx = (keys.has(K.right) || keys.has('ArrowRight') ? 1 : 0) - (keys.has(K.left) || keys.has('ArrowLeft') ? 1 : 0);
+    dz = (keys.has(K.down) || keys.has('ArrowDown') ? 1 : 0) - (keys.has(K.up) || keys.has('ArrowUp') ? 1 : 0);
   }
   const moving = dx !== 0 || dz !== 0;
-  const sprinting = moving && (keys.has('ShiftLeft') || keys.has('ShiftRight')) && game.canSprint;
+  const sprinting = moving && keys.has(K.sprint) && game.canSprint;
   const speed = sprinting ? 6.5 : 4.2;
   if (!panels.open) {
-    yawGoal += ((keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0)) * 1.9 * dt;
-    if (keys.has('KeyR')) {
+    yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
+    if (keys.has(K.camReset)) {
       // unwind to the nearest full turn so the reset takes the short way round
       yawGoal = Math.round(camYaw / (2 * Math.PI)) * 2 * Math.PI;
       pitchGoal = DEFAULT_PITCH;
@@ -426,7 +466,17 @@ function step(dt) {
     game.move(mx * speed * dt, mz * speed * dt);
     if (playerModel.swing <= 0) playerModel.facing = Math.atan2(mx, mz);
   }
-  game.physics(dt, !panels.open && keys.has('Space'));
+  const wasGrounded = p.vy === 0;
+  game.physics(dt, !panels.open && keys.has(K.jump));
+  if (wasGrounded && p.vy > 0) sfx('jump');
+  // footsteps, quicker when sprinting
+  stepTimer -= dt;
+  if (moving && p.vy === 0 && stepTimer <= 0) {
+    stepTimer = sprinting ? 0.24 : 0.34;
+    sfx('step');
+  }
+  if (p.winded && !wasWinded) sfx('winded');
+  wasWinded = !!p.winded;
   playerY = p.y;
   playerModel.group.position.set(p.x, playerY, p.z);
   playerModel.update(dt, moving, speed);
@@ -488,16 +538,32 @@ function step(dt) {
   if (foe) {
     swingCooldown = 0.32;
     hitColor = 0x6b4f9a;
-    game.attack(foe);
+    hitSound = 'hit';
+    if (foe.deer) {
+      // hunting: the deer bolts when hit and drops meat and hide when it falls
+      if (deer.hit(foe.deer, game.attackPower, p.x, p.z)) {
+        game.give('raw_meat', 1 + Math.floor(Math.random() * 2));
+        game.give('hide', 1);
+      }
+      game.wearTool();
+      game.emit('swing', { x: foe.x - 0.5, z: foe.z - 0.5 });
+      game.emit('hit', { x: Math.floor(foe.x), z: Math.floor(foe.z) });
+    } else game.attack(foe);
   } else if (wantUse && target?.reach && swingCooldown <= 0) {
     swingCooldown = 0.32;
     const obj = game.world.get(target.x, target.z);
     hitColor = obj ? colorFor(obj.t) : 0xffffff;
+    hitSound = !obj ? 'pick' : obj.t.startsWith('tree_') ? 'chop' : OBJECTS[obj.t].tool === 'pickaxe' ? 'mine' : OBJECTS[obj.t].hp ? 'hit' : 'pick';
     game.primary(target.x, target.z);
   }
 
   sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock);
   fires.update(chunks.fires(), p.x, p.z, clock, game.isNight);
+  // a held torch lights the way
+  const lit = game.held && ITEMS[game.held.id].light;
+  torch.position.set(p.x, playerY + 1.7, p.z);
+  torch.intensity = lit ? (game.isNight ? 9 : 2) * (1 + Math.sin(clock * 12) * 0.06) : 0;
+  setNight(game.isNight);
   particles.update(dt);
   deer.update(dt, p.x, p.z);
   enemies.update(dt, clock);
@@ -505,6 +571,7 @@ function step(dt) {
   hudTimer -= dt;
   if (hudTimer <= 0) {
     hudTimer = 0.25;
+    minimap.draw(camYaw);
     hud.refresh();
   }
   hud.setHint(targetLabel());

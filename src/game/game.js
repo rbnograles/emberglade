@@ -15,7 +15,11 @@ export const CHEST_SLOTS = 18;
 const STEP_LIP = 0.15; // height the player can walk up without jumping
 const JUMP_SPEED = 6.2; // about 0.95 units high: clears a 0.5 step comfortably
 const GRAVITY = 20;
-const ENEMY_HP = 6, ENEMY_SPEED = 2.5, ENEMY_DAMAGE = 1.5;
+// brutes are bigger, slower and hit harder; they start turning up from day 4
+export const ENEMY_KINDS = {
+  gloomling: { hp: 6, speed: 2.5, damage: 1.5, size: 1 },
+  brute: { hp: 14, speed: 1.9, damage: 2.5, size: 1.6 },
+};
 const FIRE_SAFE = 4; // creatures keep this far from a campfire
 const COLD_HUNGER = 1.5; // extra hunger drain when cold with no armor (x2.5 in total)
 
@@ -153,6 +157,7 @@ export class Game {
       this.toast(this.goals.current ? 'Goal complete!' : 'All goals complete. Enjoy your homestead!');
     }
     this.emit('goal');
+    this.emit('record', { key });
   }
 
   // ---- crafting grid and the stack held on the cursor ----
@@ -394,6 +399,7 @@ export class Game {
     }
     this.updateCapacity();
     this.toast(`Wearing ${ITEMS[s.id].name}`);
+    this.record(ITEMS[s.id].bag ? 'wear:back' : 'wear:armor');
     this.emit('inv');
     return true;
   }
@@ -462,6 +468,7 @@ export class Game {
       return false;
     }
     this.emit('drink', { source });
+    this.record('drink');
     this.emit('inv');
     return true;
   }
@@ -499,7 +506,10 @@ export class Game {
       }
       if (def?.tool === 'hoe') {
         if (tile.water || tile.shore || tile.biome === 'sand') this.toast("Can't till here");
-        else this.world.set(tx, tz, { t: 'soil', wet: false, crop: -1, placed: true });
+        else {
+          this.world.set(tx, tz, { t: 'soil', wet: false, crop: -1, placed: true });
+          this.wearTool();
+        }
       }
       return;
     }
@@ -532,9 +542,10 @@ export class Game {
         return;
       }
       power = def.power;
+      this.wearTool();
     }
-    if (obj.t === 'chest' && obj.items.some(Boolean)) {
-      this.toast('Empty the chest first');
+    if ((obj.t === 'chest' || obj.t === 'lostbag') && obj.items.some(Boolean)) {
+      this.toast(obj.t === 'chest' ? 'Empty the chest first' : 'Open it with F and take your things first');
       return;
     }
     const key = tx + ',' + tz;
@@ -548,8 +559,21 @@ export class Game {
     const bed = this.player.bed;
     if (obj.t === 'bed' && bed && bed.x === tx && bed.z === tz) this.player.bed = null;
     this.world.remove(tx, tz, this.day, od.regrow);
+    if (obj.t === 'lostbag') this.player.lost = null;
     if (od.item) this.give(od.item, 1);
-    else this.giveDrops(od.drops);
+    else if (od.drops) this.giveDrops(od.drops);
+  }
+
+  // Using a tool or weapon wears it down; at zero it breaks.
+  wearTool() {
+    const s = this.held, uses = s && ITEMS[s.id].uses;
+    if (!uses) return;
+    s.d = (s.d ?? uses) - 1;
+    if (s.d > 0) return;
+    this.inv.slots[this.selected] = null;
+    this.toast(`Your ${ITEMS[s.id].name} broke`);
+    this.emit('break');
+    this.emit('inv');
   }
 
   // Could the held item be placed on this tile? Shared by placing and by the placement preview.
@@ -621,6 +645,7 @@ export class Game {
       this.inv.removeAt(this.selected, 1);
       this.world.set(tx, tz, placed);
       this.record('place:' + def.place);
+      if (OBJECTS[def.place].block) this.record('place:wall');
       this.emit('inv');
       return;
     }
@@ -635,7 +660,7 @@ export class Game {
     if (obj.t === 'bed') {
       this.player.bed = { x: tx, z: tz };
       this.sleep();
-    } else if (obj.t === 'chest') this.emit('open', { what: 'chest', x: tx, z: tz });
+    } else if (obj.t === 'chest' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz });
     else if (obj.t === 'campfire' || obj.t === 'workbench') this.emit('open', { what: 'craft' });
     else return false;
     return true;
@@ -649,6 +674,7 @@ export class Game {
     this.startDay(true);
     this.player.health = Math.min(MAX_HEALTH, this.player.health + 3);
     this.toast(`Good morning! Day ${this.day}`);
+    this.record('sleep');
     return true;
   }
 
@@ -678,8 +704,8 @@ export class Game {
     return !this.blocked(x, z, 0.3, true) && !this.world.getFloor(Math.floor(x), Math.floor(z)) && !this.nearCampfire(x, z, FIRE_SAFE);
   }
 
-  spawnEnemy(x, z) {
-    const e = { id: this.nextEnemyId++, x, z, hp: ENEMY_HP, cool: 0.6, stun: 0, kx: 0, kz: 0, tx: x, tz: z, wait: 0 };
+  spawnEnemy(x, z, kind = 'gloomling') {
+    const e = { id: this.nextEnemyId++, kind, x, z, hp: ENEMY_KINDS[kind].hp, cool: 0.6, stun: 0, kx: 0, kz: 0, tx: x, tz: z, wait: 0 };
     this.enemies.push(e);
     return e;
   }
@@ -688,7 +714,7 @@ export class Game {
     const p = this.player, a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 7;
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
     if (!this.enemyCanStand(x, z) || this.nearCampfire(x, z, 8)) return null;
-    return this.spawnEnemy(x, z);
+    return this.spawnEnemy(x, z, this.day >= 4 && Math.random() < 0.25 ? 'brute' : 'gloomling');
   }
 
   removeEnemy(e) {
@@ -720,8 +746,8 @@ export class Game {
         mx = e.kx * dt;
         mz = e.kz * dt;
       } else if (night && d < 16 && d > 0.6) {
-        mx = (dx / d) * ENEMY_SPEED * dt;
-        mz = (dz / d) * ENEMY_SPEED * dt;
+        mx = (dx / d) * ENEMY_KINDS[e.kind].speed * dt;
+        mz = (dz / d) * ENEMY_KINDS[e.kind].speed * dt;
       } else if (d >= 16) {
         // idle wander
         if ((e.wait -= dt) <= 0) {
@@ -741,7 +767,7 @@ export class Game {
       if (mx || mz) e.dir = Math.atan2(-mz, mx);
       if (night && d < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
-        this.hurt(ENEMY_DAMAGE, e);
+        this.hurt(ENEMY_KINDS[e.kind].damage, e);
       }
     }
   }
@@ -769,13 +795,18 @@ export class Game {
     const p = this.player, d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
     this.emit('swing', { x: e.x - 0.5, z: e.z - 0.5 });
     e.hp -= this.attackPower;
+    this.wearTool();
     e.stun = 0.25;
     e.kx = ((e.x - p.x) / d) * 7;
     e.kz = ((e.z - p.z) / d) * 7;
     this.emit('hit', { x: Math.floor(e.x), z: Math.floor(e.z) });
     if (e.hp <= 0) {
       this.removeEnemy(e);
-      if (Math.random() < 0.4) this.give('coal', 1);
+      this.record('kill');
+      if (e.kind === 'brute') {
+        this.give('coal', 2);
+        if (Math.random() < 0.5) this.give('copper_ore', 1);
+      } else if (Math.random() < 0.4) this.give('coal', 1);
     }
   }
 
@@ -800,8 +831,30 @@ export class Game {
     if (tickSurvival(this.player, dt, sprinting, this.hungerRate)) this.faint();
   }
 
+  // Everything outside the hotbar is left in a pack where you fell (hotbar and worn items stay with you).
+  dropPack() {
+    const p = this.player, px = Math.floor(p.x), pz = Math.floor(p.z);
+    const carried = this.inv.slots.slice(HOTBAR).filter(Boolean);
+    if (!carried.length) return false;
+    for (let r = 0; r <= 3; r++) {
+      for (let z = pz - r; z <= pz + r; z++) {
+        for (let x = px - r; x <= px + r; x++) {
+          if (this.world.get(x, z) || this.gen.tile(x, z).water) continue;
+          const items = Array(27).fill(null);
+          carried.forEach((s, i) => (items[i] = s));
+          for (let i = HOTBAR; i < this.inv.slots.length; i++) this.inv.slots[i] = null;
+          this.world.set(x, z, { t: 'lostbag', placed: true, items });
+          p.lost = { x, z };
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   faint() {
     const p = this.player;
+    const dropped = this.dropPack();
     p.health = 6;
     p.hunger = 6;
     p.thirst = 6;
@@ -818,7 +871,7 @@ export class Game {
     p.vy = 0;
     for (const e of [...this.enemies]) this.removeEnemy(e);
     this.startDay(true);
-    this.toast('You fainted and woke up the next morning');
+    this.toast(dropped ? 'You fainted. Your pack is where you fell (red dot on the map)' : 'You fainted and woke up the next morning');
     this.emit('faint');
   }
 }

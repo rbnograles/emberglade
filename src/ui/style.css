@@ -228,3 +228,20 @@ kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; 
   #panel .col { min-height: auto; }
   #panel .recipes { width: auto; }
 }
+
+/* ---------- minimap, wear bars, settings ---------- */
+#minimap { width: 132px; height: 132px; border-radius: 12px; border: 3px solid rgba(45, 36, 32, 0.85); image-rendering: pixelated; }
+#home-label { background: var(--panel); border-radius: 8px; padding: 3px 10px; font-size: 12px; }
+.slot u { position: absolute; left: 5px; bottom: 4px; height: 4px; max-width: calc(100% - 10px); border-radius: 2px; }
+.slot:has(u)::after { content: ''; position: absolute; left: 5px; right: 5px; bottom: 4px; height: 4px; border-radius: 2px; background: rgba(0, 0, 0, 0.45); z-index: -1; }
+
+#menu .card { max-height: 94vh; overflow-y: auto; }
+#settings { text-align: left; margin: 10px auto 0; max-width: 420px; font-size: 13px; }
+#settings h4 { margin: 12px 0 4px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #c9623a; }
+#settings .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; }
+#settings .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+#settings input[type='range'] { flex: 1; max-width: 220px; }
+#menu #settings button { display: inline-block; width: auto; margin: 2px 4px 2px 0; padding: 4px 10px; font-size: 12px; background: #b9a48c; box-shadow: 0 2px 0 #8f7c66; border-radius: 8px; }
+#menu #settings button.active { background: #5aa84f; box-shadow: 0 2px 0 #3f7d38; }
+#menu #settings button.waiting { background: #c9623a; box-shadow: 0 2px 0 #8f4326; }
+#menu #settings .keys button { min-width: 74px; }

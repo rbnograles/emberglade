@@ -66,6 +66,14 @@ export class Inventory {
   moveTo(i, other) {
     const s = this.slots[i];
     if (!s) return;
+    if (stackSize(s.id) === 1) {
+      // single items (tools, armor) move as they are, so wear and tear travels with them
+      const free = other.slots.findIndex((x, j) => !x && j < other.limit);
+      if (free < 0) return;
+      other.slots[free] = s;
+      this.slots[i] = null;
+      return;
+    }
     const left = other.add(s.id, s.n);
     if (left === 0) this.slots[i] = null;
     else s.n = left;

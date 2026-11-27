@@ -12,6 +12,16 @@ export const GOALS = [
   { text: 'Craft a hoe, till soil and plant 4 seeds', need: { plant: 4 } },
   { text: 'Water crops 10 times', need: { water: 10 } },
   { text: 'Harvest wheat and bake bread', need: { 'craft:bread': 1 } },
+  { text: 'Drink at a pond (stand next to water, press X)', need: { drink: 1 } },
+  { text: 'Craft a water flask to carry water', need: { 'craft:flask': 1 } },
+  { text: 'Craft a torch for the night (coal above a stick)', need: { 'craft:torch': 1 } },
+  { text: 'Craft a stone sword at the workbench', need: { 'craft:stone_sword': 1 } },
+  { text: 'Defeat a gloomling at night', need: { kill: 1 } },
+  { text: 'Hunt a deer and cook its meat', need: { 'craft:cooked_meat': 1 } },
+  { text: 'Wear a bag for more inventory space', need: { 'wear:back': 1 } },
+  { text: 'Wear any piece of armor', need: { 'wear:armor': 1 } },
+  { text: 'Build a shelter: 6 walls, a door and 2 floors', need: { 'place:wall': 6, 'place:door': 1, 'place:floor': 2 } },
+  { text: 'Sleep in a bed inside your shelter', need: { sleep: 1 } },
 ];
 
 export class Goals {

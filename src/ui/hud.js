@@ -6,16 +6,37 @@ import { iconURL, isPixelIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 
+// Tooltip text: the item's name and what it does.
+export function describe(slot) {
+  const def = ITEMS[slot.id], parts = [def.name];
+  if (def.food) parts.push(`+${def.food} food`);
+  if (def.weapon) parts.push(`damage ${def.weapon}`);
+  if (def.power) parts.push(`strength ${def.power}`);
+  if (def.def) parts.push(`armor ${def.def}`);
+  if (def.bag) parts.push(`+${def.bag} slots`);
+  if (def.uses) parts.push(`${slot.d ?? def.uses}/${def.uses} uses left`);
+  return parts.join(' \u00B7 ');
+}
+
 // Fills a slot element with an item icon and count.
 export function renderSlot(el, slot) {
   el.replaceChildren();
-  el.title = slot ? ITEMS[slot.id].name : '';
+  el.title = slot ? describe(slot) : '';
   if (!slot) return;
   const img = document.createElement('img');
   img.src = iconURL(slot.id);
   img.classList.toggle('px', isPixelIcon(slot.id));
   img.draggable = false;
   el.append(img);
+  const uses = ITEMS[slot.id].uses;
+  if (uses && slot.d !== undefined) {
+    // wear bar: green when fresh, red when nearly broken
+    const bar = document.createElement('u');
+    const left = Math.max(0, slot.d / uses);
+    bar.style.width = Math.round(left * 100) + '%';
+    bar.style.background = left > 0.5 ? '#7ad04f' : left > 0.2 ? '#f2c94c' : '#e8505b';
+    el.append(bar);
+  }
   if (slot.n > 1) {
     const n = document.createElement('span');
     n.textContent = slot.n;

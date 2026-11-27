@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Vox } from './voxel.js';
 import { toGeometry } from './chunks.js';
 import { iconPixels } from '../ui/icons.js';
+import { ENEMY_KINDS } from '../game/game.js';
 
 const EAT_TIME = 1.1, EAT_BITES = 4;
 const HURT_RED = new THREE.Color(0xff2a2a), HURT_GLOW = new THREE.Color(0x8a0f0f);
@@ -210,7 +211,17 @@ export class Deer {
     const mesh = new THREE.Mesh(this.geometry, this.material);
     mesh.castShadow = true;
     this.scene.add(mesh);
-    this.list.push({ mesh, x, z, tx: x, tz: z, wait: Math.random() * 3, t: Math.random() * 10 });
+    this.list.push({ mesh, x, z, tx: x, tz: z, wait: Math.random() * 3, t: Math.random() * 10, hp: 5, flee: 0 });
+  }
+
+  // A hunter's blow. Returns true when the deer falls (and removes it).
+  hit(d, power, px, pz) {
+    d.hp -= power;
+    d.flee = 3;
+    if (d.hp > 0) return false;
+    this.scene.remove(d.mesh);
+    this.list.splice(this.list.indexOf(d), 1);
+    return true;
   }
 
   update(dt, px, pz) {
@@ -224,7 +235,14 @@ export class Deer {
         continue;
       }
       let speed = 1.3;
-      if (fromPlayer < 3.5) {
+      d.flee = Math.max(0, d.flee - dt);
+      if (d.flee > 0) {
+        // wounded: bolt away from the hunter
+        d.tx = d.x + ((d.x - px) / (fromPlayer || 1)) * 8;
+        d.tz = d.z + ((d.z - pz) / (fromPlayer || 1)) * 8;
+        d.wait = 0;
+        speed = 5.2;
+      } else if (fromPlayer < 3.5) {
         // Trot directly away from the player.
         d.tx = d.x + ((d.x - px) / fromPlayer) * 6;
         d.tz = d.z + ((d.z - pz) / fromPlayer) * 6;
@@ -282,8 +300,9 @@ export class Enemies {
       mesh.position.set(e.x, this.game.ground(e.x, e.z) + hop, e.z);
       mesh.rotation.y = e.dir ?? 0;
       // squash when hit, shrink as daylight burns it away
-      const s = Math.min(1, Math.max(0.3, e.hp / 3)) * (e.stun > 0 ? 1.25 : 1);
-      mesh.scale.set(s, e.stun > 0 ? 0.7 : s, s);
+      const kind = ENEMY_KINDS[e.kind];
+      const s = kind.size * Math.min(1, Math.max(0.3, e.hp / (kind.hp / 2))) * (e.stun > 0 ? 1.25 : 1);
+      mesh.scale.set(s, e.stun > 0 ? s * 0.7 : s, s);
     }
     for (const [id, mesh] of this.meshes) {
       if (!alive.has(id)) {

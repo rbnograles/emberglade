@@ -60,7 +60,7 @@ export class Panels {
 
   show(chestPos = null) {
     const obj = chestPos && this.game.world.get(chestPos.x, chestPos.z);
-    this.chest = obj?.t === 'chest' ? new Inventory(0, obj.items) : null;
+    this.chest = obj?.t === 'chest' || obj?.t === 'lostbag' ? new Inventory(0, obj.items) : null;
     this.root.classList.remove('hidden');
     this.render();
   }
@@ -117,7 +117,7 @@ export class Panels {
   renderInventory() {
     const game = this.game, inv = game.inv;
     const left = el('div', 'col');
-    if (this.chest) left.append(el('h3', '', 'Chest'), this.grid(this.chest, range(this.chest.slots.length), inv));
+    if (this.chest) left.append(el('h3', '', this.chest.slots.length > 18 ? 'Your dropped pack' : 'Chest'), this.grid(this.chest, range(this.chest.slots.length), inv));
 
     const top = el('div', 'worn-row');
     const worn = el('div', 'armor');
