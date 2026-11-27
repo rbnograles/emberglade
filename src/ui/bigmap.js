@@ -53,6 +53,7 @@ export class BigMap {
   }
 
   colour(t) {
+    if (t.boiling) return t.bed < -5 ? 0x8a3524 : 0xb0502e; // the boiling sea
     if (t.salt) return t.bed < -12 ? 0x24558f : t.bed < -7 ? 0x2f6aa8 : t.bed < -3 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8;
     if (t.lava) return 0xff7a1a;
     if (t.ice) return 0xbfe6f5;

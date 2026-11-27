@@ -4,11 +4,11 @@ import { BIOMES, SHORE, SEABED } from './biomes.js';
 export const WATER_Y = -0.3;
 export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swum, shallower is waded
 const OCEAN = -0.05; // continent noise below this is sea: a little under half the world
-const MOUNTAIN = 0.16; // range noise above this is mountain
+const MOUNTAIN = 0.13; // range noise above this is mountain
 const SNOW_LINE = 18; // mountains this high are snow-capped (much lower inside the frozen region)
-const VOLCANO_CELL = 300; // one possible volcano per square of this many tiles, inside the volcanic region
-const REGION_DISTANCE = 3000; // how far from the centre of the world the two harsh regions lie
-const FROST_RADIUS = 1500, HEAT_RADIUS = 1200;
+const VOLCANO_CELL = 560; // one possible volcano per square of this many tiles, inside the volcanic region
+const REGION_DISTANCE = 4300; // how far from the centre of the world the two harsh regions lie
+const FROST_RADIUS = 2600, HEAT_RADIUS = 2200; // each swallows a whole stretch of land and the sea beside it
 
 // Deterministic description of every tile: height, water, biome and natural object.
 export class Worldgen {
@@ -21,12 +21,12 @@ export class Worldgen {
     const start = hash2(this.seed, 1, 900) * Math.PI * 2;
     const spots = [];
     for (let i = 0; i < 20; i++) {
-      for (const dist of [REGION_DISTANCE - 700, REGION_DISTANCE, REGION_DISTANCE + 900]) {
+      for (const dist of [REGION_DISTANCE - 500, REGION_DISTANCE + 300, REGION_DISTANCE + 1300]) {
         const a = start + (i / 20) * Math.PI * 2;
         const x = Math.round(Math.cos(a) * dist), z = Math.round(Math.sin(a) * dist);
         let land = 0;
         for (let k = 0; k < 14; k++) {
-          const r = k === 0 ? 0 : k < 7 ? 450 : 900, b = (k / 7) * Math.PI * 2;
+          const r = k === 0 ? 0 : k < 7 ? 800 : 1700, b = (k / 7) * Math.PI * 2;
           if (this.continent(x + Math.cos(b) * r, z + Math.sin(b) * r) > OCEAN + 0.004) land++;
         }
         spots.push({ x, z, land });
@@ -34,7 +34,7 @@ export class Worldgen {
     }
     spots.sort((p, q) => q.land - p.land);
     this.frostCentre = { x: spots[0].x, z: spots[0].z };
-    const apart = spots.find((p) => Math.hypot(p.x - spots[0].x, p.z - spots[0].z) > 3400) ?? spots[spots.length - 1];
+    const apart = spots.find((p) => Math.hypot(p.x - spots[0].x, p.z - spots[0].z) > 5600) ?? spots[spots.length - 1];
     this.heatCentre = { x: apart.x, z: apart.z };
   }
 
@@ -42,7 +42,10 @@ export class Worldgen {
   // roughens the coastline, so the land stays solid and the sea stays open.
   continent(x, z) {
     const s = this.seed;
-    return fbm(x / 5200, z / 5200, s + 20, 2) + fbm(x / 170, z / 170, s + 21, 3) * 0.03 + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
+    // one smooth, very broad wave for the continents (no inland seas), a little mid-scale shape for
+    // bays and headlands, and fine noise for a ragged shoreline with the odd island
+    return fbm(x / 6000, z / 6000, s + 20, 1) + fbm(x / 1400, z / 1400, s + 22, 2) * 0.035
+      + fbm(x / 170, z / 170, s + 21, 3) * 0.02 + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
   }
 
   // How deep into each harsh region a spot is: 0 outside, rising to 1 at the heart. The edge is ragged.
@@ -63,7 +66,7 @@ export class Worldgen {
         if (v === undefined) {
           const s = this.seed;
           v = null;
-          if (hash2(cx, cz, s + 50) < 0.7) {
+          if (hash2(cx, cz, s + 50) < 0.6) {
             const vx = Math.round((cx + 0.2 + hash2(cx, cz, s + 51) * 0.6) * VOLCANO_CELL);
             const vz = Math.round((cz + 0.2 + hash2(cx, cz, s + 52) * 0.6) * VOLCANO_CELL);
             // only on solid land, and only inside the volcanic region
@@ -93,7 +96,7 @@ export class Worldgen {
     const cont = this.continent(x, z);
     const n = fbm(x / 48, z / 48, s, 3) + Math.max(0, 1 - d / 12) * 0.5;
     const { frost, heat } = this.climate(x, z);
-    let h, bed = null, water = false, salt = false, shore = false, biome = 'meadow', lava = false, ice = false;
+    let h, bed = null, water = false, salt = false, shore = false, biome = 'meadow', lava = false, ice = false, boiling = false;
 
     if (cont < OCEAN) {
       // Sea: the bed drops away in steps, down to deep trenches far from land.
@@ -101,8 +104,10 @@ export class Worldgen {
       h = WATER_Y;
       bed = Math.max(-22, -0.7 - Math.floor((OCEAN - cont) * 330) * 0.5);
       biome = 'ocean';
-      // deep inside the frozen region the shallows are locked under sea ice
-      if (frost > 0.25 && bed > -2.5) {
+      // the sea of the volcanic region boils: only a submarine survives it
+      boiling = heat > 0.04;
+      // the sea of the frozen region is one great sheet of ice, broken by the odd patch of open water
+      if (frost > 0.1 && fbm(x / 34, z / 34, s + 61, 2) < 0.3) {
         water = salt = false;
         ice = true;
         bed = null;
@@ -110,7 +115,7 @@ export class Worldgen {
         biome = 'winter';
       }
     } else {
-      const coast = cont < OCEAN + 0.004;
+      const coast = cont < OCEAN + 0.002;
       if (n < -0.3 && !coast) {
         if (frost > 0) {
           // frozen pond: solid ice to walk on
@@ -143,13 +148,15 @@ export class Worldgen {
       }
 
       // Mountains: broad ranges that climb very high, fading in away from the old start and the coast.
-      // broad ranges, highest in the heart of a continent
-      const inland = Math.min(1, Math.max(0, (cont - OCEAN - 0.004) / 0.06));
-      const range = fbm(x / 620, z / 620, s + 30, 4) + inland * 0.08;
-      if (range > MOUNTAIN && !coast) {
-        const fade = Math.min(1, Math.max(0, (d - 40) / 40)) * inland;
-        const rough = 0.8 + 0.2 * fbm(x / 14, z / 14, s + 31, 2);
-        const rise = Math.floor((range - MOUNTAIN) * 120 * rough * fade * 2) / 2;
+      // Great massifs in the heart of each continent: the land climbs steadily from the lowlands near
+      // the coast to very high peaks far inland, with valleys and terraces cut into the slopes.
+      const inland = Math.min(1, Math.max(0, (cont - OCEAN - 0.002) / 0.05));
+      const heart = Math.min(1, Math.max(0, (cont - OCEAN - 0.06) / 0.12));
+      const range = fbm(x / 1500, z / 1500, s + 30, 3) + heart * 0.12;
+      if (range > MOUNTAIN && heart > 0 && !coast) {
+        const fade = Math.min(1, Math.max(0, (d - 40) / 40)) * heart * (2 - heart);
+        const rough = 0.72 + 0.28 * fbm(x / 46, z / 46, s + 31, 3);
+        const rise = Math.floor((range - MOUNTAIN) * 230 * rough * fade * 2) / 2;
         if (rise >= 0.5) {
           if (water) {
             water = false;
@@ -185,7 +192,8 @@ export class Worldgen {
     // bed: seabed height under water (null on land). salt: sea water, not drinkable.
     // lava: burns whoever stands in it. ice: frozen water, solid to walk on.
     // frost / heat: how deep this spot is in the frozen or the volcanic region (0 = outside).
-    t = { h, bed, water, salt, biome, shore, lava, ice, frost, heat, obj: undefined };
+    // boiling: scalding sea in the volcanic region.
+    t = { h, bed, water, salt, biome, shore, lava, ice, boiling, frost, heat, obj: undefined };
     if (this.cache.size > 200000) this.cache.clear();
     this.cache.set(k, t);
     return t;
@@ -195,7 +203,7 @@ export class Worldgen {
     const t = this.tile(x, z);
     if (t.obj !== undefined) return t.obj;
     let obj = null;
-    if ((t.salt || !t.water) && !t.lava && !t.ice && Math.hypot(x, z) > 2) {
+    if ((t.salt || !t.water) && !t.lava && !t.ice && !t.boiling && Math.hypot(x, z) > 2) {
       // the seabed has its own life, changing with depth
       const depth = t.salt ? WATER_Y - t.bed : 0;
       const table = t.salt ? (depth < 2 ? SEABED.shallow : depth < 4 ? SEABED.mid : SEABED.deep) : t.shore ? SHORE.spawn : BIOMES[t.biome].spawn;

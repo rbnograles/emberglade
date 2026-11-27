@@ -121,9 +121,10 @@ export class Hud {
     const missing = ex.short > 0 ? `need ${ex.short} more ${ex.kind === 'frost' ? 'fur' : 'crystal'} piece${ex.short > 1 ? 's' : ''}` : '';
     const harsh = ex.kind === 'frost' ? (ex.short ? `Freezing! You ${missing}, or a campfire` : ex.need ? 'Your furs keep out the cold' : '')
       : ex.kind === 'heat' ? (ex.short ? `Scorching! You ${missing}` : ex.need ? 'Your crystal gear keeps out the heat' : '') : '';
-    const state = harsh ? (ex.short ? 'harsh' : 'safe') : ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
-    status.className = harsh || STATUS[state] ? state : 'hidden';
-    status.textContent = harsh || (STATUS[state] ?? '');
+    const scald = g.scalding ? 'The sea is boiling! Only a submarine can cross it' : '';
+    const state = scald ? 'harsh' : harsh ? (ex.short ? 'harsh' : 'safe') : ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
+    status.className = scald || harsh || STATUS[state] ? state : 'hidden';
+    status.textContent = scald || harsh || (STATUS[state] ?? '');
     // what the eat and drink keys would use right now, for the prompt below
     const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
     const source = g.drinkSource();

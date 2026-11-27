@@ -20,7 +20,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Creatures:** gloomlings, brutes and spitting spitters hunt you after dark; golems guard the mountains at any hour. Fight them with swords, or stay near campfire light.
 - **World map:** press M for a full map of the land and sea around you, with your start, bed, vehicles and dropped pack marked.
 - **Glider:** jump from a height and glide. **Weather:** real falling rain with splashes and sound, which waters your fields.
-- **Harsh regions:** the Frozen Wastes and the Volcanic Lands each lie in one place, marked on the world map. Going in without fur or crystal gear drains your health fast, and the deeper you go the more pieces you need. Snow falls harder toward the heart of the wastes; ash drifts over the volcanoes.
+- **Harsh regions:** the Frozen Wastes and the Volcanic Lands each lie in one place, marked on the world map. The Frozen Wastes cover a whole stretch of land and the sea beside it, frozen into an ice sheet you can walk across. The sea of the Volcanic Lands boils, and only a submarine can cross it. Going in without fur or crystal gear drains your health fast, and the deeper you go the more pieces you need. Snow falls harder toward the heart of the wastes; ash drifts over the volcanoes.
 - **Armor and bags:** woven and copper armor reduce damage and night cold; bags add inventory rows.
 - **Base building:** walls, doors, floors, fences, beds and chests, with a placement preview. Creatures cannot cross walls or step on built floors.
 - **Hunting and light:** hunt deer for meat and hide, and carry a torch to see at night.

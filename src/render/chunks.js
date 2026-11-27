@@ -14,7 +14,7 @@ const SHORE_GROUND = linearPair(SHORE.ground);
 const WATER = linearPair(WATER_COLORS);
 const SIDE_TINT = rgb(0x9a7a5a);
 const SEABED = [rgb(SEABED_COLORS.shallow), rgb(SEABED_COLORS.deep)];
-const LAVA = linearPair(LAVA_COLORS), ICE = linearPair(ICE_COLORS);
+const LAVA = linearPair(LAVA_COLORS), ICE = linearPair(ICE_COLORS), BOIL = linearPair([0xd9703a, 0xc25a2e]);
 
 export function toGeometry({ pos, norm, col, idx }) {
   const g = new THREE.BufferGeometry();
@@ -125,7 +125,10 @@ export class Chunks {
           // bed: sandy in the shallows, fading to dark blue-grey in the deep
           const depth = Math.min(1, (WATER_Y - t.bed) / 9);
           c = [0, 1, 2].map((i) => (SEABED[0][i] + (SEABED[1][i] - SEABED[0][i]) * depth) * shade);
-          const w = [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
+          // the boiling sea of the volcanic region is a murky orange-red
+          const w = t.boiling
+            ? [0, 1, 2].map((i) => BOIL[0][i] + (BOIL[1][i] - BOIL[0][i]) * k)
+            : [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
           water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w);
         } else {
           const pair = t.ice ? ICE : t.shore ? SHORE_GROUND : GROUND[t.biome];

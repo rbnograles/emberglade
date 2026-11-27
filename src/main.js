@@ -460,6 +460,7 @@ const lookAt = new THREE.Vector3();
 let last = performance.now();
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
 let shake = 0; // seconds of camera shake left
+let steamTimer = 0;
 let haze = null; // snow or ash thick enough to close the view in
 let stepTimer = 0, wasWinded = false, bubbleTimer = 0;
 let wornKey = null; // armor currently shown on the character
@@ -649,6 +650,13 @@ function step(dt) {
   const here = game.gen.tile(Math.floor(p.x), Math.floor(p.z));
   snow.update(dt, here.frost > 0 ? Math.min(1, 0.12 + here.frost * 1.15) : 0, p.x, playerY, p.z, clock);
   ash.update(dt, here.heat > 0 ? Math.min(0.6, 0.08 + here.heat * 0.6) : 0, p.x, playerY, p.z, clock);
+  // steam rises off the boiling sea around the player
+  steamTimer -= dt;
+  if (steamTimer <= 0 && here.heat > 0) {
+    steamTimer = 0.12;
+    const sx = p.x + (Math.random() - 0.5) * 16, sz = p.z + (Math.random() - 0.5) * 16;
+    if (game.gen.tile(Math.floor(sx), Math.floor(sz)).boiling) particles.burst(sx, WATER_Y, sz, 0xf2e6dc, 2);
+  }
   haze = snow.level > 0.02 ? { level: snow.level * snow.level, color: 0xe8f0f5 } : ash.level > 0.02 ? { level: ash.level * 0.8, color: 0x6b5048 } : null;
   setRain(submerged ? 0 : Math.max(rain.level, snow.level * snow.level * 0.8)); // the hiss doubles as blizzard wind
   const swell = Math.sin(clock * 1.3) * 0.035;

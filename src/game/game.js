@@ -9,7 +9,7 @@ import { Goals } from './goals.js';
 import { tickSurvival, tickStamina, eat, drink, MAX_HEALTH, MAX_HUNGER, MAX_THIRST, MAX_STAMINA } from './survival.js';
 
 export const DAY_SECONDS = 480;
-const GEN_VERSION = 4; // bump when world generation changes shape, so old saves are moved to safe ground
+const GEN_VERSION = 5; // bump when world generation changes shape, so old saves are moved to safe ground
 export const REACH = 3.5;
 export const CAN_CAPACITY = 10;
 export const HOTBAR = 9;
@@ -111,12 +111,12 @@ export class Game {
   pickSpawn() {
     const lowland = new Set(['meadow', 'autumn', 'blossom', 'pine']);
     for (let attempt = 0; attempt < 1500; attempt++) {
-      const x = Math.round((Math.random() - 0.5) * 6000), z = Math.round((Math.random() - 0.5) * 6000);
+      const x = Math.round((Math.random() - 0.5) * 9000), z = Math.round((Math.random() - 0.5) * 9000);
       const t = this.gen.tile(x, z);
       if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
       // well clear of the two harsh regions: they are places to travel to, not to wake up beside
       const far = (c, r) => Math.hypot(x - c.x, z - c.z) > r;
-      if (!far(this.gen.frostCentre, 2200) || !far(this.gen.heatCentre, 1900)) continue;
+      if (!far(this.gen.frostCentre, 3400) || !far(this.gen.heatCentre, 3000)) continue;
       // and within a few minutes' walk of the sea, so both the land and the ocean are there to explore
       let sea = false;
       for (let k = 0; k < 16 && !sea; k++) {
@@ -763,9 +763,9 @@ export class Game {
     if (!kind) return { kind: null, need: 0, have: 0, short: 0, depth: 0 };
     const depth = kind === 'frost' ? t.frost : t.heat;
     let need = Math.min(3, 1 + Math.floor(depth * 3));
-    // a fire or a floor underfoot beats the cold; water or a vehicle beats the heat
+    // a fire or a floor underfoot beats the cold; only a submarine's hull beats the heat
     if (kind === 'frost' && (this.world.getFloor(px, pz) || this.nearCampfire(p.x, p.z, 5))) need = 0;
-    if (kind === 'heat' && (t.water || p.riding)) need = 0;
+    if (kind === 'heat' && this.vehicle?.kind === 'submarine') need = 0;
     const prop = kind === 'frost' ? 'warm' : 'cool';
     const have = this.armor.slots.reduce((sum, s) => sum + (s ? ITEMS[s.id][prop] ?? 0 : 0), 0);
     return { kind, need, have, short: Math.max(0, need - have), depth };
@@ -1016,7 +1016,7 @@ export class Game {
     const p = this.player, a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 6;
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
     const t = this.gen.tile(Math.floor(x), Math.floor(z));
-    if (!t.salt || t.bed > -2.5) return null;
+    if (!t.salt || t.boiling || t.bed > -2.5) return null; // nothing lives in the boiling sea
     const e = this.spawnEnemy(x, z, 'snapper');
     e.y = t.bed + 1;
     return e;
@@ -1218,6 +1218,17 @@ export class Game {
       this.burnTimer = 0.6;
       this.toast('The lava burns!');
       this.hurt(2);
+    }
+    // the sea of the volcanic region boils: swimming in it, wading in it or sailing a wooden boat over it
+    // scalds, and no gear helps. Only a submarine can cross it.
+    const sea = this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z));
+    this.scalding = sea.boiling && this.vehicle?.kind !== 'submarine';
+    this.scaldTimer = Math.max(0, (this.scaldTimer ?? 0) - dt);
+    if (this.scalding && this.scaldTimer <= 0) {
+      this.scaldTimer = 0.5;
+      this.toast(this.vehicle ? 'The boiling sea is cooking your boat. Only a submarine can cross it!' : 'The sea is boiling! Get out!');
+      this.player.health = Math.max(0, this.player.health - 1.5);
+      this.emit('hurt');
     }
     // the frozen and volcanic regions wear down anyone without the gear for them
     const ex = this.exposure();

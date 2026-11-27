@@ -49,7 +49,7 @@ export class Minimap {
       for (let i = 0; i < CELLS; i++) {
         const t = g.gen.tile(ox + i * STEP, oz + j * STEP);
         // sea is darker the deeper it gets
-        const sea = t.salt ? (t.bed < -5 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8) : WATER_COLORS[0];
+        const sea = t.boiling ? 0xb0502e : t.salt ? (t.bed < -5 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8) : WATER_COLORS[0];
         c.fillStyle = hex(t.water ? sea : t.lava ? 0xff7a1a : t.ice ? 0xbfe6f5 : t.shore ? SHORE.ground[0] : BIOMES[t.biome].ground[(i + j) & 1]);
         c.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
       }

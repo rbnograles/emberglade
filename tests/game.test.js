@@ -414,7 +414,7 @@ describe('game rules', () => {
     const tiles = [];
     for (let z = -700; z < 700; z += 5) for (let x = -700; x < 700; x += 5) tiles.push([x, z, g.gen.tile(x, z)]);
     expect(tiles.some(([, , t]) => t.salt && t.bed <= -4)).toBe(true); // deep sea exists
-    expect(tiles.some(([, , t]) => t.biome === 'mountain' && t.h >= 6)).toBe(true); // tall mountains exist
+    // (the mountains now stand far inland; the world test below checks them)
     expect(tiles.every(([, , t]) => (t.water ? t.bed < t.h : t.bed === null))).toBe(true);
 
     // sea water cannot be drunk
@@ -636,8 +636,8 @@ describe('game rules', () => {
       expect(['meadow', 'autumn', 'blossom', 'pine']).toContain(t.biome);
       expect(g.player.x).toBe(x + 0.5);
       expect(g.blocked(g.player.x, g.player.z)).toBe(false);
-      expect(Math.hypot(x - g.gen.frostCentre.x, z - g.gen.frostCentre.z)).toBeGreaterThan(2200); // not beside the harsh regions
-      expect(Math.hypot(x - g.gen.heatCentre.x, z - g.gen.heatCentre.z)).toBeGreaterThan(1900);
+      expect(Math.hypot(x - g.gen.frostCentre.x, z - g.gen.frostCentre.z)).toBeGreaterThan(3400); // not beside the harsh regions
+      expect(Math.hypot(x - g.gen.heatCentre.x, z - g.gen.heatCentre.z)).toBeGreaterThan(3000);
       g.hurt(99); // fainting with no bed brings you back to your own start
       expect(Math.floor(g.player.x)).toBe(x);
     }
@@ -715,7 +715,7 @@ describe('game rules', () => {
     const p = g.player;
     g.spawnTimer = g.seaTimer = g.golemTimer = Infinity;
     const tiles = [];
-    for (let z = -5000; z < 5000; z += 25) for (let x = -5000; x < 5000; x += 25) tiles.push([x, z, g.gen.tile(x, z)]);
+    for (let z = -9000; z < 9000; z += 41) for (let x = -9000; x < 9000; x += 41) tiles.push([x, z, g.gen.tile(x, z)]);
     const share = (pred) => tiles.filter(([, , t]) => pred(t)).length / tiles.length;
     expect(share((t) => t.salt)).toBeGreaterThan(0.3); // vast oceans
     expect(tiles.reduce((m, [, , t]) => Math.min(m, t.bed ?? 0), 0)).toBeLessThan(-12); // with deep trenches
@@ -726,8 +726,8 @@ describe('game rules', () => {
     const frozen = tiles.filter(([, , t]) => t.frost > 0), hot = tiles.filter(([, , t]) => t.heat > 0);
     expect(frozen.length).toBeGreaterThan(100);
     expect(hot.length).toBeGreaterThan(100);
-    expect(frozen.every(([x, z]) => Math.hypot(x - fc.x, z - fc.z) < 1800)).toBe(true);
-    expect(hot.every(([x, z]) => Math.hypot(x - hc.x, z - hc.z) < 1500)).toBe(true);
+    expect(frozen.every(([x, z]) => Math.hypot(x - fc.x, z - fc.z) < 3100)).toBe(true);
+    expect(hot.every(([x, z]) => Math.hypot(x - hc.x, z - hc.z) < 2650)).toBe(true);
     expect(tiles.filter(([, , t]) => t.biome === 'winter' || t.ice).every(([, , t]) => t.frost > 0)).toBe(true);
     expect(tiles.filter(([, , t]) => t.biome === 'ash' || t.biome === 'volcano' || t.lava).every(([, , t]) => t.heat > 0)).toBe(true);
     expect(g.gen.tile(fc.x, fc.z).frost).toBeGreaterThan(0.8); // deepest at the heart
@@ -780,6 +780,41 @@ describe('game rules', () => {
     expect(g.exposure()).toMatchObject({ kind: 'heat', have: 0 });
     g.armor.slots[1] = { id: 'heat_suit', n: 1 };
     expect(g.exposure().have).toBe(1);
+
+    // the frozen region's sea is ice you can walk across; the volcanic region's sea boils
+    const seaIce = frozen.filter(([, , t]) => t.ice && t.h < 0);
+    const boiling = hot.filter(([, , t]) => t.boiling);
+    expect(seaIce.length).toBeGreaterThan(20);
+    expect(boiling.length).toBeGreaterThan(20);
+    expect(tiles.filter(([, , t]) => t.boiling).every(([, , t]) => t.heat > 0 && t.salt)).toBe(true);
+    const [bx, bz] = boiling.find(([x, z, t]) => t.bed <= -3 && g.gen.tile(x + 1, z).boiling);
+    expect(g.gen.object(bx, bz)).toBe(null); // nothing grows in it
+    g.armor.slots[0] = { id: 'heat_hood', n: 1 };
+    g.armor.slots[1] = { id: 'heat_suit', n: 1 };
+    g.armor.slots[2] = { id: 'heat_boots', n: 1 };
+    Object.assign(p, { x: bx + 0.5, z: bz + 0.5, y: g.standY(bx + 0.5, bz + 0.5), health: 10, stamina: 10, riding: null });
+    g.tick(0.1);
+    expect(p.health).toBeLessThan(9); // swimming scalds even in full heat gear
+    g.inv.slots[0] = { id: 'boat', n: 1 };
+    g.selected = 0;
+    g.vehicles.length = 0;
+    g.launch(bx + 1, bz);
+    g.board();
+    p.health = 10;
+    g.scaldTimer = 0;
+    g.tick(0.1);
+    expect(p.health).toBeLessThan(9); // a wooden boat is no protection
+    g.dismount();
+    g.vehicles.length = 0;
+    g.vehicles.push({ id: 99, kind: 'submarine', x: bx + 0.5, z: bz + 0.5, y: -1, dir: 0 });
+    g.board(g.vehicles[0]);
+    g.armor.slots.fill(null);
+    p.health = 10;
+    g.scaldTimer = 0;
+    for (let i = 0; i < 30; i++) g.tick(0.1);
+    expect(p.health).toBe(10); // a submarine crosses it unharmed, with no gear at all
+    g.dismount();
+    g.vehicles.length = 0;
 
     // frozen water is solid ice: walkable, not drinkable
     const [wx, wz] = frozen.find(([, , t]) => t.ice && t.frost > 0.3); // well inside, away from unfrozen ponds at the edge
