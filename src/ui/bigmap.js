@@ -99,7 +99,7 @@ export class BigMap {
     } else c.arc(cx, cy, 6, 0, Math.PI * 2);
     c.fill();
     c.stroke();
-    c.font = 'bold 12px sans-serif';
+    c.font = '800 12px Nunito, sans-serif';
     c.lineWidth = 3;
     c.strokeStyle = '#1c2542';
     // near the right edge the label goes to the left of its dot, so it is never cut off

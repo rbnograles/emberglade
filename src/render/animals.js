@@ -6,17 +6,17 @@ import { hash2 } from '../core/noise.js';
 // All face +x and are symmetric about the line between voxels z = -1 and z = 0 (z = 0 in model space).
 // The style: big heads with eyes on the corners, soft mottled coats, and one feature that names the
 // animal at a glance (antlers, comb, curled horns, long ears, a glowing crest, a brush, tusks).
-const EYE = 0x241d2b, HOOF = 0x3a2f2b, BONE = 0xf3e6cc, PINK = 0xf0a3a8, WHITE = 0xffffff;
+export const EYE = 0x241d2b, HOOF = 0x3a2f2b, BONE = 0xf3e6cc, PINK = 0xf0a3a8, WHITE = 0xffffff;
 
 // Colour function: a stable random pick from `palette` per voxel, for a mottled coat.
-const coat = (palette, seed) => (x, y, z) => palette[(hash2(x * 7 + y * 3, z * 5 + y, seed) * palette.length) | 0];
+export const coat = (palette, seed) => (x, y, z) => palette[(hash2(x * 7 + y * 3, z * 5 + y, seed) * palette.length) | 0];
 
 // A box on one flank (z0..z1, with z >= 0) and its mirror image on the other.
-const pair = (v, x0, y0, z0, x1, y1, z1, c) => v.box(x0, y0, z0, x1, y1, z1, c).box(x0, y0, -1 - z1, x1, y1, -1 - z0, c);
+export const pair = (v, x0, y0, z0, x1, y1, z1, c) => v.box(x0, y0, z0, x1, y1, z1, c).box(x0, y0, -1 - z1, x1, y1, -1 - z0, c);
 
 // Four legs as parts: `xs` are the two columns (back, front), each `height` tall, standing at the flanks.
 // Diagonal pairs step together. foot: colour of the bottom voxel.
-function legs(xs, height, color, foot = HOOF) {
+export function legs(xs, height, color, foot = HOOF) {
   const parts = [];
   xs.forEach((x, i) => {
     for (const side of [0, 1]) {
@@ -26,7 +26,7 @@ function legs(xs, height, color, foot = HOOF) {
   });
   return parts;
 }
-const part = (kind, pivot, v) => ({ kind, pivot, v, phase: 1 });
+export const part = (kind, pivot, v) => ({ kind, pivot, v, phase: 1 });
 
 function deer() {
   const fur = coat([0xb97d45, 0xa9703c, 0xc48a50], 5), cream = 0xecd9b4, dark = 0x70482b;
@@ -156,21 +156,27 @@ const RIGS = {
   boar: boar(),
 };
 
-// kind -> { gait, body: model, parts: [{ kind, phase, model, pivot: [x, y, z] in world units }] }.
-// Models are built around the animal's own origin (not re-centred), so every part lines up.
-export const ANIMAL_RIGS = Object.fromEntries(Object.entries(RIGS).map(([id, rig]) => [id, {
+// Sculpted rigs -> { gait, body: model, parts: [{ kind, phase, model, pivot: [x, y, z] in world units }] } by kind.
+// Models are built around the creature's own origin (not re-centred), so every part lines up.
+export const buildRigs = (rigs) => Object.fromEntries(Object.entries(rigs).map(([id, rig]) => [id, {
   gait: rig.gait,
   body: rig.body.build(rig.size, { center: false }),
   parts: rig.parts.map((p) => ({ kind: p.kind, phase: p.phase, model: p.v.build(rig.size, { center: false }), pivot: p.pivot.map((n) => n * rig.size) })),
 }]));
 
-export function addAnimalModels(m) {
-  // the whole animal in one piece, for anything that wants a still sculpture
-  for (const [id, rig] of Object.entries(RIGS)) {
+// The whole creature in one piece, for anything that wants a still sculpture.
+export function addWholeModels(m, rigs) {
+  for (const [id, rig] of Object.entries(rigs)) {
     const whole = new Vox();
     for (const v of [rig.body, ...rig.parts.map((p) => p.v)]) for (const [key, voxel] of v.m) whole.m.set(key, voxel);
     m.set(id, whole.build(rig.size, { center: false }));
   }
+}
+
+export const ANIMAL_RIGS = buildRigs(RIGS);
+
+export function addAnimalModels(m) {
+  addWholeModels(m, RIGS);
   m.set('frost_hoard', hoard(coat([0x8fc7e0, 0xa9d8ec, 0x7ab4d0], 15), 0x5f7f9a, 0xd8f3fb, WHITE));
   m.set('ember_hoard', hoard(coat([0x33282e, 0x3d2f35, 0x2a2026], 16), 0x4a3238, 0xff8a3a, 0xffc864));
 }

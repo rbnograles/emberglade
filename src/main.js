@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { installControllers } from './ui/controllers.js';
 import { ask } from './ui/dialog.js';
+import { startCloud, syncWorld, logEvent } from './cloud.js';
+import { eventFor } from './game/summary.js';
 import { Sheet } from './ui/sheet.js';
 import { Compass } from './ui/compass.js';
 import { confirmRelocation } from './ui/relocation.js';
 import { Game, needsRelocation } from './game/game.js';
-import { loadSave, writeSave, clearSave } from './game/save.js';
+import { loadSave, writeSave, clearSave, currentSlot } from './game/save.js';
 import { settings } from './settings.js';
 import { sfx, unlockAudio, setNight, setRain } from './audio.js';
 import { Rain, Flurry } from './render/weather.js';
@@ -26,11 +28,11 @@ import { Sky } from './render/sky.js';
 import { PlayerModel, Animals, Enemies, Fish, Vehicles } from './render/characters.js';
 import { VEHICLES } from './game/game.js';
 import { Particles, Sparks, Fires } from './render/effects.js';
-import '@fontsource/pixelify-sans/400.css';
-import '@fontsource/pixelify-sans/600.css';
-import '@fontsource/pixelify-sans/700.css';
+import '@fontsource/nunito/latin-500.css';
+import '@fontsource/nunito/latin-700.css';
+import '@fontsource/nunito/latin-800.css';
 import { Hud, drawFace } from './ui/hud.js';
-import { setRenderedIcons } from './ui/icons.js';
+import { setRenderedIcons, iconURL } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
 const $ = (id) => document.getElementById(id);
@@ -71,7 +73,17 @@ resize();
 const models = buildModels();
 const itemModels = buildItemModels(models);
 setRenderedIcons(renderItemIcons(itemModels));
-const chunks = new Chunks(scene, game, models);
+// Icons are photographed the first time each is needed. Doing them a few at a time while the game is
+// idle means opening the inventory for the first time never stalls on a hundred of them at once.
+{
+  const waiting = Object.keys(ITEMS);
+  const idle = window.requestIdleCallback ?? ((fn) => setTimeout(() => fn({ timeRemaining: () => 8 }), 60));
+  const warm = (deadline) => {
+    do iconURL(waiting.pop()); while (waiting.length && deadline.timeRemaining() > 4);
+    if (waiting.length) idle(warm);
+  };
+  idle(warm);
+}const chunks = new Chunks(scene, game, models);
 const sky = new Sky(scene);
 const particles = new Particles(scene);
 const sparks = new Sparks(scene);
@@ -97,6 +109,7 @@ marker.visible = false;
 scene.add(marker);
 
 const hud = new Hud(game);
+startCloud();
 if (game.relocated) setTimeout(() => hud.toast('The world has been reshaped, so you wake at a new start. Your items came with you.'), 1200);
 const minimap = new Minimap(game);
 const keeperView = new KeeperView(scene, game, $('keeper-hud'));
@@ -113,6 +126,11 @@ const waypoints = new Waypoints(scene, game, $('waypoints'));
 const compass = new Compass(game);
 const sheet = new Sheet(game);
 drawFace(settings.look);
+$('gear').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  panels.show();
+  sfx('ui');
+});
 $('portrait').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   sheet.toggle();
@@ -132,6 +150,7 @@ game.on((type, data) => {
   if (type === 'levelup' || type === 'progress') {
     if (type === 'levelup') {
       sfx('goal');
+      logEvent('level_up', { level: data.level, day: game.day }, currentSlot());
       sparks.rise(p.x, p.y + 0.1, p.z, 0xffd24a, 22, 0.8, 3);
       sparks.rise(p.x, p.y + 0.6, p.z, 0xffffff, 8, 0.5, 2.4);
     } else sparks.rise(p.x, p.y + 0.4, p.z, 0x8be06a, 8, 0.5);
@@ -156,6 +175,8 @@ game.on((type, data) => {
       sparks.rise(p.x, p.y + 0.2, p.z, 0x8be06a, 12);
     }
     // the moments worth a flourish
+    const milestone = eventFor(data.key, game);
+    if (milestone) logEvent(milestone.type, milestone.detail, currentSlot());
     if (data.key === 'hoard') sparks.rise(p.x, p.y + 0.2, p.z, 0xffd24a, 18, 1);
     else if (data.key === 'keeper:found') sparks.rise(p.x, p.y + 0.2, p.z, 0xff6a8a, 14, 0.9);
     else if (data.key === 'keeper:restore') {
@@ -244,6 +265,7 @@ game.on((type, data) => {
     game.toast(RESTORATION);
     bigmap.show();
   }
+  if (type === 'faint') logEvent('fainted', { day: game.day, level: game.progress.level }, currentSlot());
   if (type === 'inv' || type === 'goal' || type === 'newday' || type === 'faint') {
     hud.refresh();
     panels.render();
@@ -279,6 +301,11 @@ buildMenu(game, {
   onLook: () => {
     playerModel.applyLook(settings.look);
     drawFace(settings.look);
+$('gear').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  panels.show();
+  sfx('ui');
+});
   },
 });
 $('btn-pause').addEventListener('mousedown', (e) => {
@@ -567,11 +594,13 @@ const controllers = installControllers(canvas, {
   command(action) {
     if (action === 'back') {
       if (bigmap.open) bigmap.hide();
+      else if (sheet.open) sheet.hide();
       else if (panels.open) panels.hide();
       else setPaused(!paused);
       return;
     }
-    if (paused || panels.open || bigmap.open) return;
+    if (action === 'sheet' && !paused) return void sheet.toggle();
+    if (paused || panels.open || bigmap.open || sheet.open) return;
     if (action === 'strike') clicked = true;
     else if (action === 'secondary') secondaryAction();
     else if (action === 'inventory') panels.show();
@@ -594,7 +623,7 @@ const camTarget = new THREE.Vector3(p.x, playerY, p.z);
 const lookAt = new THREE.Vector3();
 const peekPoint = new THREE.Vector3(), peekSize = new THREE.Vector2();
 let last = performance.now();
-let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0;
+let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0, cloudTicks = 0;
 let shake = 0; // seconds of camera shake left
 let steamTimer = 0;
 let haze = null; // snow or ash thick enough to close the view in
@@ -630,7 +659,8 @@ function step(dt) {
   playerModel.gliding = game.gliding;
   const speed = riding ? VEHICLES[riding.kind].speed : game.gliding ? 7.5 : (swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2) * game.progress.speedScale;
   if (!panels.open) {
-    yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
+    yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0) + controllers.state.turn) * 1.9 * dt;
+  if (controllers.state.zoom) distGoal = Math.max(12, Math.min(36, distGoal + controllers.state.zoom * 22 * dt));
     if (keys.has(K.camReset)) {
       // unwind to the nearest full turn so the reset takes the short way round
       yawGoal = Math.round(camYaw / (2 * Math.PI)) * 2 * Math.PI;
@@ -828,6 +858,11 @@ function step(dt) {
   if (saveTimer > 30) {
     saveTimer = 0;
     writeSave(game);
+    // the cloud copy follows every few minutes, and only while the game is being played
+    if (++cloudTicks >= 6) {
+      cloudTicks = 0;
+      syncWorld(game, currentSlot());
+    }
   }
 }
 

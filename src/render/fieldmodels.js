@@ -1,34 +1,12 @@
 import { Vox } from './voxel.js';
 import { addAnimalModels } from './animals.js';
+import { addCreatureModels } from './creatures.js';
 
 const shale = 0x4b4954, bone = 0xf5e7cd, eye = 0x282338, bark = 0x73472f;
 
-function quadruped(body, legs) {
-  const v = new Vox().blob(0,4,0,4,2.5,2.6,body);
-  for (const x of [-3,2]) for (const z of [-2,1]) v.box(x,0,z,x,3,z,legs);
-  return v;
-}
-
-function crab() {
-  const v = new Vox().blob(0,3,0,3.4,2,4.1,shale)
-    .box(0,4,-2,1,5,2,0xc15831).set(2,4,-2,0xffcb59).set(2,4,2,0xffcb59);
-  for (const sign of [-1,1]) {
-    for (const x of [-3,0,2]) v.set(x,2,sign*3,shale).set(x-1,1,sign*4,0x9b5146).set(x-1,0,sign*5,shale);
-    v.box(3,2,sign*3,5,3,sign*3,0xad573f).set(5,4,sign*3,0xf29a41);
-  }
-  return v.build(0.15);
-}
-
 export function addFieldModels(m) {
   addAnimalModels(m);
-  m.set('frostprowler',quadruped(0x88bbcc,0x467e94).box(2,5,-2,5,7,1,0xcae9eb)
-    .set(3,8,-2,0x73b3c5).set(3,8,1,0x73b3c5).box(5,5,-1,6,6,0,0x507386)
-    .box(-6,5,0,-3,5,0,0x8fcbd7).box(-7,6,0,-6,6,0,bone)
-    .set(4,7,-2,eye).set(4,7,1,eye).build(0.16));
-  m.set('kilncrab',crab());
-  m.set('brute',quadruped(0x634857,0x433644).box(1,4,-2,4,6,2,0x745963)
-    .box(4,3,-1,5,4,1,0x4b3846).box(4,4,-2,4,7,-2,bone).box(4,4,2,4,7,2,bone)
-    .box(-2,6,0,1,8,0,0x492e46).set(3,6,-2,0xe7a84c).set(3,6,2,0xe7a84c).build(0.16));
+  addCreatureModels(m);
   const oreBase = () => new Vox().blob(0,1,0,3.7,1.7,3.4,0x80858a,0.17);
   m.set('rock_coal',oreBase().blob(-2,2,-1,2.4,2.5,2.2,0x343842).blob(1,2,1,2.9,2,2.3,0x494955).build(0.19));
   m.set('rock_copper',oreBase().box(-3,2,-1,-1,3,1,0xc17645).box(-1,3,-2,1,5,0,0xe29659)

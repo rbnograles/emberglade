@@ -50,7 +50,7 @@ export class Compass {
       c.lineTo(x, H - (point ? 11 : mid ? 8 : 5));
       c.stroke();
       if (point) {
-        c.font = `${point.length === 1 ? '700 16px' : '600 11px'} "Pixelify Sans", sans-serif`;
+        c.font = `${point.length === 1 ? '800 16px' : '700 11px'} "Nunito", sans-serif`;
         // a dark edge keeps the letters readable over bright ground
         c.lineWidth = 3;
         c.strokeStyle = 'rgba(30, 24, 21, 0.85)';

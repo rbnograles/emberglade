@@ -79,6 +79,19 @@ npm test        # unit tests for the game rules (Vitest)
 npm run build   # production build into dist/
 ```
 
+## Phones and tablets
+
+Hold the device sideways. The left thumb moves the stick; the right thumb has Tool (hold to keep swinging), Place, Use, Jump and Run. A row of buttons under the compass opens the pack, map and skills, eats and drinks, turns the view and zooms. Tap the ground to aim, drag with two fingers to turn, pinch to zoom.
+
+## Cloud storage (optional)
+
+The game saves in the browser and needs nothing else. To also keep worlds, progress and milestones in your own [Supabase](https://supabase.com) project:
+
+1. Create a project, open the SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql).
+2. Turn on Authentication → Sign In / Providers → Anonymous sign-ins.
+3. Copy `.env.example` to `.env.local` and fill in the project URL and anon key (Project Settings → API). On Vercel, add the same two variables to the project and redeploy.
+
+Each browser then signs in as an anonymous guest and can only reach its own rows. The Worlds tab shows the connection and has buttons to save to, and load from, the cloud; the game also syncs every few minutes while you play.
 ## Project layout
 
 - `src/core` – noise functions

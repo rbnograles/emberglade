@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { settings, saveSettings, DEFAULT_KEYS, DEFAULT_LOOK, KEY_LABELS, keyName } from '../settings.js';
 import { applyVolume, sfx, unlockAudio } from '../audio.js';
 import { DIFFICULTIES } from '../game/survival.js';
-import { writeSave, SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
+import { writeSave, writeRaw, SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
+import { cloud, syncWorld, fetchWorld } from '../cloud.js';
 import { PlayerModel } from '../render/characters.js';
 import { ask } from './dialog.js';
 
@@ -81,6 +82,24 @@ export function buildMenu(game, hooks) {
     } else ask({ title: 'Could not import', text: 'That file is not an Emberglade world.' });
   });
 
+  // ---- cloud ----
+  const paintCloud = () => {
+    $('cloud-status').textContent = cloud.status;
+    for (const id of ['btn-cloud-up', 'btn-cloud-down']) $(id).hidden = !cloud.enabled;
+  };
+  cloud.onChange = paintCloud;
+  paintCloud();
+  $('btn-cloud-up').addEventListener('click', () => syncWorld(game, currentSlot()));
+  $('btn-cloud-down').addEventListener('click', async () => {
+    const row = await fetchWorld(currentSlot());
+    if (!row) return void ask({ title: 'Nothing in the cloud', text: 'No copy of this world slot has been saved to the cloud yet.' });
+    const when = new Date(row.updated_at).toLocaleString();
+    if (!await ask({ title: 'Load the cloud copy?', text: `It is from day ${row.day}, level ${row.level}, saved ${when}. It will replace the world in this slot on this device.`, yes: 'Replace', no: 'Cancel', danger: true })) return;
+    if (writeRaw(row.data)) {
+      hooks.beforeLeave(true);
+      location.reload();
+    } else ask({ title: 'Could not load', text: 'The cloud copy could not be read.' });
+  });
   // ---- character ----
   buildCharacter(hooks.onLook);
 

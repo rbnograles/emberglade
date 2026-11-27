@@ -68,6 +68,16 @@ export function exportSaveData(save) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+// Replace the current slot with a world fetched from elsewhere (the cloud). Returns true when it looked valid.
+export function writeRaw(data) {
+  try {
+    if (typeof data?.seed !== 'number' || !data.player || !Array.isArray(data.inv)) return false;
+    localStorage.setItem(keyFor(currentSlot()), JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
 // Replace the current slot with a world read from an exported file. Resolves true when it looked valid.
 export async function importSave(file) {
   try {

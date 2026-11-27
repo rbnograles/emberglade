@@ -24,12 +24,15 @@
       </div>
       <div id="waypoints"></div>
       <div id="compass"><b class="needle"></b></div>
+      <div id="charbox">
       <button id="portrait" title="Character sheet (K)">
         <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="45"></circle><circle id="xp-ring" cx="50" cy="50" r="45"></circle></svg>
         <canvas id="face" width="16" height="16"></canvas>
         <b id="level"></b>
         <em id="level-points"></em>
       </button>
+      <div id="gear" title="What you are wearing. Click to open your inventory"></div>
+      </div>
       <div id="bottomright">
         <div id="home-label"></div>
         <canvas id="minimap" title="Click: open the world map. Right click: place or remove a marker"></canvas>
@@ -53,13 +56,21 @@
 
     <div id="touch-controls" aria-label="Touch controls">
       <div id="walk-stick" aria-label="Movement stick"><i></i></div>
-      <div class="touch-tools">
-        <button data-action="inventory">Pack</button><button data-action="interact">Use</button>
-        <button data-action="jump">Jump ↑</button><button data-action="sprint">Run ↓</button>
-        <button data-action="secondary">Place</button><button data-action="strike">Tool</button>
+      <div class="touch-bar">
+        <button data-action="inventory">Pack</button><button data-action="map">Map</button><button data-action="sheet">Skills</button>
+        <button data-action="eat">Eat</button><button data-action="drink">Drink</button>
+        <button data-action="camLeft" aria-label="Turn view left">&#9664;</button><button data-action="camRight" aria-label="Turn view right">&#9654;</button>
+        <button data-action="zoomIn" aria-label="Zoom in">+</button><button data-action="zoomOut" aria-label="Zoom out">&minus;</button>
       </div>
-      <div class="touch-needs"><button data-action="eat">Eat</button><button data-action="drink">Drink</button></div>
+      <div class="touch-pad">
+        <button data-action="strike" class="tool">Tool</button>
+        <button data-action="secondary" class="place">Place</button>
+        <button data-action="interact" class="use">Use</button>
+        <button data-action="jump" class="jump">Jump</button>
+        <button data-action="sprint" class="run">Run</button>
+      </div>
     </div>
+    <div id="rotate-hint"><b>Turn your phone sideways</b><span>Emberglade plays in landscape.</span></div>
     <button id="close-pack" class="touch-close">Close pack</button>
     <div id="panel" class="hidden"></div>
     <div id="sheet" class="hidden"></div>
@@ -90,6 +101,10 @@
             <div id="worlds"></div>
             <label class="row">World difficulty <select id="difficulty" aria-describedby="difficulty-help"></select></label>
             <p id="difficulty-help" class="lead"></p>
+            <div id="cloud">
+              <b>Cloud</b><span id="cloud-status"></span>
+              <div class="row-buttons"><button id="btn-cloud-up">Save to cloud now</button><button id="btn-cloud-down">Load from cloud</button></div>
+            </div>
             <div class="row-buttons">
               <button id="btn-new" class="danger">Start this world over</button>
               <button id="btn-export">Export this world</button>

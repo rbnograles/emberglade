@@ -32,13 +32,16 @@ export function navigatePanel(root, delta, adjust, accept) {
   }
 }
 
+// buttons that act for as long as a finger rests on them
+const HELD = ['jump', 'sprint', 'strike', 'camLeft', 'camRight', 'zoomIn', 'zoomOut'];
+
 export function installControllers(canvas, actions) {
   const controls = document.querySelector('#touch-controls');
   const stick = document.querySelector('#walk-stick');
   const touches = new Map();
   const held = new Set();
   let walkX = 0, walkY = 0, stickId = null, previous = [], previousPad = null;
-  const state = { x: 0, y: 0, jump: false, sprint: false, strike: false };
+  const state = { x: 0, y: 0, jump: false, sprint: false, strike: false, turn: 0, zoom: 0 };
   const resetStick = () => {
     stickId = null;
     walkX = walkY = 0;
@@ -61,7 +64,7 @@ export function installControllers(canvas, actions) {
   stick.addEventListener('lostpointercapture', e => { if (e.pointerId === stickId) resetStick(); });
   for (const button of controls.querySelectorAll('[data-action]')) {
     const name = button.dataset.action;
-    if (['jump', 'sprint', 'strike'].includes(name)) {
+    if (HELD.includes(name)) {
       button.addEventListener('pointerdown', e => {
         button.setPointerCapture(e.pointerId);
         held.add(name);
@@ -115,6 +118,9 @@ export function installControllers(canvas, actions) {
       state.jump = !panel && (held.has('jump') || pressed[0]);
       state.sprint = !panel && (held.has('sprint') || pressed[6]);
       state.strike = !panel && (held.has('strike') || pressed[7]);
+      // held camera buttons: turn the view and zoom while a finger stays down
+      state.turn = panel ? 0 : Number(held.has('camLeft')) - Number(held.has('camRight'));
+      state.zoom = panel ? 0 : Number(held.has('zoomOut')) - Number(held.has('zoomIn'));
       previous = pressed;
     },
   };

@@ -9,6 +9,8 @@ import { KEEPERS, carvingId } from '../src/game/keepers.js';
 import { suitsSite, attackWarnings, inWarning, rewardFor } from '../src/game/encounters.js';
 import { Progress, SKILLS, STAT_CAP, MAX_LEVEL, xpToNext } from '../src/game/progress.js';
 import { tickSurvival, tickStamina } from '../src/game/survival.js';
+import { summarise, eventFor } from '../src/game/summary.js';
+import { cloud, syncWorld, fetchWorld } from '../src/cloud.js';
 import { buildModels, buildItemModels } from '../src/render/models.js';
 
 const newGame = () => new Game({ seed: 1 });
@@ -443,5 +445,28 @@ describe('harsh regions', () => {
     g.day++;
     g.interact(x, z);
     expect(g.inv.count('rimeglass')).toBe(4);
+  });
+});
+
+describe('cloud', () => {
+  it('sums a world up in plain numbers and picks out the milestones', () => {
+    const g = newGame();
+    g.gainXp(200);
+    g.encounters.discovered.add(KEEPERS[0].id);
+    g.encounters.restored.add(KEEPERS[0].id);
+    expect(summarise(g)).toEqual({
+      seed: 1, day: g.day, level: g.progress.level, difficulty: 'standard', goals_done: g.goals.index,
+      keepers_found: 1, keepers_restored: 1, finished: false,
+    });
+    expect(eventFor('keeper:restore', g)).toMatchObject({ type: 'keeper_restored', detail: { restored: 1 } });
+    expect(eventFor('hoard', g).type).toBe('hoard_opened');
+    expect(eventFor('collect:stick', g)).toBe(null); // everyday things are not logged
+  });
+
+  it('stays out of the way when no project is set up', async () => {
+    expect(cloud.enabled).toBe(false);
+    expect(cloud.status).toBe('Not set up');
+    expect(await syncWorld(newGame(), 1)).toBe(false);
+    expect(await fetchWorld(1)).toBe(null);
   });
 });

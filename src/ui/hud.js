@@ -1,4 +1,4 @@
-import { ITEMS, FLASK_DRINKS } from '../game/items.js';
+import { ITEMS, FLASK_DRINKS, ARMOR_SLOTS } from '../game/items.js';
 import { GOALS } from '../game/goals.js';
 import { xpToNext, MAX_LEVEL } from '../game/progress.js';
 import { BIOMES } from '../world/biomes.js';
@@ -97,6 +97,14 @@ export class Hud {
     this.thirst = segments($('thirst'));
     this.stamina = segments($('stamina'));
     this.air = segments($('air'));
+    // the worn gear beside the portrait: head, body, feet and back
+    this.gear = ARMOR_SLOTS.map((name) => {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      slot.dataset.label = name;
+      $('gear').append(slot);
+      return slot;
+    });
     // Hotbar: click a slot to select it, or drag it onto another slot to swap the two.
     this.dragFrom = null;
     addEventListener('mouseup', () => (this.dragFrom = null));
@@ -175,6 +183,14 @@ export class Hud {
     setBar(this.thirst, p.thirst);
     setBar(this.stamina, p.stamina, g.maxStamina);
     const pr = g.progress, need = xpToNext(pr.level), points = pr.statPoints + pr.skillPoints;
+    this.gear.forEach((slot, i) => {
+      const worn = g.armor.slots[i];
+      if (slot.dataset.id !== (worn?.id ?? '')) {
+        slot.dataset.id = worn?.id ?? '';
+        renderSlot(slot, worn);
+      }
+      if (!worn) slot.title = 'Nothing worn on your ' + ARMOR_SLOTS[i];
+    });
     // the portrait: the ring fills with experience toward the next level
     const full = pr.level >= MAX_LEVEL ? 1 : pr.xp / need;
     $('xp-ring').style.strokeDashoffset = RING * (1 - full);

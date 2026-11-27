@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { toGeometry } from './chunks.js';
 import { ENEMY_KINDS } from '../game/game.js';
 import { ANIMAL_RIGS } from './animals.js';
+import { ENEMY_RIGS } from './creatures.js';
 import { WATER_Y } from '../world/worldgen.js';
 
 const EAT_TIME = 1.1, EAT_BITES = 4;
@@ -363,60 +364,90 @@ export class Animals {
     }
   }
 }
-// pace: steps per second. hop: how high a step lifts. sway: side-to-side roll while moving.
+// pace: steps per second. hop: how high a step lifts the body. sway: side-to-side roll while moving.
 const GAITS = {
-  gloomling: { pace: 9, hop: 0.3, sway: 0 }, brute: { pace: 5, hop: 0.12, sway: 0.1 },
-  golem: { pace: 3.5, hop: 0.08, sway: 0.14 }, spitter: { pace: 7, hop: 0.18, sway: 0.05 },
-  frostprowler: { pace: 12, hop: 0.1, sway: 0.06 }, kilncrab: { pace: 14, hop: 0.04, sway: 0.09 },
-  snapper: { pace: 6, hop: 0, sway: 0.05 },
+  gloomling: { pace: 9, hop: 0.3, sway: 0 }, brute: { pace: 5, hop: 0.1, sway: 0.08 },
+  golem: { pace: 3.5, hop: 0.06, sway: 0.1 }, spitter: { pace: 7, hop: 0.18, sway: 0.05 },
+  frostprowler: { pace: 12, hop: 0.06, sway: 0.04 }, kilncrab: { pace: 14, hop: 0.03, sway: 0.05 },
+  snapper: { pace: 6, hop: 0, sway: 0 },
 };
 
-// Creatures: one mesh per entry in game.enemies. Each kind moves its own way, sways while idle,
-// lunges as it strikes and squashes when hit.
+// Creatures: one jointed figure per entry in game.enemies. Legs step, arms swing and are thrown
+// forward to strike, heads lunge, jaws drop open to bite and tails lash. Each kind keeps its own
+// pace, sways while idle, lunges as it strikes and squashes when hit.
 export class Enemies {
-  constructor(scene, game, model) {
+  constructor(scene, game) {
     this.scene = scene;
     this.game = game;
-    this.geometries = Object.fromEntries(Object.keys(ENEMY_KINDS).map((kind) => [kind, toGeometry(model.get(kind))]));
+    this.material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1f44 });
+    // per kind: the body geometry, and each part's geometry moved so its pivot is the origin
+    this.kinds = Object.fromEntries(Object.entries(ENEMY_RIGS).map(([kind, rig]) => [kind, {
+      body: toGeometry(rig.body),
+      parts: rig.parts.map((p) => ({ ...p, geometry: toGeometry(p.model).translate(-p.pivot[0], -p.pivot[1], -p.pivot[2]) })),
+    }]));
     // spit in flight
     this.spitGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
     this.spitMat = new THREE.MeshBasicMaterial({ color: 0xb8f25a });
     this.spits = [];
-    this.material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1f44 });
-    this.meshes = new Map(); // enemy id -> mesh
+    this.shown = new Map(); // enemy id -> { group, parts: [{ mesh, kind, phase }], step }
+  }
+
+  add(e) {
+    const kind = this.kinds[e.kind], group = new THREE.Group();
+    const entry = { group, parts: [], step: 0 };
+    const mesh = (geometry) => {
+      const m = new THREE.Mesh(geometry, this.material);
+      m.castShadow = true;
+      group.add(m);
+      return m;
+    };
+    mesh(kind.body);
+    for (const p of kind.parts) {
+      const m = mesh(p.geometry);
+      m.position.set(...p.pivot);
+      entry.parts.push({ mesh: m, kind: p.kind, phase: p.phase });
+    }
+    this.scene.add(group);
+    this.shown.set(e.id, entry);
+    return entry;
   }
 
   update(dt, clock) {
     const alive = new Set();
     for (const e of this.game.enemies) {
       alive.add(e.id);
-      let mesh = this.meshes.get(e.id);
-      if (!mesh) {
-        mesh = new THREE.Mesh(this.geometries[e.kind], this.material);
-        mesh.castShadow = true;
-        this.scene.add(mesh);
-        this.meshes.set(e.id, mesh);
-      }
+      const v = this.shown.get(e.id) ?? this.add(e);
       const kind = ENEMY_KINDS[e.kind], gait = GAITS[e.kind] ?? GAITS.gloomling, t = clock + e.id;
-      // moving: each kind has its own step. idle: a slow sway so nothing ever stands frozen.
-      const step = e.moving ? Math.abs(Math.sin(t * gait.pace)) * gait.hop : Math.sin(t * 1.8) * 0.03;
-      // striking: a quick lunge forward that settles back over a third of a second
-      const lunge = Math.sin(Math.min(1, (e.strike ?? 0) / 0.35) * Math.PI) * 0.45;
-      const dir = e.dir ?? 0;
-      mesh.position.set(e.x + Math.cos(dir) * lunge, e.y + (kind.sea ? Math.sin(t * 5) * 0.05 : step), e.z - Math.sin(dir) * lunge);
-      mesh.rotation.y = dir;
-      mesh.rotation.z = (e.moving ? Math.sin(t * gait.pace) * gait.sway : 0) - lunge * 0.5;
+      // ease in and out of the walk, so limbs never snap to rest
+      v.step += ((e.moving ? 1 : 0) - v.step) * Math.min(1, dt * 8);
+      const stride = Math.sin(t * gait.pace) * v.step, idle = Math.sin(t * 1.8);
+      // striking: 0 -> 1 -> 0 over a third of a second
+      const strike = Math.sin(Math.min(1, (e.strike ?? 0) / 0.35) * Math.PI);
+      for (const p of v.parts) {
+        const r = p.mesh.rotation;
+        if (p.kind === 'leg') r.z = stride * p.phase * 0.65;
+        else if (p.kind === 'arm') r.z = stride * p.phase * 0.5 + idle * 0.05 + strike * 2.1; // thrown up and forward
+        else if (p.kind === 'head') r.z = idle * 0.05 + stride * 0.05 + (kind.ranged ? strike * 0.55 : -strike * 0.5); // spitters rear back, biters snap down
+        else if (p.kind === 'jaw') r.z = -(0.12 + idle * 0.06 + strike * 0.9);
+        else if (p.kind === 'tail') {
+          r.y = Math.sin(t * (kind.sea ? 7 : 4)) * (kind.sea ? 0.55 : 0.3) * (kind.sea ? 0.4 + v.step * 0.6 : 1);
+          r.z = strike * 0.4;
+        }
+      }
+      const lunge = strike * 0.45, dir = e.dir ?? 0;
+      const lift = kind.sea ? Math.sin(t * 5) * 0.05 : Math.abs(stride) * gait.hop + (1 - v.step) * idle * 0.03;
+      v.group.position.set(e.x + Math.cos(dir) * lunge, e.y + lift, e.z - Math.sin(dir) * lunge);
+      v.group.rotation.set(stride * gait.sway, dir, -lunge * 0.35);
       // squash when hit, shrink as daylight burns it away
       const s = kind.size * Math.min(1, Math.max(0.3, e.hp / (kind.hp / 2))) * (e.stun > 0 ? 1.25 : 1);
-      mesh.scale.set(s, e.stun > 0 ? s * 0.7 : s * (1 + (e.moving ? 0 : Math.sin(t * 1.8) * 0.03)), s);
+      v.group.scale.set(s, e.stun > 0 ? s * 0.7 : s, s);
     }
-    for (const [id, mesh] of this.meshes) {
+    for (const [id, v] of this.shown) {
       if (!alive.has(id)) {
-        this.scene.remove(mesh);
-        this.meshes.delete(id);
+        this.scene.remove(v.group);
+        this.shown.delete(id);
       }
-    }
-    // one little glowing cube per projectile
+    }    // one little glowing cube per projectile
     const shots = this.game.projectiles;
     while (this.spits.length < shots.length) {
       const s = new THREE.Mesh(this.spitGeo, this.spitMat);
