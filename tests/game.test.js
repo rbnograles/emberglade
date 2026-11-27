@@ -572,6 +572,8 @@ describe('game rules', () => {
     // boat: launch, board, sail without tiring, never dive
     g.inv.slots[0] = { id: 'boat', n: 1 };
     g.selected = 0;
+    expect(g.canPlace(x + 5, z)).toBe(false);
+    expect(g.canPlace(x + 1, z)).toBe(true);
     g.secondary(x + 5, z, false);
     expect(g.vehicles.length).toBe(0); // too far away
     g.secondary(x + 1, z, true);

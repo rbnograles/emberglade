@@ -172,17 +172,21 @@ export class Game {
     return this.submerged || (!!v && v.kind === 'submarine' && v.y < WATER_Y - 1.4);
   }
 
-  // Right click with a boat or submarine held: put it on the water at the targeted tile.
+  launchProblem(kind, tx, tz) {
+    const tile = this.gen.tile(tx, tz);
+    if (!tile.water || Math.hypot(tx + 0.5 - this.player.x, tz + 0.5 - this.player.z) > REACH + 0.5) {
+      return 'Aim at water close to you to launch it';
+    }
+    if (VEHICLES[kind].dive && WATER_Y - tile.bed < 2) return 'A submarine needs deeper water';
+    return null;
+  }
+
   launch(tx, tz) {
     const held = this.held, kind = held && ITEMS[held.id].vehicle;
     if (!kind) return false;
-    const p = this.player, t = this.gen.tile(tx, tz);
-    if (!t.water || Math.hypot(tx + 0.5 - p.x, tz + 0.5 - p.z) > REACH + 0.5) {
-      this.toast('Aim at water close to you to launch it');
-      return false;
-    }
-    if (VEHICLES[kind].dive && WATER_Y - t.bed < 2) {
-      this.toast('A submarine needs deeper water');
+    const problem = this.launchProblem(kind, tx, tz);
+    if (problem) {
+      this.toast(problem);
       return false;
     }
     this.inv.removeAt(this.selected, 1);
@@ -892,6 +896,7 @@ export class Game {
   // Could the held item be placed on this tile? Shared by placing and by the placement preview.
   canPlace(tx, tz) {
     const def = this.held ? ITEMS[this.held.id] : null;
+    if (def?.vehicle) return !this.launchProblem(def.vehicle, tx, tz);
     if (!def || (!def.place && !def.floor) || !this.inReach(tx, tz)) return false;
     const obj = this.world.get(tx, tz);
     if (this.gen.tile(tx, tz).water || this.gen.tile(tx, tz).lava) return false;

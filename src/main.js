@@ -317,7 +317,7 @@ addEventListener('mouseup', (e) => {
   if (!wasClick || paused || panels.open) return;
   camera.updateMatrixWorld();
   target = pickTarget();
-  game.secondary(target?.x ?? 0, target?.z ?? 0, !!target && target.reach);
+  if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach);
   hud.refresh();
 });
 addEventListener('contextmenu', (e) => e.preventDefault());
@@ -352,7 +352,14 @@ const raycaster = new THREE.Raycaster();
 function pickTarget() {
   raycaster.setFromCamera(mouse, camera);
   // under water the cursor points at the seabed, not the surface above it
-  const hit = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z, !game.submerged), false)[0];
+  const hits = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z, !game.submerged), false);
+  const def = ITEMS[game.held?.id];
+  const placing = def?.place || def?.vehicle || def?.floor;
+  const peek = chunks.peek.value;
+  const insidePeek = Math.hypot((mouse.x + 1) * peekSize.x / 2 - peek.x,
+    (mouse.y + 1) * peekSize.y / 2 - peek.y) < peek.z * 0.45;
+  const hit = placing && insidePeek ? hits.find(h => h.object.material !== chunks.objectMat ||
+    -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z >= peek.w - 0.7) : hits[0];
   if (!hit) return null;
   const pt = hit.point;
   let best = null;
@@ -422,7 +429,7 @@ const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 
 const colorFor = (t) => HIT_COLORS[t.split('_')[0]] ?? (OBJECTS[t].item ? 0xa8743c : 0x6cc257);
 
 // ---------- placement preview ----------
-// A see-through copy of the held buildable on the targeted tile: green where it can go, red where it cannot.
+// A see-through copy of the held buildable on the targeted tile: white where it can go, red where it cannot.
 const GHOST_MODEL = { fence: 'fence_post', flower: 'flower0' };
 const ghostGeometry = new Map();
 const ghost = new THREE.Mesh(
@@ -431,20 +438,41 @@ const ghost = new THREE.Mesh(
 );
 ghost.visible = false;
 ghost.renderOrder = 9;
+const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x332c35, transparent: true, opacity: 0.9, depthWrite: false });
+const ghostEdges = new THREE.LineSegments(new THREE.BufferGeometry(), edgeMaterial);
+ghostEdges.renderOrder = 10;
+ghost.add(ghostEdges);
+const fenceArms = [];
+for (let rot = 0; rot < 4; rot++) {
+  const arm = new THREE.Mesh(toGeometry(models.get('fence_arm')), ghost.material);
+  arm.rotation.y = rot * Math.PI / 2;
+  arm.renderOrder = ghost.renderOrder;
+  ghost.add(arm);
+  fenceArms.push(arm);
+}
 scene.add(ghost);
 
 function updateGhost() {
   const def = game.held ? ITEMS[game.held.id] : null;
-  const what = def?.floor ? game.held.id : def?.place;
+  const what = def?.floor ? game.held.id : def?.place ?? def?.vehicle;
   ghost.visible = !!what && !!target && !panels.open;
   if (!ghost.visible) return;
   const key = GHOST_MODEL[what] ?? what;
-  if (!ghostGeometry.has(key)) ghostGeometry.set(key, toGeometry(models.get(key)));
-  ghost.geometry = ghostGeometry.get(key);
+  if (!ghostGeometry.has(key)) {
+    const body = toGeometry(models.get(key));
+    ghostGeometry.set(key, { body, edges: new THREE.EdgesGeometry(body) });
+  }
+  const { body, edges } = ghostGeometry.get(key);
+  ghost.geometry = body;
+  ghostEdges.geometry = edges;
+  [[1, 0], [0, -1], [-1, 0], [0, 1]].forEach(([dx, dz], i) => {
+    fenceArms[i].visible = what === 'fence' && game.world.get(target.x + dx, target.z + dz)?.t === 'fence';
+  });
   const ok = game.canPlace(target.x, target.z);
   ghost.material.color.setHex(ok ? 0xffffff : 0xff4a4a);
   ghost.material.opacity = ok ? 0.7 : 0.55;
-  const y = game.gen.tile(target.x, target.z).h + 0.02;
+  const tile = game.gen.tile(target.x, target.z);
+  const y = def.vehicle && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + 0.02;
   const isWall = (x, z) => !!OBJECTS[game.world.get(x, z)?.t]?.block;
   if (what !== 'door') {
     ghost.position.set(target.x + 0.5, y, target.z + 0.5);
@@ -591,7 +619,7 @@ function step(dt) {
   const buffer = renderer.getDrawingBufferSize(peekSize);
   chunks.peek.value.set((peekPoint.x * 0.5 + 0.5) * buffer.x, (peekPoint.y * 0.5 + 0.5) * buffer.y, (buffer.y * 2.6) / camDist, playerDepth);
 
-  // targeting and tool use  target = panels.open ? null : pickTarget();
+  target = panels.open ? null : pickTarget();
   marker.visible = !!target?.reach;
   if (marker.visible) {
     const tt = game.gen.tile(target.x, target.z);
