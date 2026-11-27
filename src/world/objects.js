@@ -24,6 +24,10 @@ export const OBJECTS = {
   boulder: rock('Boulder', [['stone', 2, 3]]),
   rock_coal: rock('Coal rock', [['coal', 2, 3], ['stone', 1, 1]]),
   rock_copper: rock('Copper rock', [['copper_ore', 2, 3], ['stone', 1, 1]]),
+  // high mountains only; needs a copper pickaxe or better
+  rock_crystal: { ...rock('Crystal rock', [['crystal', 1, 2], ['stone', 1, 1]]), minPower: 2 },
+  lantern: { ...placed('Crystal lantern', 0.3), item: 'lantern' },
+  coral_wall: { name: 'Coral wall', block: true, hp: 2, tool: null, pickR: 0.75, item: 'coral_wall' },
   // sea floor
   kelp: { name: 'Kelp', pick: true, drops: [['kelp', 1, 2]], regrow: 3, pickR: 0.5 },
   clam: { name: 'Clam', pick: true, drops: [['clam', 1, 1], ['pearl', 1, 1, 0.3]], regrow: 5 },

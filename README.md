@@ -17,7 +17,9 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Farming:** till soil, plant seeds, water them and harvest wheat to bake bread.
 - **Survival:** health, food, water and energy bars. Eat, drink at ponds or from a flask, and catch your breath after sprinting.
 - **Day and night:** a full sky with sun, moon, stars and clouds, and a gradual dawn.
-- **Night creatures:** gloomlings hunt you after dark. Fight them with swords, or stay near campfire light.
+- **Creatures:** gloomlings, brutes and spitting spitters hunt you after dark; golems guard the mountains at any hour. Fight them with swords, or stay near campfire light.
+- **World map:** press M for a full map of the land and sea around you, with your start, bed, vehicles and dropped pack marked.
+- **Glider:** jump from a height and glide. **Weather:** rain waters your fields.
 - **Armor and bags:** woven and copper armor reduce damage and night cold; bags add inventory rows.
 - **Base building:** walls, doors, floors, fences, beds and chests, with a placement preview. Creatures cannot cross walls or step on built floors.
 - **Hunting and light:** hunt deer for meat and hide, and carry a torch to see at night.
@@ -41,6 +43,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 | Mouse wheel | Zoom |
 | `1`–`9` | Select a hotbar slot (drag slots to rearrange) |
 | `Tab` | Inventory and crafting |
+| `M` | World map (scroll to zoom) |
 | `C` | Eat |
 | `X` | Drink (next to a pond, or from a flask) |
 | `F` | Use a bed, chest, campfire or workbench; get on or off a boat or submarine |

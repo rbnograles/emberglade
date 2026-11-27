@@ -114,7 +114,9 @@ export class Sky {
   }
 
   // time: 0..1 of the day. (cx, cy, cz): player. cam: camera position. clock: seconds, for cloud drift.
-  update(time, cx, cy, cz, camDist, cam, clock) {
+  update(time, cx, cy, cz, camDist, cam, clock, raining = false) {
+    // rain eases in and out, dimming the light and greying the sky
+    this.rain = (this.rain ?? 0) + ((raining ? 1 : 0) - (this.rain ?? 0)) * 0.02;
     let i = 0;
     while (i < KEYS.length - 2 && time >= KEYS[i + 1][0]) i++;
     const k0 = KEYS[i], k1 = KEYS[i + 1];
@@ -124,6 +126,8 @@ export class Sky {
     u.horizon.value.copy(a.setHex(k0[4])).lerp(b.setHex(k1[4]), f);
     u.zenith.value.copy(a.setHex(k0[5])).lerp(b.setHex(k1[5]), f);
     u.stars.value = lerp(6);
+    u.horizon.value.lerp(a.setHex(0x9aa7b3), this.rain * 0.7);
+    u.zenith.value.lerp(b.setHex(0x7d8a98), this.rain * 0.7);
     this.scene.background.copy(u.horizon.value);
     this.scene.fog.color.copy(u.horizon.value);
     this.scene.fog.near = camDist + 18;
@@ -133,7 +137,7 @@ export class Sky {
     // at the two hand-overs (6:00 and 18:00) so the change of direction is never seen.
     const flip = smooth(Math.min(1, Math.min(time, Math.abs(time - 0.5), 1 - time) / 0.04));
     this.sun.color.copy(a.setHex(k0[1])).lerp(b.setHex(k1[1]), f);
-    this.sun.intensity = lerp(2) * (0.12 + 0.88 * flip);
+    this.sun.intensity = lerp(2) * (0.12 + 0.88 * flip) * (1 - this.rain * 0.45);
     this.hemi.intensity = lerp(3) + (1 - flip) * 0.3;
     const ang = (time % 0.5) * 2 * Math.PI;
     const dx = Math.cos(ang) * 0.75, dy = Math.max(0.45, Math.min(0.8, Math.sin(ang))), dz = 0.5;

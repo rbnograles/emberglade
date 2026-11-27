@@ -4,6 +4,7 @@ import { loadSave, writeSave, clearSave } from './game/save.js';
 import { settings } from './settings.js';
 import { sfx, unlockAudio, setNight } from './audio.js';
 import { Minimap } from './ui/minimap.js';
+import { BigMap } from './ui/bigmap.js';
 import { buildSettings } from './ui/menu.js';
 import { OBJECTS, CROP_RIPE } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
@@ -54,7 +55,9 @@ const sky = new Sky(scene);
 const particles = new Particles(scene);
 const fires = new Fires(scene);
 const deer = new Deer(scene, game, models.get('deer'));
-const enemies = new Enemies(scene, game, { gloomling: models.get('gloomling'), snapper: models.get('snapper') });
+const enemies = new Enemies(scene, game, {
+  gloomling: models.get('gloomling'), snapper: models.get('snapper'), golem: models.get('golem'), spitter: models.get('spitter'),
+});
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
 const playerModel = new PlayerModel();
@@ -72,6 +75,11 @@ scene.add(marker);
 
 const hud = new Hud(game);
 const minimap = new Minimap(game);
+const bigmap = new BigMap(game);
+$('minimap').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  bigmap.toggle();
+});
 const torch = new THREE.PointLight(0xffb060, 0, 17, 1.4);
 scene.add(torch);
 $('btn-drink').addEventListener('mousedown', (e) => {
@@ -97,6 +105,7 @@ game.on((type, data) => {
   if (type === 'hit') sfx(hitSound);
   else if (type === 'eat' || type === 'drink' || type === 'hurt' || type === 'break') sfx(type);
   else if (type === 'enemygone') sfx('gone');
+  else if (type === 'spit') sfx('pick');
   else if (type === 'dive' || type === 'surface') {
     sfx('splash');
     particles.burst(p.x, WATER_Y + 0.1, p.z, 0xcfeaff, 10);
@@ -234,13 +243,17 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Tab' || e.code === K.inventory || (e.code === K.jump && !paused)) e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'Escape') {
-    if (panels.open) panels.hide();
+    if (bigmap.open) bigmap.hide();
+    else if (panels.open) panels.hide();
     else setPaused(!paused);
     return;
   }
   if (paused) return;
   keys.add(e.code);
-  if (e.code === K.inventory) {
+  if (e.code === K.map) {
+    bigmap.toggle();
+    sfx('ui');
+  } else if (e.code === K.inventory) {
     panels.toggle();
     sfx('ui');
   }
@@ -472,7 +485,8 @@ function step(dt) {
   const sprinting = moving && keys.has(K.sprint) && game.canSprint;
   const swimming = game.swimming;
   const riding = game.vehicle;
-  const speed = riding ? VEHICLES[riding.kind].speed : swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
+  playerModel.gliding = game.gliding;
+  const speed = riding ? VEHICLES[riding.kind].speed : game.gliding ? 7.5 : swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
   if (!panels.open) {
     yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
     if (keys.has(K.camReset)) {
@@ -611,7 +625,7 @@ function step(dt) {
     game.primary(target.x, target.z);
   }
 
-  sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock);
+  sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock, game.raining);
   fires.update(chunks.fires(), p.x, p.z, clock, game.isNight);
   // a held torch lights the way
   const lit = game.held && ITEMS[game.held.id].light;
@@ -625,6 +639,11 @@ function step(dt) {
   enemies.update(dt, clock);
   fish.update(dt, p.x, p.y, p.z);
   vehicles.update(clock);
+  bigmap.update();
+  // weather: rain streaks over the view, and the water surface rises and falls a little
+  $('rain').style.opacity = game.raining && !submerged ? 1 : 0;
+  const swell = Math.sin(clock * 1.3) * 0.035;
+  for (const c of chunks.map.values()) c.water.position.y = swell;
 
   hudTimer -= dt;
   if (hudTimer <= 0) {

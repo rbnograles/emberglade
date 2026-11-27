@@ -54,7 +54,7 @@ export class Minimap {
         c.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
       }
     }
-    const home = p.bed ?? { x: 0, z: 0 };
+    const home = p.bed ?? p.spawn;
     this.marker(home.x + 0.5, home.z + 0.5, '#ffd24a');
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a');
     for (const e of g.enemies) this.marker(e.x, e.z, '#7a4fd0');

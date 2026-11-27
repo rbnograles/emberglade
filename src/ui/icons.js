@@ -14,6 +14,10 @@ const boots = (h) => `........ .${h}${h}..${h}${h}. .${h}${h}..${h}${h}. .${h}${
 const bag = (h) => `..${h}${h}${h}${h}.. .${h}....${h}. ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}bb${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} ${h}${h}${h}${h}${h}${h}${h}${h} .${h}${h}${h}${h}${h}${h}. ........`;
 
 const ART = {
+  crystal: '...c.... ..cwc... ..ccc.c. .cwccccc .cccccwc ..ccccc. ..cc.cc. ........',
+  lantern: '...GG... ..GGGG.. ..GccG.. ..GcwG.. ..GccG.. ..GccG.. ..GGGG.. ........',
+  coral_wall: 'pppopppp popppppo pppppopp ppoppppp pppppppo oppppopp pppopppp ppppppop',
+  glider: '........ wwwwwwww .wwwwww. ..b..b.. ..b..b.. ...bb... ........ ........',
   boat: '........ ........ b......b bb....bb bbbbbbbb .bbbbbb. ........ ........',
   submarine: '....G... ...yy... ..yyyy.. .yyyyyyG yycyycyG .yyyyyyG ..oooo.. ........',
   kelp: '...L.... ..LL.... ..L..L.. .LL..L.. .L..LL.. .LL.L... ..L.LL.. ..L..L..',

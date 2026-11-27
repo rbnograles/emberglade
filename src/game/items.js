@@ -31,9 +31,9 @@ export const ITEMS = {
   roasted_apple: { name: 'Roasted apple', food: 4, hint: 'C or right click: eat' },
   bread: { name: 'Bread', food: 6, hint: 'C or right click: eat' },
   flower: { name: 'Flower', place: 'flower', hint: 'RMB: place' },
-  stone_axe: { name: 'Stone axe', tool: 'axe', power: 1, uses: 60, stack: 1, hint: 'LMB: chop trees' },
+  stone_axe: { name: 'Stone axe', tool: 'axe', power: 1, uses: 90, stack: 1, hint: 'LMB: chop trees' },
   copper_axe: { name: 'Copper axe', tool: 'axe', power: 2, uses: 200, stack: 1, hint: 'LMB: chop trees' },
-  stone_pickaxe: { name: 'Stone pickaxe', tool: 'pickaxe', power: 1, uses: 60, stack: 1, hint: 'LMB: mine rocks' },
+  stone_pickaxe: { name: 'Stone pickaxe', tool: 'pickaxe', power: 1, uses: 90, stack: 1, hint: 'LMB: mine rocks' },
   copper_pickaxe: { name: 'Copper pickaxe', tool: 'pickaxe', power: 2, uses: 200, stack: 1, hint: 'LMB: mine rocks' },
   stone_sword: { name: 'Stone sword', weapon: 3, uses: 80, stack: 1, hint: 'LMB: attack' },
   copper_sword: { name: 'Copper sword', weapon: 5, uses: 240, stack: 1, hint: 'LMB: attack' },
@@ -54,6 +54,10 @@ export const ITEMS = {
   // bags are worn on the back and add inventory slots
   woven_bag: { name: 'Woven bag', armor: 'back', bag: 9, color: 0xd9c27a, stack: 1, hint: 'RMB: wear (+9 slots)' },
   trail_pack: { name: 'Trail pack', armor: 'back', bag: 18, color: 0x8a5a34, stack: 1, hint: 'RMB: wear (+18 slots)' },
+  crystal: { name: 'Crystal' },
+  lantern: { name: 'Crystal lantern', place: 'lantern', hint: 'RMB: place (lights the area, no fuel needed)' },
+  coral_wall: { name: 'Coral wall', place: 'coral_wall', hint: 'RMB: place' },
+  glider: { name: 'Glider', glide: true, stack: 1, hint: 'Hold it, jump from a height and hold Space to glide' },
   boat: { name: 'Boat', vehicle: 'boat', stack: 1, hint: 'RMB on water: launch. F next to it: get on' },
   submarine: { name: 'Submarine', vehicle: 'submarine', stack: 1, hint: 'RMB on deep water: launch. F next to it: get in' },
   // armor: which body slot it goes on, its armor points and the colour shown on the character

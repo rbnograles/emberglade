@@ -3,8 +3,8 @@ export const MAX_HUNGER = 10;
 export const MAX_THIRST = 10;
 export const MAX_STAMINA = 10;
 
-const HUNGER_SECONDS = 45; // seconds per food point at rest
-const THIRST_SECONDS = 32; // seconds per water point at rest
+const HUNGER_SECONDS = 52; // seconds per food point at rest
+const THIRST_SECONDS = 44; // seconds per water point at rest
 const STARVE_SECONDS = 8; // seconds per heart lost while starving or parched
 const REGEN_SECONDS = 6; // seconds per heart regained while well fed and watered
 const SPRINT_SECONDS = 6.5; // seconds of sprinting on full stamina

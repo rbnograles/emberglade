@@ -3,13 +3,13 @@ const KEY = 'emberglade-settings';
 
 export const DEFAULT_KEYS = {
   up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', sprint: 'ShiftLeft', jump: 'Space',
-  inventory: 'Tab', eat: 'KeyC', drink: 'KeyX', use: 'KeyF', camLeft: 'KeyQ', camRight: 'KeyE', camReset: 'KeyR',
+  inventory: 'Tab', eat: 'KeyC', drink: 'KeyX', use: 'KeyF', camLeft: 'KeyQ', camRight: 'KeyE', camReset: 'KeyR', map: 'KeyM',
 };
 
 export const KEY_LABELS = {
   up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', sprint: 'Sprint', jump: 'Jump',
   inventory: 'Inventory / craft', eat: 'Eat', drink: 'Drink', use: 'Use (bed, chest...)',
-  camLeft: 'Turn view left', camRight: 'Turn view right', camReset: 'Reset view',
+  camLeft: 'Turn view left', camRight: 'Turn view right', camReset: 'Reset view', map: 'World map',
 };
 
 function load() {

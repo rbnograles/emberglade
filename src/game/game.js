@@ -1,4 +1,5 @@
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
+import { hash2 } from '../core/noise.js';
 import { WorldState } from '../world/worldstate.js';
 import { OBJECTS, CROP_RIPE } from '../world/objects.js';
 import { ITEMS, stackSize, ARMOR_SLOTS, MAX_DEFENSE, BASE_STORAGE, FLASK_DRINKS } from './items.js';
@@ -15,6 +16,7 @@ export const CHEST_SLOTS = 18;
 const STEP_LIP = 0.15; // height the player can walk up without jumping
 const JUMP_SPEED = 6.2; // about 0.95 units high: clears a 0.5 step comfortably
 const GRAVITY = 20;
+const GLIDE_FALL = 1.2; // units per second a glider sinks
 const FLOAT_SINK = 0.95; // how far below the surface a swimmer's feet hang
 const BANK_LIP = 1.45; // bank height you can climb out of the water onto
 const DIVE_SPEED = 2.6, RISE_SPEED = 3, BUOYANCY = 0.7; // vertical speeds under water
@@ -26,17 +28,21 @@ export const VEHICLES = {
 export const MAX_BREATH = 10;
 const BREATH_SECONDS = 26; // seconds of air on a full breath
 const SUFFOCATE_SECONDS = 1.2; // seconds per heart lost once the air is gone
-const SWIM_SECONDS = 22; // seconds of swimming on full energy before you start to drown
+const SWIM_SECONDS = 30; // seconds of swimming on full energy before you start to drown
 const DROWN_SECONDS = 1.6; // seconds per heart lost once out of energy in deep water
 // brutes are bigger, slower and hit harder; they start turning up from day 4
 export const ENEMY_KINDS = {
   gloomling: { hp: 6, speed: 2.5, damage: 1.5, size: 1 },
   brute: { hp: 14, speed: 1.9, damage: 2.5, size: 1.6 },
   // sea: lives in deep water at any hour and hunts swimmers
-  snapper: { hp: 9, speed: 2.9, damage: 2, size: 1, sea: true },
+  snapper: { hp: 9, speed: 2.9, damage: 1.5, size: 1, sea: true },
+  // golems guard the mountains by day and night: slow, tough, and they hit hard
+  golem: { hp: 22, speed: 1.5, damage: 3, size: 1, mountain: true },
+  // spitters keep their distance and lob glowing spit
+  spitter: { hp: 5, speed: 2.2, damage: 1.2, size: 0.85, ranged: true },
 };
 const FIRE_SAFE = 4; // creatures keep this far from a campfire
-const COLD_HUNGER = 1.5; // extra hunger drain when cold with no armor (x2.5 in total)
+const COLD_HUNGER = 1; // extra hunger drain when cold with no armor (x2 in total)
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
@@ -54,6 +60,8 @@ export class Game {
     this.nextEnemyId = 1;
     this.spawnTimer = 3;
     this.seaTimer = 6;
+    this.golemTimer = 8;
+    this.projectiles = []; // spit in flight: {x, z, y, vx, vz, life, damage}
     this.knock = null;
     this.vehicles = save?.vehicles ?? []; // boats and submarines: {id, kind, x, z, y, dir}
     this.nextVehicleId = 1 + Math.max(0, ...this.vehicles.map((v) => v.id));
@@ -65,6 +73,12 @@ export class Game {
     this.time = save?.time ?? 0.08; // 0 = 6:00, 0.25 = noon, 0.5 = 18:00
     this.selected = save?.selected ?? 0;
     this.player = save?.player ?? { x: 0.5, z: 0.5, health: MAX_HEALTH, hunger: 10, water: CAN_CAPACITY, bed: null };
+    // A brand new world starts somewhere random; worlds from before this keep the old start at the origin.
+    this.player.spawn ??= save ? { x: 0, z: 0 } : this.pickSpawn();
+    if (!save) {
+      this.player.x = this.player.spawn.x + 0.5;
+      this.player.z = this.player.spawn.z + 0.5;
+    }
     this.player.y ??= this.ground(this.player.x, this.player.z);
     this.player.vy ??= 0;
     this.player.thirst ??= MAX_THIRST;
@@ -82,11 +96,33 @@ export class Game {
     this.listeners = [];
   }
 
+  // A friendly place to begin: gentle lowland with trees close by and fresh water not far off.
+  pickSpawn() {
+    const lowland = new Set(['meadow', 'autumn', 'blossom', 'pine']);
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const x = Math.round((Math.random() - 0.5) * 6000), z = Math.round((Math.random() - 0.5) * 6000);
+      const t = this.gen.tile(x, z);
+      if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
+      let trees = 0, pond = false;
+      for (let dz = -24; dz <= 24; dz += 2) {
+        for (let dx = -24; dx <= 24; dx += 2) {
+          const n = this.gen.tile(x + dx, z + dz);
+          if (n.water && !n.salt) pond = true;
+          if (Math.abs(dx) <= 10 && Math.abs(dz) <= 10 && this.gen.object(x + dx, z + dz)?.t.startsWith('tree_')) trees++;
+        }
+      }
+      if (trees >= 3 && pond) return { x, z };
+    }
+    return { x: 0, z: 0 };
+  }
+
   on(fn) { this.listeners.push(fn); }
   emit(type, data = {}) { for (const fn of this.listeners) fn(type, data); }
   toast(text) { this.emit('toast', { text }); }
 
   get held() { return this.inv.slots[this.selected]; }
+  // rain: every third day or so, for the middle part of the day; it waters the fields
+  get raining() { return hash2(this.day, 7, this.seed) < 0.3 && this.time > 0.14 && this.time < 0.4; }
   get canSprint() { return !this.player.winded && this.player.stamina > 0 && !this.inWater && !this.player.riding; }
   get isNight() { return this.time > 0.56 && this.time < 0.96; }
 
@@ -309,7 +345,13 @@ export class Game {
     if (p.y <= g + 1e-4 && p.vy <= 0) {
       p.y = g;
       p.vy = jump && !this.swimming ? JUMP_SPEED : 0;
-    } else p.vy -= GRAVITY * dt;
+    } else {
+      p.vy -= GRAVITY * dt;
+      // a glider held in the hand turns a fall into a long, slow descent
+      this.gliding = jump && p.vy < 0 && !!(this.held && ITEMS[this.held.id].glide);
+      if (this.gliding) p.vy = Math.max(p.vy, -GLIDE_FALL);
+    }
+    if (p.y <= g + 1e-4) this.gliding = false;
     p.y = Math.max(g, p.y + p.vy * dt);
   }
 
@@ -916,7 +958,9 @@ export class Game {
     const p = this.player, a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 7;
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
     if (!this.enemyCanStand(x, z) || this.nearCampfire(x, z, 8)) return null;
-    return this.spawnEnemy(x, z, this.day >= 4 && Math.random() < 0.25 ? 'brute' : 'gloomling');
+    const roll = Math.random();
+    const kind = this.day >= 4 && roll < 0.22 ? 'brute' : this.day >= 3 && roll > 0.78 ? 'spitter' : 'gloomling';
+    return this.spawnEnemy(x, z, kind);
   }
 
   // A snapper appears out in the deep while you are swimming in the sea.
@@ -939,14 +983,27 @@ export class Game {
     const p = this.player, night = this.isNight;
     const seaCount = this.enemies.filter((e) => ENEMY_KINDS[e.kind].sea).length;
     const inSea = this.swimming && this.gen.tile(Math.floor(p.x), Math.floor(p.z)).salt;
-    if (inSea && seaCount < (night ? 3 : 2)) {
+    if (inSea && seaCount < (night ? 2 : 1)) {
       this.seaTimer -= dt;
       if (this.seaTimer <= 0) {
-        this.seaTimer = 9;
+        this.seaTimer = 14;
         this.trySpawnSeaEnemy();
       }
     }
-    if (night && this.enemies.length - seaCount < Math.min(8, 3 + Math.floor(this.day / 2))) {
+    const golems = this.enemies.filter((e) => e.kind === 'golem').length;
+    const here = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).biome;
+    if ((here === 'mountain' || here === 'snow') && golems < 2) {
+      this.golemTimer -= dt;
+      if (this.golemTimer <= 0) {
+        this.golemTimer = 16;
+        const a = Math.random() * Math.PI * 2, r = 12 + Math.random() * 6;
+        const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+        const b = this.gen.tile(Math.floor(x), Math.floor(z)).biome;
+        if ((b === 'mountain' || b === 'snow') && this.enemyCanStand(x, z)) this.spawnEnemy(x, z, 'golem');
+      }
+    }
+    // the first night is quiet, to give a new player time to find their feet
+    if (night && this.day >= 2 && this.enemies.length - seaCount - golems < Math.min(8, 2 + Math.floor(this.day / 2))) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 5;
@@ -957,9 +1014,10 @@ export class Game {
       const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz);
       const sea = !!ENEMY_KINDS[e.kind].sea;
       // land creatures hunt at night; sea creatures hunt whoever is in deep water
-      const hunting = sea ? this.swimming : night;
+      const spec = ENEMY_KINDS[e.kind];
+      const hunting = sea ? this.swimming : spec.mountain ? true : night;
       const canStand = (x, z) => (sea ? this.deepAt(x, z) : this.enemyCanStand(x, z));
-      if (!night && !sea) e.hp -= dt * 3; // daylight burns the night creatures away
+      if (!night && !sea && !spec.mountain) e.hp -= dt * 3; // daylight burns the night creatures away
       if (e.hp <= 0 || d > 48) {
         this.removeEnemy(e);
         continue;
@@ -971,7 +1029,17 @@ export class Game {
         e.stun -= dt;
         mx = e.kx * dt;
         mz = e.kz * dt;
-      } else if (hunting && d < (sea ? 11 : 16) && d > 0.6) {
+      } else if (spec.ranged && hunting && d < 16) {
+        // keep about six tiles away: close in when far, back off when near, and spit when in range
+        const dir = d > 7 ? 1 : d < 4.5 ? -1 : 0;
+        mx = (dx / d) * spec.speed * dir * dt;
+        mz = (dz / d) * spec.speed * dir * dt;
+        if (d < 9 && e.cool <= 0) {
+          e.cool = 2.6;
+          this.projectiles.push({ x: e.x, z: e.z, y: e.y + 0.6, vx: (dx / d) * 6.5, vz: (dz / d) * 6.5, life: 2, damage: spec.damage });
+          this.emit('spit', { x: e.x, z: e.z });
+        }
+      } else if (hunting && d < (sea ? 11 : spec.mountain ? 10 : 16) && d > 0.6) {
         mx = (dx / d) * ENEMY_KINDS[e.kind].speed * dt;
         mz = (dz / d) * ENEMY_KINDS[e.kind].speed * dt;
       } else if (d >= 16) {
@@ -1000,10 +1068,24 @@ export class Game {
       } else e.y = this.ground(e.x, e.z);
       e.moving = mx !== 0 || mz !== 0;
       if (mx || mz) e.dir = Math.atan2(-mz, mx);
-      if (hunting && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
+      if (hunting && !spec.ranged && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
         this.hurt(ENEMY_KINDS[e.kind].damage, e);
       }
+    }
+  }
+
+  // Spit in flight: it stops at walls and hurts the player if it lands.
+  updateProjectiles(dt) {
+    const p = this.player;
+    for (const s of [...this.projectiles]) {
+      s.x += s.vx * dt;
+      s.z += s.vz * dt;
+      s.life -= dt;
+      const hit = Math.hypot(s.x - p.x, s.z - p.z) < 0.55 && Math.abs(s.y - p.y - 0.7) < 1.2;
+      const wall = OBJECTS[this.world.get(Math.floor(s.x), Math.floor(s.z))?.t]?.block;
+      if (hit) this.hurt(s.damage, s);
+      if (hit || wall || s.life <= 0) this.projectiles.splice(this.projectiles.indexOf(s), 1);
     }
   }
 
@@ -1038,7 +1120,13 @@ export class Game {
     if (e.hp <= 0) {
       this.removeEnemy(e);
       this.record('kill');
-      if (e.kind === 'snapper') {
+      if (e.kind === 'golem') {
+        this.give('stone', 3);
+        this.give('iron_ore', 2);
+        if (Math.random() < 0.5) this.give('crystal', 1);
+      } else if (e.kind === 'spitter') {
+        if (Math.random() < 0.6) this.give('coal', 1);
+      } else if (e.kind === 'snapper') {
         this.give('raw_fish', 2);
         if (Math.random() < 0.25) this.give('pearl', 1);
       } else if (e.kind === 'brute') {
@@ -1064,7 +1152,19 @@ export class Game {
       this.move(this.knock.x * dt, this.knock.z * dt);
       if ((this.knock.t -= dt) <= 0) this.knock = null;
     }
+    // rain soaks every tilled plot, once when it starts
+    const rain = this.raining;
+    if (rain && !this.wasRaining) {
+      for (const [key, o] of [...this.world.over]) {
+        if (o.t !== 'soil' || o.wet) continue;
+        const [x, z] = key.split(',').map(Number);
+        this.world.set(x, z, { ...o, wet: true });
+      }
+      this.toast('It starts to rain');
+    }
+    this.wasRaining = rain;
     this.updateEnemies(dt);
+    this.updateProjectiles(dt);
     // breath: runs down with your head under water, comes back quickly at the surface
     const pl = this.player, under = this.submerged;
     if (under) {
@@ -1127,8 +1227,8 @@ export class Game {
       p.x = p.bed.x + 0.5;
       p.z = p.bed.z + 1.5;
     } else {
-      p.x = 0.5;
-      p.z = 0.5;
+      p.x = p.spawn.x + 0.5;
+      p.z = p.spawn.z + 0.5;
     }
     p.y = this.ground(p.x, p.z);
     p.vy = 0;

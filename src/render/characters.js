@@ -50,6 +50,10 @@ export class PlayerModel {
     g.add(this.armorParts[0][0], this.armorParts[1][0], this.armorParts[3][0]);
     this.legL.add(this.armorParts[2][0]);
     this.legR.add(this.armorParts[2][1]);
+    // the glider's wing, shown overhead while gliding
+    this.wing = part(2.2, 0.06, 0.9, 0xf2efe6, 0, 1.95, 0.05);
+    this.wing.visible = false;
+    g.add(this.wing);
     this.setArmor([null, null, null, null]);
     // Remember every part's own colour so a damage flash can tint it red and fade back.
     this.hurt = 0;
@@ -136,9 +140,13 @@ export class PlayerModel {
     this.legL.rotation.x = s;
     this.legR.rotation.x = -s;
     this.armL.rotation.x = -s;
+    // gliding: arms up holding the wing
+    this.wing.visible = !!this.gliding;
+    if (this.gliding) this.armL.rotation.x = -3;
     this.swing = Math.max(0, this.swing - dt * 4);
     this.armR.rotation.x = this.swing > 0 ? -2.4 * Math.sin(this.swing * Math.PI) : s;
     this.armR.rotation.z = 0;
+    if (this.gliding && this.swing <= 0) this.armR.rotation.x = -3;
     if (swimming) {
       // afloat: arms paddle out in front, legs kick gently, and the body bobs with the water
       const paddle = Math.sin(this.phase) * 0.55;
@@ -294,7 +302,14 @@ export class Enemies {
     this.scene = scene;
     this.game = game;
     // one shape per kind of creature (brutes reuse the gloomling, scaled up)
-    this.geometries = { gloomling: toGeometry(model.gloomling), brute: toGeometry(model.gloomling), snapper: toGeometry(model.snapper) };
+    this.geometries = {
+      gloomling: toGeometry(model.gloomling), brute: toGeometry(model.gloomling), snapper: toGeometry(model.snapper),
+      golem: toGeometry(model.golem), spitter: toGeometry(model.spitter),
+    };
+    // spit in flight
+    this.spitGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+    this.spitMat = new THREE.MeshBasicMaterial({ color: 0xb8f25a });
+    this.spits = [];
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1f44 });
     this.meshes = new Map(); // enemy id -> mesh
   }
@@ -326,8 +341,23 @@ export class Enemies {
         this.meshes.delete(id);
       }
     }
+    // one little glowing cube per projectile
+    const shots = this.game.projectiles;
+    while (this.spits.length < shots.length) {
+      const s = new THREE.Mesh(this.spitGeo, this.spitMat);
+      this.scene.add(s);
+      this.spits.push(s);
+    }
+    this.spits.forEach((s, i) => {
+      s.visible = i < shots.length;
+      if (s.visible) {
+        s.position.set(shots[i].x, shots[i].y, shots[i].z);
+        s.rotation.set(clock * 9, clock * 7, 0);
+      }
+    });
   }
 }
+
 // Schools of small fish in the sea. Harmless, quick to dart away, and good eating if you can catch one.
 export class Fish {
   constructor(scene, game, model) {

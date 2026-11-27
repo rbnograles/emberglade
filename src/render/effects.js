@@ -71,8 +71,8 @@ export class Fires {
     fires.sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
     this.flames.forEach((f, i) => {
       const fire = fires[i];
-      f.g.visible = !!fire;
-      if (!fire) return;
+      f.g.visible = !!fire && !fire.lantern; // lanterns glow without a flame
+      if (!fire || fire.lantern) return;
       const flick = Math.sin(t * 11 + i * 2) * 0.5 + Math.sin(t * 17 + i) * 0.5;
       f.g.position.set(fire.x, fire.y + 0.3, fire.z);
       f.outer.scale.set(0.3, 0.45 + flick * 0.08, 0.3);
@@ -88,7 +88,8 @@ export class Fires {
         return;
       }
       l.position.set(fire.x, fire.y + 1.1, fire.z);
-      l.intensity = (night ? 11 : 3) * (1 + Math.sin(t * 13 + i * 3) * 0.08);
+      l.color.setHex(fire.lantern ? 0xbfefff : 0xff8a3a);
+      l.intensity = (fire.lantern ? 0.8 : 1) * (night ? 11 : 3) * (1 + Math.sin(t * 13 + i * 3) * 0.08);
     });
   }
 }

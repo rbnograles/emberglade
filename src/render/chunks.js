@@ -175,6 +175,7 @@ export class Chunks {
         } else if (obj.placed && obj.t !== 'flower') {
           add(obj.t);
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
+          if (obj.t === 'lantern') c.fires.push({ x: px, y, z: pz, lantern: true });
         } else {
           // Natural objects get a stable random turn, size and (if small) nudge.
           const small = obj.t === 'flower' || obj.t === 'tallgrass' || obj.t === 'stick' || obj.t === 'pebble' || obj.t === 'clam';

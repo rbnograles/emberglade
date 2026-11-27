@@ -179,6 +179,26 @@ export function buildModels() {
       .box(1, 0, 1, 9, 0, 2, 0xd9803a).box(-1, 1, 1, -1, 4, 2, 0x6b7078)
       .build(0.2));
   }
+  // ---- newer creatures and mountain things ----
+  m.set('golem', new Vox()
+    .box(0, 0, 0, 1, 2, 1, 0x7d8387).box(4, 0, 0, 5, 2, 1, 0x7d8387).box(0, 3, 0, 5, 7, 2, mix(GRAYS, 61))
+    .box(-2, 3, 0, -1, 6, 1, 0x8b9098).box(6, 3, 0, 7, 6, 1, 0x8b9098).box(1, 8, 0, 4, 10, 2, mix(GRAYS, 62))
+    .set(2, 9, 3, 0x7ff0ff).set(4, 9, 3, 0x7ff0ff).box(2, 5, 3, 3, 5, 3, 0x7ff0ff)
+    .build(0.2));
+  m.set('spitter', new Vox()
+    .blob(0, 2, 0, 2.2, 2.4, 2.2, mix([0x4f7a3a, 0x5c8a44, 0x436a30], 63), 0.25, 63)
+    .set(2, 3, -1, 0xffe27a).set(2, 3, 0, 0xffe27a).box(2, 1, -1, 2, 1, 0, 0xb8f25a)
+    .build(0.16));
+  m.set('rock_crystal', new Vox()
+    .blob(0, 1, 0, 2.2, 1.5, 2.0, mix(GRAYS, 64), 0.3, 64)
+    .box(0, 2, 0, 0, 6, 0, 0x9fe8ff).box(-1, 2, -1, -1, 4, -1, 0x7fd4f2).box(1, 2, 1, 1, 5, 1, 0xc8f4ff)
+    .build(0.22));
+  m.set('lantern', new Vox()
+    .box(0, 0, 0, 2, 0, 2, 0x6b7078).box(0, 4, 0, 2, 4, 2, 0x6b7078).box(1, 5, 1, 1, 5, 1, 0x6b7078)
+    .box(0, 1, 0, 0, 3, 0, 0x6b7078).box(2, 1, 0, 2, 3, 0, 0x6b7078).box(0, 1, 2, 0, 3, 2, 0x6b7078).box(2, 1, 2, 2, 3, 2, 0x6b7078)
+    .box(1, 1, 1, 1, 3, 1, 0xc8f4ff)
+    .build(0.16));
+  m.set('coral_wall', new Vox().box(0, 0, 0, 3, 5, 3, (x, y, z) => [0xf0728a, 0xf78fa3, 0xf2a03d][(x * 3 + y * 5 + z * 7) % 3]).build(0.25, { jitter: 0.07 }));
   m.set('deer', deer());
   // gloomling: a dark blob facing +x with two bright eyes
   m.set('gloomling', new Vox()

@@ -308,7 +308,7 @@ describe('game rules', () => {
 
     g.time = 0.7; // night, out in the open
     expect(g.updateStatus()).toBe('cold');
-    expect(g.hungerRate).toBeCloseTo(2);
+    expect(g.hungerRate).toBeCloseTo(1 + 2 / 3); // cold doubles hunger; 2 of 6 armor points take a third of that off
     g.world.set(2, 0, { t: 'campfire', placed: true });
     expect(g.updateStatus()).toBe('warm');
     expect(g.hungerRate).toBe(1);
@@ -376,7 +376,7 @@ describe('game rules', () => {
   it('gets thirsty, drinks at ponds and from a flask', () => {
     const g = newGame();
     const p = g.player;
-    g.tick(64); // two water points' worth of time
+    g.tick(88); // two water points' worth of time
     expect(p.thirst).toBeCloseTo(8);
     expect(g.drinkSource()).toBe(null);
     expect(g.drinkWater()).toBe(false);
@@ -432,9 +432,9 @@ describe('game rules', () => {
     expect(p.x).toBeCloseTo(sx + 0.8);
     expect(g.blocked(p.x, p.z, 0.3, true)).toBe(true); // ...but it does block animals
     for (let i = 0; i < 100; i++) g.tick(0.1); // 10 seconds
-    expect(p.stamina).toBeCloseTo(10 - 100 / 22, 1);
+    expect(p.stamina).toBeCloseTo(10 - 100 / 30, 1);
     expect(p.health).toBe(10);
-    for (let i = 0; i < 160; i++) g.tick(0.1);
+    for (let i = 0; i < 260; i++) g.tick(0.1);
     expect(p.stamina).toBe(0);
     expect(p.health).toBeLessThan(10);
 
@@ -623,6 +623,75 @@ describe('game rules', () => {
     expect(copy.vehicles.length).toBe(1);
   });
 
+  it('starts new worlds somewhere random but friendly', () => {
+    const spots = new Set();
+    for (let i = 0; i < 4; i++) {
+      const g = new Game(null);
+      const { x, z } = g.player.spawn;
+      spots.add(x + ',' + z);
+      const t = g.gen.tile(x, z);
+      expect(t.water).toBe(false);
+      expect(['meadow', 'autumn', 'blossom', 'pine']).toContain(t.biome);
+      expect(g.player.x).toBe(x + 0.5);
+      expect(g.blocked(g.player.x, g.player.z)).toBe(false);
+      g.hurt(99); // fainting with no bed brings you back to your own start
+      expect(Math.floor(g.player.x)).toBe(x);
+    }
+    expect(spots.size).toBeGreaterThan(1);
+    expect(newGame().player.spawn).toEqual({ x: 0, z: 0 }); // older worlds keep the origin
+  });
+
+  it('glides, meets golems and spitters, and gets rained on', () => {
+    const g = newGame();
+    const p = g.player;
+    g.spawnTimer = g.seaTimer = g.golemTimer = Infinity;
+
+    // glider: holding it and the jump key turns a fall into a slow descent
+    const fall = (held) => {
+      g.inv.slots[0] = held;
+      Object.assign(p, { y: g.ground(p.x, p.z) + 6, vy: 0 });
+      let t = 0;
+      while (p.y > g.ground(p.x, p.z) + 0.01 && t < 20) { g.physics(0.02, true); t += 0.02; }
+      return t;
+    };
+    const plain = fall(null), gliding = fall({ id: 'glider', n: 1 });
+    expect(plain).toBeLessThan(1.2);
+    expect(gliding).toBeGreaterThan(4);
+
+    // golem: hunts by day, and daylight does not burn it
+    g.time = 0.25;
+    const golem = g.spawnEnemy(4.5, 0.5, 'golem');
+    for (let i = 0; i < 90; i++) g.updateEnemies(1 / 30);
+    expect(golem.hp).toBe(22);
+    expect(Math.hypot(golem.x - p.x, golem.z - p.z)).toBeLessThan(3);
+    g.removeEnemy(golem);
+
+    // spitter: stays back and spits; the spit hurts, and a wall stops it
+    g.time = 0.7;
+    Object.assign(p, { health: 10, y: g.ground(p.x, p.z) });
+    for (let x = 1; x <= 8; x++) for (let z = -1; z <= 1; z++) g.world.set(x, z, { t: 'empty' });
+    const spitter = g.spawnEnemy(6.5, 0.5, 'spitter');
+    for (let i = 0; i < 90; i++) { g.updateEnemies(1 / 30); g.updateProjectiles(1 / 30); }
+    expect(p.health).toBeLessThan(10);
+    expect(Math.hypot(spitter.x - p.x, spitter.z - p.z)).toBeGreaterThan(3.5);
+    Object.assign(p, { health: 10, x: 0.5, z: 0.5 });
+    g.projectiles.length = 0;
+    for (let z = -2; z <= 2; z++) g.world.set(3, z, { t: 'stone_wall', placed: true });
+    spitter.x = 6.5;
+    spitter.z = 0.5;
+    spitter.cool = 0;
+    for (let i = 0; i < 60; i++) { g.updateEnemies(1 / 30); g.updateProjectiles(1 / 30); }
+    expect(p.health).toBe(10);
+
+    // rain waters the fields
+    g.world.set(0, 5, { t: 'soil', wet: false, crop: 0, placed: true });
+    let rainy = 1;
+    while (!(g.day = rainy, g.time = 0.2, g.raining)) rainy++;
+    g.enemies.length = 0;
+    g.tick(0.1);
+    expect(g.world.get(0, 5).wet).toBe(true);
+  });
+
   it('tires from sprinting and recovers', () => {    const g = newGame();
     const p = g.player;
     expect(g.canSprint).toBe(true);
@@ -679,7 +748,7 @@ describe('game rules', () => {
     g.inv.slots[0] = { id: 'stone_axe', n: 1 };
     const [x, z] = findTile(g, (o) => o?.t.startsWith('tree_'));
     g.primary(x, z);
-    expect(g.inv.slots[0].d).toBe(59);
+    expect(g.inv.slots[0].d).toBe(89);
   });
 
   it('leaves a pack behind when you faint, and gives it back', () => {
