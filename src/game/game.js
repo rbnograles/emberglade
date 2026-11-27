@@ -716,7 +716,10 @@ export class Game {
   // under your feet keeps you warm, and armor cuts the effect.
   updateStatus() {
     const p = this.player, px = Math.floor(p.x), pz = Math.floor(p.z);
-    if (!this.isNight) return (this.status = 'ok');
+    // the frozen wastes and the snowy peaks are cold at any hour
+    const biome = this.gen.tile(px, pz).biome;
+    const freezing = biome === 'winter' || biome === 'snow';
+    if (!this.isNight && !freezing) return (this.status = 'ok');
     if (this.world.getFloor(px, pz)) return (this.status = 'sheltered');
     for (let z = pz - 5; z <= pz + 5; z++) {
       for (let x = px - 5; x <= px + 5; x++) if (this.world.get(x, z)?.t === 'campfire') return (this.status = 'warm');
@@ -824,7 +827,7 @@ export class Game {
     const def = this.held ? ITEMS[this.held.id] : null;
     if (!def || (!def.place && !def.floor) || !this.inReach(tx, tz)) return false;
     const obj = this.world.get(tx, tz);
-    if (this.gen.tile(tx, tz).water) return false;
+    if (this.gen.tile(tx, tz).water || this.gen.tile(tx, tz).lava) return false;
     if (def.floor) return !this.world.getFloor(tx, tz) && !(obj && !obj.placed) && obj?.t !== 'soil';
     const p = this.player;
     return !obj && !(tx === Math.floor(p.x) && tz === Math.floor(p.z));
@@ -945,6 +948,7 @@ export class Game {
 
   // Can a creature stand here?
   enemyCanStand(x, z) {
+    if (this.gen.tile(Math.floor(x), Math.floor(z)).lava) return false; // nothing walks into lava
     return !this.blocked(x, z, 0.3, true) && !this.world.getFloor(Math.floor(x), Math.floor(z)) && !this.nearCampfire(x, z, FIRE_SAFE);
   }
 
@@ -1163,6 +1167,14 @@ export class Game {
       this.toast('It starts to rain');
     }
     this.wasRaining = rain;
+    // standing in lava burns, again and again until you get out
+    const here = this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z));
+    this.burnTimer = Math.max(0, (this.burnTimer ?? 0) - dt);
+    if (here.lava && this.player.y <= here.h + 0.1 && this.burnTimer <= 0) {
+      this.burnTimer = 0.6;
+      this.toast('The lava burns!');
+      this.hurt(2);
+    }
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
     // breath: runs down with your head under water, comes back quickly at the surface

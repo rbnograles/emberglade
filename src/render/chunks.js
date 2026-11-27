@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { hash2 } from '../core/noise.js';
-import { BIOMES, SHORE, WATER_COLORS, SEABED_COLORS } from '../world/biomes.js';
+import { BIOMES, SHORE, WATER_COLORS, SEABED_COLORS, LAVA_COLORS, ICE_COLORS } from '../world/biomes.js';
 import { WATER_Y } from '../world/worldgen.js';
 import { rgb, mergeModels } from './voxel.js';
 import { OBJECTS } from '../world/objects.js';
@@ -14,6 +14,7 @@ const SHORE_GROUND = linearPair(SHORE.ground);
 const WATER = linearPair(WATER_COLORS);
 const SIDE_TINT = rgb(0x9a7a5a);
 const SEABED = [rgb(SEABED_COLORS.shallow), rgb(SEABED_COLORS.deep)];
+const LAVA = linearPair(LAVA_COLORS), ICE = linearPair(ICE_COLORS);
 
 export function toGeometry({ pos, norm, col, idx }) {
   const g = new THREE.BufferGeometry();
@@ -36,6 +37,7 @@ export class Chunks {
     this.dirty = new Set();
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.objectMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     this.waterMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthWrite: false });
     this.world.onChange((x, z) => {
       // Neighbours too, so fences across a chunk border reconnect.
@@ -59,9 +61,10 @@ export class Chunks {
 
     for (const [key, c] of this.map) {
       if (Math.abs(c.cx - ccx) > RADIUS + 1 || Math.abs(c.cz - ccz) > RADIUS + 1) {
-        this.scene.remove(c.terrain, c.water, c.objects);
+        this.scene.remove(c.terrain, c.water, c.lava, c.objects);
         c.terrain.geometry.dispose();
         c.water.geometry.dispose();
+        c.lava.geometry.dispose();
         c.objects.geometry.dispose();
         this.map.delete(key);
       }
@@ -79,12 +82,13 @@ export class Chunks {
     terrain.receiveShadow = true;
     const water = new THREE.Mesh(built.water, this.waterMat);
     water.renderOrder = 1;
+    const lava = new THREE.Mesh(built.lava, this.lavaMat);
     const objects = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     objects.castShadow = true;
     objects.receiveShadow = true;
-    const c = { cx, cz, terrain, water, objects, fires: [] };
+    const c = { cx, cz, terrain, water, lava, objects, fires: [] };
     this.buildObjects(c);
-    this.scene.add(terrain, water, objects);
+    this.scene.add(terrain, water, lava, objects);
     this.map.set(cx + ',' + cz, c);
   }
 
@@ -106,7 +110,7 @@ export class Chunks {
       });
       return { quad, done };
     };
-    const land = maker(), water = maker();
+    const land = maker(), water = maker(), lava = maker();
     // the solid surface of a tile: the bed under water, the ground elsewhere
     const floor = (x, z) => {
       const t = this.gen.tile(x, z);
@@ -119,13 +123,18 @@ export class Chunks {
         let c;
         if (t.water) {
           // bed: sandy in the shallows, fading to dark blue-grey in the deep
-          const depth = Math.min(1, (WATER_Y - t.bed) / 5);
+          const depth = Math.min(1, (WATER_Y - t.bed) / 9);
           c = [0, 1, 2].map((i) => (SEABED[0][i] + (SEABED[1][i] - SEABED[0][i]) * depth) * shade);
           const w = [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
           water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w);
         } else {
-          const pair = t.shore ? SHORE_GROUND : GROUND[t.biome];
+          const pair = t.ice ? ICE : t.shore ? SHORE_GROUND : GROUND[t.biome];
           c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
+          // lava glows: it gets its own unlit layer just above the rock
+          if (t.lava) {
+            const g = [0, 1, 2].map((i) => LAVA[0][i] + (LAVA[1][i] - LAVA[0][i]) * k);
+            lava.quad([[x, t.h + 0.03, z], [x, t.h + 0.03, z + 1], [x + 1, t.h + 0.03, z + 1], [x + 1, t.h + 0.03, z]], [0, 1, 0], g);
+          }
         }
         const h = t.water ? t.bed : t.h;
         land.quad([[x, h, z], [x, h, z + 1], [x + 1, h, z + 1], [x + 1, h, z]], [0, 1, 0], c);
@@ -141,7 +150,7 @@ export class Chunks {
         if (nh < h) land.quad([[x, nh, z], [x, h, z], [x + 1, h, z], [x + 1, nh, z]], [0, 0, -1], side);
       }
     }
-    return { land: land.done(), water: water.done() };
+    return { land: land.done(), water: water.done(), lava: lava.done() };
   }
 
   buildObjects(c) {

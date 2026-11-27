@@ -15,6 +15,7 @@ export const OBJECTS = {
   tree_pink: tree('Blossom tree'),
   tree_purple: tree('Wisteria tree'),
   tree_pine: tree('Pine tree'),
+  tree_snowpine: tree('Snowy pine'),
   bush: { name: 'Berry bush', solid: 0.3, pick: true, drops: [['berries', 2, 3]], becomes: 'bush_bare', regrow: 2, pickR: 0.6 },
   bush_bare: { name: 'Bush (picked)', solid: 0.3, pickR: 0.6 },
   flower: { name: 'Flower', pick: true, drops: [['flower', 1, 1]], regrow: 3 },

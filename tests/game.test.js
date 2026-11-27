@@ -692,6 +692,53 @@ describe('game rules', () => {
     expect(g.world.get(0, 5).wet).toBe(true);
   });
 
+  it('has vast oceans, very high mountains, volcanoes and frozen wastes', () => {
+    const g = newGame();
+    const p = g.player;
+    g.spawnTimer = g.seaTimer = g.golemTimer = Infinity;
+    const tiles = [];
+    for (let z = -3000; z < 3000; z += 15) for (let x = -3000; x < 3000; x += 15) tiles.push([x, z, g.gen.tile(x, z)]);
+    const share = (pred) => tiles.filter(([, , t]) => pred(t)).length / tiles.length;
+    expect(share((t) => t.salt)).toBeGreaterThan(0.3); // vast oceans
+    expect(tiles.reduce((m, [, , t]) => Math.min(m, t.bed ?? 0), 0)).toBeLessThan(-12); // with deep trenches
+    expect(tiles.reduce((m, [, , t]) => Math.max(m, t.h), 0)).toBeGreaterThan(35); // very high mountains
+    expect(share((t) => t.biome === 'winter')).toBeGreaterThan(0.03);
+    expect(tiles.some(([, , t]) => t.biome === 'snow')).toBe(true);
+
+    // a volcano: a cone rising to a rim, with a lava-filled crater that burns
+    const v = [...g.gen.volcanoes.values()].find(Boolean);
+    expect(v).toBeTruthy();
+    const crater = g.gen.tile(v.x, v.z), rim = g.gen.tile(v.x + 9, v.z), slope = g.gen.tile(v.x + Math.round(v.radius / 2), v.z);
+    expect(crater.lava).toBe(true);
+    expect(rim.lava).toBe(false);
+    expect(rim.h).toBeGreaterThan(crater.h);
+    expect(rim.h).toBeGreaterThan(slope.h);
+    expect(rim.biome).toBe('volcano');
+    expect(g.gen.object(v.x, v.z)).toBe(null);
+    Object.assign(p, { x: v.x + 0.5, z: v.z + 0.5, y: crater.h, vy: 0, health: 10 });
+    g.tick(0.1);
+    expect(p.health).toBeCloseTo(8, 1);
+    g.tick(0.1); // not again straight away
+    expect(p.health).toBeCloseTo(8, 1);
+    expect(g.enemyCanStand(v.x + 0.5, v.z + 0.5)).toBe(false);
+    g.inv.slots[0] = { id: 'campfire', n: 1 };
+    Object.assign(p, { x: v.x + 1.5, z: v.z + 0.5 });
+    expect(g.canPlace(v.x, v.z)).toBe(false);
+
+    // frozen wastes: cold by day, with frozen ponds you can walk on
+    const [wx, wz] = tiles.find(([, , t]) => t.biome === 'winter' && !t.ice);
+    Object.assign(p, { x: wx + 0.5, z: wz + 0.5, y: g.ground(wx + 0.5, wz + 0.5), health: 10 });
+    g.time = 0.25;
+    expect(g.updateStatus()).toBe('cold');
+    let ice = null;
+    for (let z = -3000; z < 3000 && !ice; z += 4) for (let x = -3000; x < 3000; x += 4) if (g.gen.tile(x, z).ice) { ice = [x, z]; break; }
+    const frozen = g.gen.tile(ice[0], ice[1]);
+    expect(frozen.water).toBe(false);
+    Object.assign(p, { x: ice[0] + 0.5, z: ice[1] + 0.5, y: frozen.h });
+    expect(g.inWater).toBe(false);
+    expect(g.drinkSource()).toBe(null);
+  });
+
   it('tires from sprinting and recovers', () => {    const g = newGame();
     const p = g.player;
     expect(g.canSprint).toBe(true);

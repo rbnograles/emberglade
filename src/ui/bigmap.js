@@ -53,13 +53,15 @@ export class BigMap {
   }
 
   colour(t) {
-    if (t.salt) return t.bed < -5 ? 0x2f6aa8 : t.bed < -3 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8;
+    if (t.salt) return t.bed < -12 ? 0x24558f : t.bed < -7 ? 0x2f6aa8 : t.bed < -3 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8;
+    if (t.lava) return 0xff7a1a;
+    if (t.ice) return 0xbfe6f5;
     if (t.water) return WATER_COLORS[0];
     if (t.shore) return SHORE.ground[0];
     const c = BIOMES[t.biome].ground[0];
     if (t.biome !== 'mountain') return c;
     // mountains darken with height so the ranges read as relief
-    const k = Math.max(0.55, 1 - t.h / 22);
+    const k = Math.max(0.45, 1 - t.h / 40);
     return (((c >> 16) * k) << 16) | ((((c >> 8) & 255) * k) << 8) | ((c & 255) * k);
   }
 

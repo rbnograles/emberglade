@@ -21,7 +21,7 @@ const MOON_URL = new URL('../../assets/kenney_voxel-pack/PNG/Other/moon.png', im
 const smooth = (t) => t * t * (3 - 2 * t);
 const a = new THREE.Color(), b = new THREE.Color();
 const dummy = new THREE.Object3D();
-const CLOUD_AREA = 320, CLOUD_Y = 46;
+const CLOUD_AREA = 320, CLOUD_Y = 72; // above all but the very highest peaks
 
 const DOME_VERT = `
 varying vec3 vDir;

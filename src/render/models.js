@@ -19,9 +19,11 @@ function tree(leaves, seed, accent = null) {
     .build(0.25);
 }
 
-function pine() {
+// snowy: the tips of every tier are dusted white
+function pine(snowy = false) {
   const v = new Vox().box(-1, 0, -1, 0, 2, 0, TRUNK);
-  const c = mix([0x2f7a4a, 0x388a55, 0x286b40], 3);
+  const green = mix([0x2f7a4a, 0x388a55, 0x286b40], 3), white = mix([0xf4f8fb, 0xe4edf3], 3);
+  const c = (x, y, z) => (snowy && (y % 3 === 2 || y >= 10 || (x + z + y) % 4 === 0) ? white(x, y, z) : green(x, y, z));
   const layers = [[3, 3.6], [4, 3.1], [5, 2.5], [6, 2.9], [7, 2.3], [8, 1.7], [9, 2.0], [10, 1.4], [11, 0.9], [12, 0.75]];
   for (const [y, r] of layers) {
     for (let z = -4; z <= 3; z++) for (let x = -4; x <= 3; x++) if (Math.hypot(x + 0.5, z + 0.5) <= r) v.set(x, y, z, c);
@@ -113,6 +115,7 @@ export function buildModels() {
   m.set('tree_pink', tree([0xf08cb4, 0xf7a6c6, 0xe274a2], 15, 0xfff0f5));
   m.set('tree_purple', tree([0x9a6fd6, 0xad85e2, 0x8558c4], 16, 0xf2e6ff));
   m.set('tree_pine', pine());
+  m.set('tree_snowpine', pine(true));
   m.set('bush', bush(true));
   m.set('bush_bare', bush(false));
   [0xe8556a, 0xffffff, 0xa77be0, 0xf2a03d].forEach((c, i) => m.set('flower' + i, flower(c)));
