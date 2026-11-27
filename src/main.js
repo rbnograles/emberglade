@@ -101,6 +101,20 @@ game.on((type, data) => {
   }
   if (type === 'drink') {
     playerModel.startDrink(data.source);
+    if (data.source === 'pond') {
+      // turn to face the nearest water before kneeling
+      let best = Infinity;
+      const px = Math.floor(p.x), pz = Math.floor(p.z);
+      for (let z = pz - 1; z <= pz + 1; z++) {
+        for (let x = px - 1; x <= px + 1; x++) {
+          const d = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z);
+          if (game.gen.tile(x, z).water && d < best) {
+            best = d;
+            playerModel.facing = Math.atan2(x + 0.5 - p.x, z + 0.5 - p.z);
+          }
+        }
+      }
+    }
     // water drops: at the mouth for a flask, splashing up from the pond otherwise
     for (const delay of [250, 480, 710, 940]) {
       setTimeout(() => {
