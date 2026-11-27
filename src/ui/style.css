@@ -268,3 +268,59 @@ kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; 
   background-image: repeating-linear-gradient(100deg, transparent 0 14px, rgba(200, 225, 255, 0.22) 14px 15px, transparent 15px 31px);
   background-size: 62px 120px; animation: rainfall 0.45s linear infinite; }
 @keyframes rainfall { to { background-position: -22px 120px; } }
+
+/* ---------- title / pause menu, reworked ---------- */
+.daybar { display: flex; align-items: center; gap: 8px; }
+#btn-pause { pointer-events: auto; width: 34px; height: 34px; font-size: 16px; color: var(--cream); background: var(--panel); border: 2px solid rgba(255, 246, 227, 0.25); border-radius: 10px; cursor: pointer; }
+#btn-pause:hover { border-color: var(--accent); }
+
+#menu { place-items: center; background: radial-gradient(ellipse at center, rgba(28, 37, 66, 0.35), rgba(15, 20, 40, 0.8)); backdrop-filter: blur(4px); }
+#menu .shell { display: flex; width: min(920px, 94vw); height: min(600px, 90vh); background: var(--cream); color: var(--ink); border-radius: 22px; overflow: hidden; box-shadow: 0 14px 0 rgba(0, 0, 0, 0.22); }
+#menu aside { width: 250px; flex: none; display: flex; flex-direction: column; gap: 6px; padding: 26px 20px; background: linear-gradient(170deg, #f7d9a6, #f0c38a); }
+#menu aside h1 { margin: 0; font-size: 34px; letter-spacing: 0.5px; color: #c9623a; }
+#menu aside p { margin: 0 0 12px; font-size: 13px; }
+#menu aside .credit { margin-top: auto; font-size: 12px; opacity: 0.6; }
+#menu main { flex: 1; min-width: 0; padding: 26px 28px; overflow-y: auto; text-align: left; }
+#menu main h2 { margin: 0 0 4px; font-size: 22px; color: #c9623a; }
+#menu .lead { margin: 0 0 14px; font-size: 13px; opacity: 0.75; }
+
+#menu button { display: block; width: auto; margin: 0; font: inherit; font-weight: bold; cursor: pointer; border: 0; border-radius: 10px; box-shadow: none; }
+#menu button.primary { width: 100%; padding: 13px; margin: 4px 0 14px; font-size: 18px; color: #fff; background: #5aa84f; box-shadow: 0 4px 0 #3f7d38; }
+#menu button.primary:active { transform: translateY(2px); box-shadow: 0 2px 0 #3f7d38; }
+#menu nav { display: flex; flex-direction: column; gap: 4px; }
+#menu nav button { padding: 10px 14px; text-align: left; font-size: 15px; color: var(--ink); background: transparent; }
+#menu nav button:hover { background: rgba(255, 255, 255, 0.4); }
+#menu nav button.active { background: var(--cream); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.12); }
+
+#worlds { display: grid; gap: 8px; margin-bottom: 14px; }
+#menu .world { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; text-align: left; color: var(--ink); background: #f4e7cb; border: 2px solid transparent; }
+#menu .world:hover { border-color: #c9623a; }
+#menu .world.current { background: #dcefd2; border-color: #5aa84f; cursor: default; }
+#menu .world b { font-size: 16px; }
+#menu .world span { font-size: 13px; opacity: 0.8; }
+#menu .world i { font-style: normal; font-size: 12px; opacity: 0.7; }
+.row-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#menu .row-buttons button, #menu button.small { padding: 8px 14px; font-size: 13px; color: var(--ink); background: #eadcc0; box-shadow: 0 2px 0 #c9b594; }
+#menu .row-buttons button.danger { color: #fff; background: #c9623a; box-shadow: 0 2px 0 #8f4326; }
+
+.character { display: flex; gap: 22px; align-items: flex-start; }
+#look-preview { width: 220px; height: 271px; flex: none; border-radius: 14px; background: linear-gradient(#bfe6f7, #9bd66f 75%, #8dcb62); }
+#look-options h4, #settings h4 { margin: 10px 0 5px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #c9623a; }
+#look-options h4:first-child { margin-top: 0; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+#menu .swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(0, 0, 0, 0.12); }
+#menu .swatch.active { border-color: var(--ink); transform: scale(1.12); }
+#menu .style { padding: 6px 12px; font-size: 13px; color: var(--ink); background: #eadcc0; }
+#menu .style.active { color: #fff; background: #5aa84f; }
+
+#settings { max-width: 460px; margin: 0; font-size: 13px; }
+#settings .keys button { padding: 4px 10px; min-width: 78px; font-size: 12px; color: var(--ink); background: #eadcc0; }
+#settings .keys button.waiting { color: #fff; background: #c9623a; }
+#menu ul.controls { list-style: none; padding: 0; margin: 0 0 12px; font-size: 14px; line-height: 2.1; }
+
+@media (max-width: 720px) {
+  #menu .shell { flex-direction: column; height: 92vh; }
+  #menu aside { width: auto; padding: 16px; }
+  #menu nav { flex-direction: row; flex-wrap: wrap; }
+  .character { flex-direction: column; align-items: center; }
+}

@@ -18,7 +18,7 @@
         </div>
       </div>
       <div id="topright">
-        <div id="day"></div>
+        <div class="daybar"><div id="day"></div><button id="btn-pause" title="Pause (Esc)">&#9776;</button></div>
         <div id="status" class="hidden"></div>
         <canvas id="minimap"></canvas>
         <div id="home-label"></div>
@@ -36,9 +36,6 @@
         </div>
         <div id="hotbar-row">
           <div id="hotbar"></div>
-          <button id="btn-craft"><kbd>Tab</kbd> Craft</button>
-          <button id="btn-eat" class="hidden"><kbd>C</kbd> Eat</button>
-          <button id="btn-drink" class="hidden"><kbd>X</kbd> Drink</button>
         </div>
       </div>
     </div>
@@ -46,30 +43,67 @@
     <div id="panel" class="hidden"></div>
     <div id="cursor" class="slot hidden"></div>
     <div id="bigmap" class="hidden"><div class="frame"><canvas></canvas><div class="info"></div></div></div>
-    <div id="rain"></div>
     <div id="fade"></div>
     <div id="hurt"></div>
     <div id="underwater"></div>
 
     <div id="menu">
-      <div class="card">
-        <h1>Emberglade</h1>
-        <p id="menu-sub">A cozy voxel survival game</p>
-        <button id="btn-play">Play</button>
-        <button id="btn-new" class="secondary">New world</button>
-        <button id="btn-settings" class="secondary">Settings</button>
-        <div id="settings" class="hidden"></div>
-        <ul>
-          <li><kbd>W A S D</kbd> move &nbsp; <kbd>Space</kbd> jump up ledges &nbsp; <kbd>Shift</kbd> sprint (in deep water: Shift dives, Space swims up) &nbsp; <kbd>Wheel</kbd> zoom</li>
-          <li><kbd>Right-drag</kbd> or <kbd>Q</kbd> <kbd>E</kbd> turn the view, tilt down low to see the sky &nbsp; <kbd>R</kbd> reset view</li>
-          <li><kbd>Left click</kbd> use tool, pick, harvest, attack night creatures</li>
-          <li><kbd>Right click</kbd> place, plant, water, wear armor &nbsp; <kbd>C</kbd> eat &nbsp; <kbd>X</kbd> drink at a pond or from a flask</li>
-          <li><kbd>1</kbd>–<kbd>9</kbd> hotbar (drag a slot onto another to swap) &nbsp; <kbd>Tab</kbd> inventory and crafting &nbsp; <kbd>M</kbd> world map</li>
-          <li><kbd>F</kbd> use bed, chest, campfire, workbench; get on or off a boat or submarine &nbsp; <kbd>Esc</kbd> pause</li>
-        </ul>
+      <div class="shell">
+        <aside>
+          <h1>Emberglade</h1>
+          <p id="menu-sub">A cozy voxel survival game</p>
+          <button id="btn-play" class="primary">Play</button>
+          <nav>
+            <button data-tab="worlds" class="active">Worlds</button>
+            <button data-tab="character">Character</button>
+            <button data-tab="settings">Settings</button>
+            <button data-tab="controls">Controls</button>
+          </nav>
+          <p class="credit">Esc pauses and resumes</p>
+        </aside>
+        <main>
+          <section id="tab-worlds">
+            <h2>Worlds</h2>
+            <p class="lead">Three separate worlds, saved in this browser as you play.</p>
+            <div id="worlds"></div>
+            <div class="row-buttons">
+              <button id="btn-new" class="danger">Start this world over</button>
+              <button id="btn-export">Export this world</button>
+              <button id="btn-import">Import a world file</button>
+            </div>
+          </section>
+          <section id="tab-character" class="hidden">
+            <h2>Character</h2>
+            <p class="lead">Your look is kept across all worlds.</p>
+            <div class="character">
+              <canvas id="look-preview" width="260" height="320"></canvas>
+              <div id="look-options"></div>
+            </div>
+          </section>
+          <section id="tab-settings" class="hidden">
+            <h2>Settings</h2>
+            <div id="settings"></div>
+          </section>
+          <section id="tab-controls" class="hidden">
+            <h2>Controls</h2>
+            <ul class="controls">
+              <li><kbd>W A S D</kbd> move &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>Space</kbd> jump</li>
+              <li><kbd>Left click</kbd> use tool, pick, harvest, attack</li>
+              <li><kbd>Right click</kbd> place, plant, water, wear</li>
+              <li><kbd>Right-drag</kbd> or <kbd>Q</kbd> <kbd>E</kbd> turn and tilt the view &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>Wheel</kbd> zoom</li>
+              <li><kbd>1</kbd>–<kbd>9</kbd> hotbar (drag a slot onto another to swap)</li>
+              <li><kbd>Tab</kbd> inventory and crafting &nbsp; <kbd>M</kbd> world map</li>
+              <li><kbd>C</kbd> eat &nbsp; <kbd>X</kbd> drink at a pond or from a flask</li>
+              <li><kbd>F</kbd> use bed, chest, campfire, workbench; board or leave a boat or submarine</li>
+              <li>In deep water: <kbd>Shift</kbd> dives, <kbd>Space</kbd> swims up</li>
+              <li>With a glider held: jump from a height and hold <kbd>Space</kbd></li>
+              <li><kbd>Esc</kbd> pause</li>
+            </ul>
+            <p class="lead">Keys can be changed under Settings.</p>
+          </section>
+        </main>
       </div>
     </div>
-
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

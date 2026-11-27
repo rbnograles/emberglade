@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { Game } from './game/game.js';
 import { loadSave, writeSave, clearSave } from './game/save.js';
 import { settings } from './settings.js';
-import { sfx, unlockAudio, setNight } from './audio.js';
+import { sfx, unlockAudio, setNight, setRain } from './audio.js';
+import { Rain } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
 import { BigMap } from './ui/bigmap.js';
-import { buildSettings } from './ui/menu.js';
+import { buildMenu } from './ui/menu.js';
 import { OBJECTS, CROP_RIPE } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
 import { ITEMS } from './game/items.js';
@@ -60,7 +61,8 @@ const enemies = new Enemies(scene, game, {
 });
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { boat: models.get('boat'), submarine: models.get('submarine') });
-const playerModel = new PlayerModel();
+const playerModel = new PlayerModel(settings.look);
+const rain = new Rain(scene);
 scene.add(playerModel.group);
 
 // Square frame marking the targeted tile.
@@ -82,16 +84,7 @@ $('minimap').addEventListener('mousedown', (e) => {
 });
 const torch = new THREE.PointLight(0xffb060, 0, 17, 1.4);
 scene.add(torch);
-$('btn-drink').addEventListener('mousedown', (e) => {
-  e.stopPropagation();
-  game.drinkWater();
-  hud.refresh();
-});
-$('btn-eat').addEventListener('mousedown', (e) => {
-  e.stopPropagation();
-  game.eatFood();
-  hud.refresh();
-});
+
 const panels = new Panels(game);
 
 // ---------- game events ----------
@@ -198,26 +191,31 @@ let hitSound = 'pick';
 let paused = true;
 const menu = $('menu');
 $('btn-play').textContent = save ? `Continue (day ${game.day})` : 'Play';
-$('btn-new').classList.toggle('hidden', !save);
+
 
 function setPaused(v) {
   paused = v;
   menu.classList.toggle('hidden', !v);
   if (v) {
     $('btn-play').textContent = 'Resume';
-    $('btn-new').classList.remove('hidden');
-    $('menu-sub').textContent = 'Paused. Your world is saved.';
+    $('menu-sub').textContent = `Paused on day ${game.day}. Your world is saved.`;
     writeSave(game);
   }
 }
 $('btn-play').addEventListener('click', () => setPaused(false));
 addEventListener('mousedown', unlockAudio);
 addEventListener('keydown', unlockAudio);
-buildSettings(game, (discard = false) => {
-  if (discard) discardOnExit = true;
-  else writeSave(game);
+buildMenu(game, {
+  beforeLeave: (discard) => {
+    if (discard) discardOnExit = true;
+    else writeSave(game);
+  },
+  onLook: () => playerModel.applyLook(settings.look),
 });
-$('btn-settings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
+$('btn-pause').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  setPaused(true);
+});
 // ?play in the address skips the title menu (handy for screenshots and quick testing)
 if (new URLSearchParams(location.search).has('play')) setPaused(false);
 $('btn-new').addEventListener('click', () => {
@@ -641,7 +639,9 @@ function step(dt) {
   vehicles.update(clock);
   bigmap.update();
   // weather: rain streaks over the view, and the water surface rises and falls a little
-  $('rain').style.opacity = game.raining && !submerged ? 1 : 0;
+  // rain falls as real streaks with splashes; the tallest water is what a drop lands on
+  rain.update(dt, game.raining, p.x, playerY, p.z, (x, z) => game.ground(x, z));
+  setRain(submerged ? 0 : rain.level);
   const swell = Math.sin(clock * 1.3) * 0.035;
   for (const c of chunks.map.values()) c.water.position.y = swell;
 

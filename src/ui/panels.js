@@ -50,10 +50,7 @@ export class Panels {
     };
     addEventListener('mousemove', follow);
     addEventListener('mousedown', follow, true);
-    $('btn-craft').addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      this.toggle();
-    });
+
   }
 
   get open() { return !this.root.classList.contains('hidden'); }

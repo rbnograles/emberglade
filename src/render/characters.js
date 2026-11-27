@@ -25,14 +25,24 @@ const limb = (w, h, d, color, x, y) => {
 
 // Blocky character facing +z. update() animates walking and tool swings.
 export class PlayerModel {
-  constructor() {
+  // look: {skin, hair, shirt, pants, style} from the character screen
+  constructor(look = null) {
     const g = (this.group = new THREE.Group());
     g.rotation.order = 'YXZ'; // so leaning forward or back follows the way the character faces
     const skin = 0xf2c7a0, shirt = 0x4fa56a, pants = 0x5a4634, hair = 0x6b3f24;
-    g.add(part(0.5, 0.5, 0.3, shirt, 0, 0.75, 0));
-    g.add(part(0.46, 0.42, 0.42, skin, 0, 1.21, 0));
-    g.add(part(0.5, 0.16, 0.46, hair, 0, 1.46, 0));
-    g.add(part(0.5, 0.3, 0.12, hair, 0, 1.3, -0.19));
+    // the parts whose colour the player can choose, by what they are
+    this.lookParts = { skin: [], hair: [], shirt: [], pants: [] };
+    const body = part(0.5, 0.5, 0.3, shirt, 0, 0.75, 0), head = part(0.46, 0.42, 0.42, skin, 0, 1.21, 0);
+    // hair pieces; which ones show depends on the style
+    this.hairPieces = {
+      top: part(0.5, 0.16, 0.46, hair, 0, 1.46, 0), back: part(0.5, 0.3, 0.12, hair, 0, 1.3, -0.19),
+      long: part(0.52, 0.5, 0.12, hair, 0, 1.02, -0.2), sides: part(0.54, 0.34, 0.2, hair, 0, 1.22, -0.08),
+      tuft: part(0.2, 0.2, 0.3, hair, 0, 1.55, 0.02),
+    };
+    g.add(body, head, ...Object.values(this.hairPieces));
+    this.lookParts.shirt.push(body);
+    this.lookParts.skin.push(head);
+    this.lookParts.hair.push(...Object.values(this.hairPieces));
     g.add(part(0.07, 0.07, 0.02, 0x2b2b33, -0.11, 1.22, 0.215));
     g.add(part(0.07, 0.07, 0.02, 0x2b2b33, 0.11, 1.22, 0.215));
     this.legL = limb(0.22, 0.5, 0.26, pants, -0.13, 0.5);
@@ -40,6 +50,8 @@ export class PlayerModel {
     this.armL = limb(0.16, 0.48, 0.22, skin, -0.34, 0.98);
     this.armR = limb(0.16, 0.48, 0.22, skin, 0.34, 0.98);
     g.add(this.legL, this.legR, this.armL, this.armR);
+    this.lookParts.pants.push(this.legL.children[0], this.legR.children[0]);
+    this.lookParts.skin.push(this.armL.children[0], this.armR.children[0]);
     // Armor pieces sit just outside the body parts and are shown when worn.
     this.armorParts = [
       [part(0.52, 0.24, 0.48, 0xffffff, 0, 1.44, 0)],
@@ -74,6 +86,27 @@ export class PlayerModel {
     this.phase = 0;
     this.swing = 0;
     this.facing = 0;
+    if (look) this.applyLook(look);
+    else this.applyLook({ skin, hair, shirt, pants, style: 'short' });
+  }
+
+  // Recolour the body and switch hair pieces for the chosen style.
+  applyLook(look) {
+    for (const key of ['skin', 'hair', 'shirt', 'pants']) {
+      for (const mesh of this.lookParts[key]) {
+        mesh.material.color.setHex(look[key]);
+        mesh.userData.base?.setHex(look[key]); // so the damage flash fades back to the new colour
+      }
+    }
+    const shown = { short: ['top', 'back'], long: ['top', 'back', 'long', 'sides'], tuft: ['top', 'tuft'], bald: [] }[look.style] ?? ['top', 'back'];
+    for (const [name, mesh] of Object.entries(this.hairPieces)) mesh.userData.hairOn = shown.includes(name);
+    this.showHair();
+  }
+
+  // Hair hides under a helmet.
+  showHair() {
+    const helmet = this.armorParts[0][0].visible;
+    for (const [name, mesh] of Object.entries(this.hairPieces)) mesh.visible = !!mesh.userData.hairOn && !(helmet && (name === 'top' || name === 'tuft'));
   }
 
   startSwing() { this.swing = 1; }
@@ -110,6 +143,7 @@ export class PlayerModel {
         }
       }
     });
+    if (this.hairPieces) this.showHair();
   }
 
   // Show item `id` (or nothing) in the hand. Tools are held full size, other items smaller.

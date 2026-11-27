@@ -2,7 +2,7 @@ import { settings } from './settings.js';
 
 // All sound is synthesised with the Web Audio API: no audio files.
 let ctx = null, sfxGain = null, musicGain = null, noiseBuffer = null, musicTimer = null;
-let nightMood = false;
+let nightMood = false, rainGain = null;
 
 // Browsers only allow audio after a click or key press; call this from one.
 export function unlockAudio() {
@@ -17,6 +17,17 @@ export function unlockAudio() {
     noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = noiseBuffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    // rain: a steady hiss of filtered noise whose loudness follows the weather
+    const rain = ctx.createBufferSource(), band = ctx.createBiquadFilter();
+    rain.buffer = noiseBuffer;
+    rain.loop = true;
+    band.type = 'bandpass';
+    band.frequency.value = 2400;
+    band.Q.value = 0.5;
+    rainGain = ctx.createGain();
+    rainGain.gain.value = 0;
+    rain.connect(band).connect(rainGain).connect(sfxGain);
+    rain.start();
     applyVolume();
     musicTimer = setInterval(musicTick, 2600);
   }
@@ -30,6 +41,11 @@ export function applyVolume() {
 }
 
 export function setNight(night) { nightMood = night; }
+
+// level 0..1: how hard it is raining (0 under water, where the hiss would be wrong)
+export function setRain(level) {
+  if (rainGain) rainGain.gain.setTargetAtTime(level * 0.28, ctx.currentTime, 0.6);
+}
 
 // A pitched blip. slide: Hz the pitch moves by over its length. delay: seconds from now.
 function tone(freq, dur, type = 'sine', vol = 0.3, slide = 0, delay = 0, dest = sfxGain) {

@@ -19,14 +19,15 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 - **Day and night:** a full sky with sun, moon, stars and clouds, and a gradual dawn.
 - **Creatures:** gloomlings, brutes and spitting spitters hunt you after dark; golems guard the mountains at any hour. Fight them with swords, or stay near campfire light.
 - **World map:** press M for a full map of the land and sea around you, with your start, bed, vehicles and dropped pack marked.
-- **Glider:** jump from a height and glide. **Weather:** rain waters your fields.
+- **Glider:** jump from a height and glide. **Weather:** real falling rain with splashes and sound, which waters your fields.
 - **Armor and bags:** woven and copper armor reduce damage and night cold; bags add inventory rows.
 - **Base building:** walls, doors, floors, fences, beds and chests, with a placement preview. Creatures cannot cross walls or step on built floors.
 - **Hunting and light:** hunt deer for meat and hide, and carry a torch to see at night.
 - **Wear and loss:** tools wear out, and fainting leaves your pack where you fell for you to fetch.
 - **Minimap** with markers for home, your dropped pack and nearby creatures.
 - **Sound and music** synthesised in the browser, with volume sliders.
-- **Settings:** rebindable keys, three world slots, and export / import of a world as a file.
+- **Menu:** worlds, character, settings and controls as tabs, on the title screen and when paused. Three world slots, export / import, volume, and rebindable keys.
+- **Character:** choose skin, hair colour and style, shirt and trousers, with a live preview.
 - **27 guided goals** to learn every system, and autosave in the browser.
 
 ## Controls

@@ -1,21 +1,75 @@
-import { settings, saveSettings, DEFAULT_KEYS, KEY_LABELS, keyName } from '../settings.js';
+import * as THREE from 'three';
+import { settings, saveSettings, DEFAULT_KEYS, DEFAULT_LOOK, KEY_LABELS, keyName } from '../settings.js';
 import { applyVolume, sfx, unlockAudio } from '../audio.js';
 import { SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
+import { PlayerModel } from '../render/characters.js';
 
+const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text) e.textContent = text;
   return e;
 };
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-// Builds the Settings box in the title / pause menu: volume, keys, world slots, export and import.
-// beforeLeave(): called before the page reloads into another world, so the current one is saved first.
-export function buildSettings(game, beforeLeave) {
-  const root = document.getElementById('settings');
-  root.replaceChildren();
+// What the character screen offers.
+const LOOK_CHOICES = {
+  skin: ['Skin', [0xf9dcc4, 0xf2c7a0, 0xd9a47a, 0xb9794f, 0x8a5a3c, 0x5c3a26]],
+  hair: ['Hair', [0x2b2b33, 0x6b3f24, 0xa8743c, 0xe9c545, 0xd9432f, 0xf2efe6, 0x4f7ad0, 0xe274a2]],
+  shirt: ['Shirt', [0x4fa56a, 0x3d7fbd, 0xd9534f, 0xf2c94c, 0x9a6fd6, 0xf2efe6, 0x2b2b33, 0xe8833a]],
+  pants: ['Trousers', [0x5a4634, 0x2f4a6b, 0x3f3f46, 0x6b7078, 0x7a5233, 0x2f6a4a]],
+};
+const STYLES = [['short', 'Short'], ['long', 'Long'], ['tuft', 'Tuft'], ['bald', 'Bald']];
 
-  // ---- sound ----
+// Title / pause menu: world slots, character look, settings and controls, as tabs.
+// hooks.beforeLeave(discard): called before the page reloads into another world.
+// hooks.onLook(): called when the character's look changes.
+export function buildMenu(game, hooks) {
+  // ---- tabs ----
+  const tabs = [...document.querySelectorAll('#menu nav button')];
+  const show = (name) => {
+    for (const b of tabs) b.classList.toggle('active', b.dataset.tab === name);
+    for (const s of document.querySelectorAll('#menu main > section')) s.classList.toggle('hidden', s.id !== 'tab-' + name);
+    sfx('ui');
+  };
+  for (const b of tabs) b.addEventListener('click', () => show(b.dataset.tab));
+
+  // ---- worlds ----
+  const worlds = $('worlds');
+  for (let n = 1; n <= SLOTS; n++) {
+    const current = n === currentSlot(), summary = slotSummary(n);
+    const card = el('button', 'world' + (current ? ' current' : ''));
+    card.append(el('b', '', `World ${n}`), el('span', '', summary ?? 'Empty: a new world starts here'), el('i', '', current ? 'Playing now' : 'Switch to this world'));
+    card.addEventListener('click', () => {
+      if (current) return;
+      hooks.beforeLeave(false);
+      setSlot(n);
+      location.reload();
+    });
+    worlds.append(card);
+  }
+  $('btn-export').addEventListener('click', () => exportSave(game));
+  const file = el('input');
+  file.type = 'file';
+  file.accept = '.json,application/json';
+  file.hidden = true;
+  document.body.append(file);
+  $('btn-import').addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    if (!file.files[0]) return;
+    if (!confirm('Replace the world in this slot with the imported file?')) return;
+    if (await importSave(file.files[0])) {
+      hooks.beforeLeave(true);
+      location.reload();
+    } else alert('That file is not an Emberglade world.');
+  });
+
+  // ---- character ----
+  buildCharacter(hooks.onLook);
+
+  // ---- settings: sound and keys ----
+  const root = $('settings');
   const slider = (label, key) => {
     const row = el('label', 'row');
     const input = el('input');
@@ -36,14 +90,13 @@ export function buildSettings(game, beforeLeave) {
   };
   root.append(el('h4', '', 'Sound'), slider('Effects', 'sfx'), slider('Music', 'music'));
 
-  // ---- keys ----
-  root.append(el('h4', '', 'Keys (click one, then press the new key)'));
+  root.append(el('h4', '', 'Keys: click one, then press the new key'));
   const keys = el('div', 'keys');
-  let waiting = null; // {action, button} while a rebind is in progress
+  let waiting = null; // the action being rebound
   const paint = () => {
     for (const b of keys.querySelectorAll('button')) {
-      b.textContent = waiting?.action === b.dataset.action ? 'press a key…' : keyName(settings.keys[b.dataset.action]);
-      b.classList.toggle('waiting', waiting?.action === b.dataset.action);
+      b.textContent = waiting === b.dataset.action ? 'press a key…' : keyName(settings.keys[b.dataset.action]);
+      b.classList.toggle('waiting', waiting === b.dataset.action);
     }
   };
   for (const action of Object.keys(DEFAULT_KEYS)) {
@@ -51,7 +104,7 @@ export function buildSettings(game, beforeLeave) {
     const b = el('button');
     b.dataset.action = action;
     b.addEventListener('click', () => {
-      waiting = { action };
+      waiting = action;
       paint();
     });
     row.append(el('span', '', KEY_LABELS[action]), b);
@@ -62,10 +115,10 @@ export function buildSettings(game, beforeLeave) {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (e.code !== 'Escape') {
-      // a key can only do one thing: whatever had it before swaps to the old key
+      // a key can only do one thing: whatever had it before takes the old key
       const other = Object.keys(settings.keys).find((a) => settings.keys[a] === e.code);
-      if (other) settings.keys[other] = settings.keys[waiting.action];
-      settings.keys[waiting.action] = e.code;
+      if (other) settings.keys[other] = settings.keys[waiting];
+      settings.keys[waiting] = e.code;
       saveSettings();
     }
     waiting = null;
@@ -79,35 +132,87 @@ export function buildSettings(game, beforeLeave) {
   });
   root.append(keys, reset);
   paint();
+}
 
-  // ---- worlds ----
-  root.append(el('h4', '', 'Worlds'));
-  const worlds = el('div', 'worlds');
-  for (let n = 1; n <= SLOTS; n++) {
-    const b = el('button', n === currentSlot() ? 'active' : '', `World ${n}: ${slotSummary(n) ?? 'empty'}`);
-    b.addEventListener('click', () => {
-      if (n === currentSlot()) return;
-      beforeLeave();
-      setSlot(n);
-      location.reload();
-    });
-    worlds.append(b);
+// Colour swatches and hair styles, with the character turning slowly in a small preview.
+function buildCharacter(onLook) {
+  const canvas = $('look-preview');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, canvas.width / canvas.height, 0.1, 20);
+  camera.position.set(0, 1.25, 4.6);
+  camera.lookAt(0, 0.85, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb59a78, 1.1));
+  const sun = new THREE.DirectionalLight(0xfff3dd, 2.2);
+  sun.position.set(2, 4, 3);
+  scene.add(sun);
+  const model = new PlayerModel(settings.look);
+  scene.add(model.group);
+
+  const options = $('look-options');
+  const refresh = () => {
+    model.applyLook(settings.look);
+    saveSettings();
+    onLook();
+    for (const b of options.querySelectorAll('[data-key]')) b.classList.toggle('active', String(settings.look[b.dataset.key]) === b.dataset.value);
+  };
+  for (const [key, [label, colours]] of Object.entries(LOOK_CHOICES)) {
+    options.append(el('h4', '', label));
+    const row = el('div', 'swatches');
+    for (const c of colours) {
+      const b = el('button', 'swatch');
+      b.style.background = hex(c);
+      b.dataset.key = key;
+      b.dataset.value = String(c);
+      b.title = label;
+      b.addEventListener('click', () => {
+        settings.look[key] = c;
+        refresh();
+      });
+      row.append(b);
+    }
+    options.append(row);
   }
-  const exportBtn = el('button', 'small', 'Export this world');
-  exportBtn.addEventListener('click', () => exportSave(game));
-  const importBtn = el('button', 'small', 'Import a world file');
-  const file = el('input');
-  file.type = 'file';
-  file.accept = '.json,application/json';
-  file.hidden = true;
-  importBtn.addEventListener('click', () => file.click());
-  file.addEventListener('change', async () => {
-    if (!file.files[0]) return;
-    if (!confirm('Replace the world in this slot with the imported file?')) return;
-    if (await importSave(file.files[0])) {
-      beforeLeave(true);
-      location.reload();
-    } else alert('That file is not an Emberglade world.');
+  options.append(el('h4', '', 'Hair style'));
+  const styles = el('div', 'swatches');
+  for (const [id, label] of STYLES) {
+    const b = el('button', 'style', label);
+    b.dataset.key = 'style';
+    b.dataset.value = id;
+    b.addEventListener('click', () => {
+      settings.look.style = id;
+      refresh();
+    });
+    styles.append(b);
+  }
+  options.append(styles);
+  const buttons = el('div', 'row-buttons');
+  const random = el('button', '', 'Surprise me');
+  random.addEventListener('click', () => {
+    for (const [key, [, colours]] of Object.entries(LOOK_CHOICES)) settings.look[key] = colours[(Math.random() * colours.length) | 0];
+    settings.look.style = STYLES[(Math.random() * STYLES.length) | 0][0];
+    refresh();
   });
-  root.append(worlds, exportBtn, importBtn, file);
+  const reset = el('button', '', 'Reset');
+  reset.addEventListener('click', () => {
+    Object.assign(settings.look, DEFAULT_LOOK);
+    refresh();
+  });
+  buttons.append(random, reset);
+  options.append(buttons);
+  refresh();
+
+  // Only draw while the character tab is on screen.
+  let last = performance.now();
+  const frame = (now) => {
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if ($('menu').classList.contains('hidden') || $('tab-character').classList.contains('hidden')) return;
+    model.facing += dt * 0.8;
+    model.update(dt, true, 2.2);
+    renderer.render(scene, camera);
+  };
+  requestAnimationFrame(frame);
 }

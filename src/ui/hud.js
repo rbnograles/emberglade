@@ -119,31 +119,9 @@ export class Hud {
     const state = ride ? ride.kind : g.submerged ? 'dive' : g.swimming ? 'swim' : g.status;
     status.className = STATUS[state] ? state : 'hidden';
     status.textContent = STATUS[state] ?? '';
-    // Eat button: shows what C would eat, and pulses when you are hungry.
+    // what the eat and drink keys would use right now, for the prompt below
     const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
-    const eatBtn = $('btn-eat');
-    eatBtn.classList.toggle('hidden', !food);
-    eatBtn.classList.toggle('urgent', !!food && p.hunger < 5);
-    if (food && eatBtn.dataset.food !== food.id) {
-      eatBtn.dataset.food = food.id;
-      const img = document.createElement('img');
-      img.src = iconURL(food.id);
-      img.classList.toggle('px', isPixelIcon(food.id));
-      const key = document.createElement('kbd');
-      key.textContent = 'C';
-      eatBtn.replaceChildren(key, `Eat ${ITEMS[food.id].name}`, img);
-    }
-    // Drink button: shown when X would work (next to a pond, or a flask with water in it).
-    const source = g.drinkSource(), drinkBtn = $('btn-drink');
-    drinkBtn.classList.toggle('hidden', !source);
-    drinkBtn.classList.toggle('urgent', !!source && p.thirst < 5);
-    const drinkLabel = source === 'flask' ? `Drink flask (${p.flask})` : 'Drink';
-    if (drinkBtn.dataset.label !== drinkLabel) {
-      drinkBtn.dataset.label = drinkLabel;
-      const key = document.createElement('kbd');
-      key.textContent = 'X';
-      drinkBtn.replaceChildren(key, drinkLabel);
-    }
+    const source = g.drinkSource();
     // One prompt at a time: thirst first, since it runs out sooner.
     const prompt = $('hungry');
     if (p.thirst < 4) {
