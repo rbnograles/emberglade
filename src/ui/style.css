@@ -245,3 +245,4 @@ kbd { background: #eadcc0; border-radius: 5px; padding: 2px 6px; font: inherit; 
 #menu #settings button.active { background: #5aa84f; box-shadow: 0 2px 0 #3f7d38; }
 #menu #settings button.waiting { background: #c9623a; box-shadow: 0 2px 0 #8f4326; }
 #menu #settings .keys button { min-width: 74px; }
+#status.swim { color: #a9d4ff; }

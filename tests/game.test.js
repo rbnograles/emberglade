@@ -382,7 +382,9 @@ describe('game rules', () => {
     g.inv.add('flask', 1);
     expect(g.drinkWater()).toBe(false); // flask starts empty
 
-    const [wx, wz] = findTile(g, (o, t, x, z) => !t.water && g.gen.tile(x + 1, z).water);
+    const pond = (t) => t.water && !t.salt;
+    const [wx, wz] = findTile(g, (o, t, x, z) => !t.water && pond(g.gen.tile(x + 1, z))
+      && [-1, 0, 1].every((dz) => [-1, 0, 1].every((dx) => !g.gen.tile(x + dx, z + dz).salt)));
     Object.assign(p, { x: wx + 0.5, z: wz + 0.5 });
     expect(g.drinkSource()).toBe('pond');
     expect(g.drinkWater()).toBe(true);
@@ -402,6 +404,45 @@ describe('game rules', () => {
     p.hunger = 10;
     g.tick(8);
     expect(p.health).toBeLessThan(4.2);
+  });
+
+  it('has oceans to swim in and mountains to climb', () => {
+    const g = newGame();
+    const p = g.player;
+    const tiles = [];
+    for (let z = -700; z < 700; z += 5) for (let x = -700; x < 700; x += 5) tiles.push([x, z, g.gen.tile(x, z)]);
+    expect(tiles.some(([, , t]) => t.salt && t.bed <= -4)).toBe(true); // deep sea exists
+    expect(tiles.some(([, , t]) => t.biome === 'mountain' && t.h >= 6)).toBe(true); // tall mountains exist
+    expect(tiles.every(([, , t]) => (t.water ? t.bed < t.h : t.bed === null))).toBe(true);
+
+    // sea water cannot be drunk
+    const [sx, sz] = tiles.find(([x, z, t]) => t.salt && t.bed <= -3 && [-1, 0, 1].every((d) => g.gen.tile(x + d, z).salt && g.gen.tile(x, z + d).salt));
+    Object.assign(p, { x: sx + 0.5, z: sz + 0.5, y: g.standY(sx + 0.5, sz + 0.5), vy: 0 });
+    expect(g.drinkSource()).toBe(null);
+
+    // swimming: afloat, no sprinting or jumping, energy drains, then drowning
+    expect(g.swimming).toBe(true);
+    expect(p.y).toBeCloseTo(-1.25);
+    expect(g.canSprint).toBe(false);
+    g.physics(0.1, true);
+    expect(p.vy).toBe(0);
+    g.move(0.3, 0); // water does not block the player...
+    expect(p.x).toBeCloseTo(sx + 0.8);
+    expect(g.blocked(p.x, p.z, 0.3, true)).toBe(true); // ...but it does block animals
+    for (let i = 0; i < 100; i++) g.tick(0.1); // 10 seconds
+    expect(p.stamina).toBeCloseTo(10 - 100 / 22, 1);
+    expect(p.health).toBe(10);
+    for (let i = 0; i < 160; i++) g.tick(0.1);
+    expect(p.stamina).toBe(0);
+    expect(p.health).toBeLessThan(10);
+
+    // ponds are shallow: you wade, and can climb out onto the bank
+    const [wx, wz] = findTile(g, (o, t, x, z) => t.water && !t.salt && !g.gen.tile(x + 1, z).water && g.gen.tile(x + 1, z).h <= 0.5 && !g.world.get(x + 1, z));
+    Object.assign(p, { x: wx + 0.5, z: wz + 0.5, y: g.standY(wx + 0.5, wz + 0.5), vy: 0 });
+    expect(g.swimming).toBe(false);
+    expect(g.inWater).toBe(true);
+    for (let i = 0; i < 30; i++) { g.move(0.05, 0); g.physics(1 / 60, false); }
+    expect(g.inWater).toBe(false);
   });
 
   it('tires from sprinting and recovers', () => {

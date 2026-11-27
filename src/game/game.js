@@ -1,4 +1,4 @@
-import { Worldgen } from '../world/worldgen.js';
+import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
 import { WorldState } from '../world/worldstate.js';
 import { OBJECTS, CROP_RIPE } from '../world/objects.js';
 import { ITEMS, stackSize, ARMOR_SLOTS, MAX_DEFENSE, BASE_STORAGE, FLASK_DRINKS } from './items.js';
@@ -15,6 +15,10 @@ export const CHEST_SLOTS = 18;
 const STEP_LIP = 0.15; // height the player can walk up without jumping
 const JUMP_SPEED = 6.2; // about 0.95 units high: clears a 0.5 step comfortably
 const GRAVITY = 20;
+const FLOAT_SINK = 0.95; // how far below the surface a swimmer's feet hang
+const BANK_LIP = 1.45; // bank height you can climb out of the water onto
+const SWIM_SECONDS = 22; // seconds of swimming on full energy before you start to drown
+const DROWN_SECONDS = 1.6; // seconds per heart lost once out of energy in deep water
 // brutes are bigger, slower and hit harder; they start turning up from day 4
 export const ENEMY_KINDS = {
   gloomling: { hp: 6, speed: 2.5, damage: 1.5, size: 1 },
@@ -68,7 +72,7 @@ export class Game {
   toast(text) { this.emit('toast', { text }); }
 
   get held() { return this.inv.slots[this.selected]; }
-  get canSprint() { return !this.player.winded && this.player.stamina > 0; }
+  get canSprint() { return !this.player.winded && this.player.stamina > 0 && !this.inWater; }
   get isNight() { return this.time > 0.56 && this.time < 0.96; }
 
   serialize() {
@@ -86,8 +90,11 @@ export class Game {
     for (let tz = cz - 1; tz <= cz + 1; tz++) {
       for (let tx = cx - 1; tx <= cx + 1; tx++) {
         if (this.gen.tile(tx, tz).water) {
-          const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
-          if (Math.hypot(x - nx, z - nz) < r) return true;
+          // the player wades and swims; animals and creatures stay out of the water
+          if (animal) {
+            const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
+            if (Math.hypot(x - nx, z - nz) < r) return true;
+          }
           continue;
         }
         const obj = this.world.get(tx, tz);
@@ -104,9 +111,26 @@ export class Game {
 
   ground(x, z) { return this.gen.tile(Math.floor(x), Math.floor(z)).h; }
 
+  // Is the water at this spot deep enough that the player has to swim?
+  deepAt(x, z) {
+    const t = this.gen.tile(Math.floor(x), Math.floor(z));
+    return t.water && WATER_Y - t.bed > SWIM_DEPTH;
+  }
+
+  // Height the player's feet rest at: the ground, the bed of shallow water, or afloat in deep water.
+  standY(x, z) {
+    const t = this.gen.tile(Math.floor(x), Math.floor(z));
+    if (!t.water) return t.h;
+    return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
+  }
+
+  get inWater() { return this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)).water; }
+  get swimming() { return this.deepAt(this.player.x, this.player.z); }
+
   // Ledges higher than a small lip stop the player unless they have jumped high enough.
   canEnter(x, z) {
-    return !this.blocked(x, z) && this.ground(x, z) <= this.player.y + STEP_LIP;
+    // from the water you can haul yourself out onto a low bank
+    return !this.blocked(x, z) && this.standY(x, z) <= this.player.y + (this.inWater ? BANK_LIP : STEP_LIP);
   }
 
   move(dx, dz) {
@@ -119,10 +143,10 @@ export class Game {
   // Gravity and jumping. Call after move() each frame.
   physics(dt, jump) {
     const p = this.player;
-    const g = this.ground(p.x, p.z);
+    const g = this.standY(p.x, p.z);
     if (p.y <= g + 1e-4 && p.vy <= 0) {
       p.y = g;
-      p.vy = jump ? JUMP_SPEED : 0;
+      p.vy = jump && !this.swimming ? JUMP_SPEED : 0;
     } else p.vy -= GRAVITY * dt;
     p.y = Math.max(g, p.y + p.vy * dt);
   }
@@ -438,9 +462,15 @@ export class Game {
   }
 
   // ---- water ----
-  waterNear() {
+  // fresh: only ponds count (sea water is salty)
+  waterNear(fresh = false) {
     const px = Math.floor(this.player.x), pz = Math.floor(this.player.z);
-    for (let z = pz - 1; z <= pz + 1; z++) for (let x = px - 1; x <= px + 1; x++) if (this.gen.tile(x, z).water) return true;
+    for (let z = pz - 1; z <= pz + 1; z++) {
+      for (let x = px - 1; x <= px + 1; x++) {
+        const t = this.gen.tile(x, z);
+        if (t.water && !(fresh && t.salt)) return true;
+      }
+    }
     return false;
   }
 
@@ -448,7 +478,7 @@ export class Game {
 
   // What the drink key would do right now: 'pond', 'flask' or null.
   drinkSource() {
-    if (this.waterNear()) return 'pond';
+    if (this.waterNear(true)) return 'pond';
     return this.hasFlask() && this.player.flask > 0 ? 'flask' : null;
   }
 
@@ -464,7 +494,8 @@ export class Game {
       drink(p, 5);
       this.toast(`You drink from your flask (${p.flask} left)`);
     } else {
-      this.toast(this.hasFlask() ? 'Your flask is empty. Stand next to a pond to drink' : 'Stand next to a pond to drink');
+      if (this.waterNear()) this.toast('Sea water is too salty to drink. Find a pond');
+      else this.toast(this.hasFlask() ? 'Your flask is empty. Stand next to a pond to drink' : 'Stand next to a pond to drink');
       return false;
     }
     this.emit('drink', { source });
@@ -827,7 +858,19 @@ export class Game {
       if ((this.knock.t -= dt) <= 0) this.knock = null;
     }
     this.updateEnemies(dt);
-    if (tickStamina(this.player, dt, sprinting)) this.toast('Out of breath. Walk for a moment to recover');
+    if (this.swimming) {
+      // swimming uses energy; with none left you start to drown
+      const p = this.player;
+      p.stamina = Math.max(0, p.stamina - (dt * MAX_STAMINA) / SWIM_SECONDS);
+      if (p.stamina <= 0) {
+        p.health = Math.max(0, p.health - dt / DROWN_SECONDS);
+        if (!this.drowning) this.toast('You are drowning! Get to land');
+        this.drowning = true;
+      }
+    } else {
+      this.drowning = false;
+      if (tickStamina(this.player, dt, sprinting)) this.toast('Out of breath. Walk for a moment to recover');
+    }
     if (tickSurvival(this.player, dt, sprinting, this.hungerRate)) this.faint();
   }
 

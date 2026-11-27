@@ -126,8 +126,8 @@ export class PlayerModel {
     this.held.position.set(isTool ? 0.2 : 0.12, isTool ? -0.62 : -0.56, isTool ? 0.22 : 0.16);
   }
 
-  update(dt, moving, speed) {
-    this.phase = moving ? this.phase + dt * speed * 2.4 : 0;
+  update(dt, moving, speed, swimming = false, clock = 0) {
+    this.phase = moving || swimming ? this.phase + dt * (swimming ? 7 : speed * 2.4) : 0;
     const s = Math.sin(this.phase) * 0.7;
     this.legL.rotation.x = s;
     this.legR.rotation.x = -s;
@@ -135,6 +135,15 @@ export class PlayerModel {
     this.swing = Math.max(0, this.swing - dt * 4);
     this.armR.rotation.x = this.swing > 0 ? -2.4 * Math.sin(this.swing * Math.PI) : s;
     this.armR.rotation.z = 0;
+    if (swimming) {
+      // afloat: arms paddle out in front, legs kick gently, and the body bobs with the water
+      const paddle = Math.sin(this.phase) * 0.55;
+      this.armL.rotation.x = -1.35 + paddle;
+      if (this.swing <= 0) this.armR.rotation.x = -1.35 - paddle;
+      this.legL.rotation.x = paddle * 0.5;
+      this.legR.rotation.x = -paddle * 0.5;
+      this.group.position.y += Math.sin(clock * 2.6) * 0.05;
+    }
     if (this.eating > 0) {
       this.eating = Math.max(0, this.eating - dt);
       const t = 1 - this.eating / EAT_TIME; // 0 -> 1 over the animation

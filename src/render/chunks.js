@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../core/noise.js';
-import { BIOMES, SHORE, WATER_COLORS } from '../world/biomes.js';
+import { BIOMES, SHORE, WATER_COLORS, SEABED_COLORS } from '../world/biomes.js';
+import { WATER_Y } from '../world/worldgen.js';
 import { rgb, mergeModels } from './voxel.js';
 import { OBJECTS } from '../world/objects.js';
 
@@ -12,6 +13,7 @@ const GROUND = Object.fromEntries(Object.entries(BIOMES).map(([k, b]) => [k, lin
 const SHORE_GROUND = linearPair(SHORE.ground);
 const WATER = linearPair(WATER_COLORS);
 const SIDE_TINT = rgb(0x9a7a5a);
+const SEABED = [rgb(SEABED_COLORS.shallow), rgb(SEABED_COLORS.deep)];
 
 export function toGeometry({ pos, norm, col, idx }) {
   const g = new THREE.BufferGeometry();
@@ -34,6 +36,7 @@ export class Chunks {
     this.dirty = new Set();
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.objectMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.waterMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthWrite: false });
     this.world.onChange((x, z) => {
       // Neighbours too, so fences across a chunk border reconnect.
       for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -56,8 +59,9 @@ export class Chunks {
 
     for (const [key, c] of this.map) {
       if (Math.abs(c.cx - ccx) > RADIUS + 1 || Math.abs(c.cz - ccz) > RADIUS + 1) {
-        this.scene.remove(c.terrain, c.objects);
+        this.scene.remove(c.terrain, c.water, c.objects);
         c.terrain.geometry.dispose();
+        c.water.geometry.dispose();
         c.objects.geometry.dispose();
         this.map.delete(key);
       }
@@ -70,52 +74,74 @@ export class Chunks {
   }
 
   create(cx, cz) {
-    const terrain = new THREE.Mesh(this.buildTerrain(cx, cz), this.terrainMat);
+    const built = this.buildTerrain(cx, cz);
+    const terrain = new THREE.Mesh(built.land, this.terrainMat);
     terrain.receiveShadow = true;
+    const water = new THREE.Mesh(built.water, this.waterMat);
+    water.renderOrder = 1;
     const objects = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     objects.castShadow = true;
     objects.receiveShadow = true;
-    const c = { cx, cz, terrain, objects, fires: [] };
+    const c = { cx, cz, terrain, water, objects, fires: [] };
     this.buildObjects(c);
-    this.scene.add(terrain, objects);
+    this.scene.add(terrain, water, objects);
     this.map.set(cx + ',' + cz, c);
   }
 
+  // -> {land, water}: the solid ground (including the sea and pond beds) and the see-through water surface.
   buildTerrain(cx, cz) {
-    const pos = [], norm = [], col = [], idx = [];
-    const quad = (corners, n, c) => {
-      const base = pos.length / 3;
-      for (const p of corners) {
-        pos.push(p[0], p[1], p[2]);
-        norm.push(n[0], n[1], n[2]);
-        col.push(c[0], c[1], c[2]);
-      }
-      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    const maker = () => {
+      const pos = [], norm = [], col = [], idx = [];
+      const quad = (corners, n, c) => {
+        const base = pos.length / 3;
+        for (const p of corners) {
+          pos.push(p[0], p[1], p[2]);
+          norm.push(n[0], n[1], n[2]);
+          col.push(c[0], c[1], c[2]);
+        }
+        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      };
+      const done = () => toGeometry({
+        pos: new Float32Array(pos), norm: new Float32Array(norm), col: new Float32Array(col), idx: new Uint32Array(idx),
+      });
+      return { quad, done };
+    };
+    const land = maker(), water = maker();
+    // the solid surface of a tile: the bed under water, the ground elsewhere
+    const floor = (x, z) => {
+      const t = this.gen.tile(x, z);
+      return t.water ? t.bed : t.h;
     };
     for (let z = cz * CHUNK; z < (cz + 1) * CHUNK; z++) {
       for (let x = cx * CHUNK; x < (cx + 1) * CHUNK; x++) {
         const t = this.gen.tile(x, z);
-        const pair = t.water ? WATER : t.shore ? SHORE_GROUND : GROUND[t.biome];
         const k = hash2(x, z, 31), shade = 0.95 + hash2(x, z, 32) * 0.1;
-        const c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
-        const h = t.h;
-        quad([[x, h, z], [x, h, z + 1], [x + 1, h, z + 1], [x + 1, h, z]], [0, 1, 0], c);
-        if (t.water) continue;
+        let c;
+        if (t.water) {
+          // bed: sandy in the shallows, fading to dark blue-grey in the deep
+          const depth = Math.min(1, (WATER_Y - t.bed) / 5);
+          c = [0, 1, 2].map((i) => (SEABED[0][i] + (SEABED[1][i] - SEABED[0][i]) * depth) * shade);
+          const w = [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
+          water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w);
+        } else {
+          const pair = t.shore ? SHORE_GROUND : GROUND[t.biome];
+          c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
+        }
+        const h = t.water ? t.bed : t.h;
+        land.quad([[x, h, z], [x, h, z + 1], [x + 1, h, z + 1], [x + 1, h, z]], [0, 1, 0], c);
         const side = c.map((v, i) => v * 0.45 + SIDE_TINT[i] * 0.3);
         // Walls down to lower neighbours, wound to face outward.
-        let nh = this.gen.tile(x + 1, z).h;
-        if (nh < h) quad([[x + 1, nh, z], [x + 1, h, z], [x + 1, h, z + 1], [x + 1, nh, z + 1]], [1, 0, 0], side);
-        nh = this.gen.tile(x - 1, z).h;
-        if (nh < h) quad([[x, nh, z], [x, nh, z + 1], [x, h, z + 1], [x, h, z]], [-1, 0, 0], side);
-        nh = this.gen.tile(x, z + 1).h;
-        if (nh < h) quad([[x, nh, z + 1], [x + 1, nh, z + 1], [x + 1, h, z + 1], [x, h, z + 1]], [0, 0, 1], side);
-        nh = this.gen.tile(x, z - 1).h;
-        if (nh < h) quad([[x, nh, z], [x, h, z], [x + 1, h, z], [x + 1, nh, z]], [0, 0, -1], side);
+        let nh = floor(x + 1, z);
+        if (nh < h) land.quad([[x + 1, nh, z], [x + 1, h, z], [x + 1, h, z + 1], [x + 1, nh, z + 1]], [1, 0, 0], side);
+        nh = floor(x - 1, z);
+        if (nh < h) land.quad([[x, nh, z], [x, nh, z + 1], [x, h, z + 1], [x, h, z]], [-1, 0, 0], side);
+        nh = floor(x, z + 1);
+        if (nh < h) land.quad([[x, nh, z + 1], [x + 1, nh, z + 1], [x + 1, h, z + 1], [x, h, z + 1]], [0, 0, 1], side);
+        nh = floor(x, z - 1);
+        if (nh < h) land.quad([[x, nh, z], [x, h, z], [x + 1, h, z], [x + 1, nh, z]], [0, 0, -1], side);
       }
     }
-    return toGeometry({
-      pos: new Float32Array(pos), norm: new Float32Array(norm), col: new Float32Array(col), idx: new Uint32Array(idx),
-    });
+    return { land: land.done(), water: water.done() };
   }
 
   buildObjects(c) {
@@ -170,7 +196,7 @@ export class Chunks {
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         const c = this.map.get(ccx + dx + ',' + (ccz + dz));
-        if (c) out.push(c.terrain, c.objects);
+        if (c) out.push(c.terrain, c.water, c.objects);
       }
     }
     return out;

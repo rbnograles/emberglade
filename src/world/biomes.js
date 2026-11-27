@@ -22,5 +22,17 @@ export const BIOMES = {
   },
 };
 
+BIOMES.mountain = {
+  name: 'Mountains', ground: [0x9aa1a3, 0x8d9496],
+  spawn: [['boulder', 0.05], ['rock_coal', 0.03], ['rock_copper', 0.025], ['tree_pine', 0.03], ['pebble', 0.03], ['stick', 0.01]],
+};
+BIOMES.snow = {
+  name: 'Snowy Peaks', ground: [0xf4f8fb, 0xe4edf3],
+  spawn: [['boulder', 0.025], ['tree_pine', 0.012], ['rock_coal', 0.012]],
+};
+// sea tiles; ground is only used by the minimap
+BIOMES.ocean = { name: 'Open Ocean', ground: [0x4f9fd6, 0x4a98cf], spawn: [] };
+
 export const SHORE = { ground: BIOMES.sand.ground, spawn: [['pebble', 0.05], ['stick', 0.02]] };
 export const WATER_COLORS = [0x82cbec, 0x74c0e6];
+export const SEABED_COLORS = { shallow: 0xe6d9a8, deep: 0x3d5f78 }; // sand near the surface, blue-grey far below

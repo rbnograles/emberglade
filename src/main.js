@@ -450,7 +450,8 @@ function step(dt) {
   }
   const moving = dx !== 0 || dz !== 0;
   const sprinting = moving && keys.has(K.sprint) && game.canSprint;
-  const speed = sprinting ? 6.5 : 4.2;
+  const swimming = game.swimming;
+  const speed = swimming ? 2.4 : game.inWater ? 3.2 : sprinting ? 6.5 : 4.2;
   if (!panels.open) {
     yawGoal += ((keys.has(K.camLeft) ? 1 : 0) - (keys.has(K.camRight) ? 1 : 0)) * 1.9 * dt;
     if (keys.has(K.camReset)) {
@@ -479,7 +480,7 @@ function step(dt) {
   wasWinded = !!p.winded;
   playerY = p.y;
   playerModel.group.position.set(p.x, playerY, p.z);
-  playerModel.update(dt, moving, speed);
+  playerModel.update(dt, moving, speed, swimming, clock);
   playerModel.setHeld(game.held?.id ?? null, !!(game.held && (ITEMS[game.held.id].tool || ITEMS[game.held.id].weapon)));
   const worn = game.armor.slots.map((s) => s?.id ?? '').join();
   if (worn !== wornKey) {

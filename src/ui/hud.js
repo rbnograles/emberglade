@@ -108,10 +108,12 @@ export class Hud {
       cold: 'Cold: you get hungry faster. Find a campfire, a floor, or armor',
       warm: 'Warm by the fire',
       sheltered: 'Sheltered indoors',
+      swim: 'Swimming: your energy drains. Reach land before it runs out',
     };
     const status = $('status');
-    status.className = STATUS[g.status] ? g.status : 'hidden';
-    status.textContent = STATUS[g.status] ?? '';
+    const state = g.swimming ? 'swim' : g.status;
+    status.className = STATUS[state] ? state : 'hidden';
+    status.textContent = STATUS[state] ?? '';
     // Eat button: shows what C would eat, and pulses when you are hungry.
     const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
     const eatBtn = $('btn-eat');
