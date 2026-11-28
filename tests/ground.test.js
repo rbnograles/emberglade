@@ -59,6 +59,40 @@ function slabsAreSound(slabs, floor) {
   return true;
 }
 
+// Can someone who steps up no more than half a tile walk from outside a landform to its top?
+// Every surface counts: the ground, and the top of any slab (a cave's roof is walked on like a bench).
+// They keep to the routes and to rock at least as high as the first tier, as a climber would.
+function routeClimbs(forms, f, base) {
+  const first = f.tiers[0], out = first.r * (1 + f.layer.amp) + f.layer.lip;
+  const sx = Math.round(f.x + Math.cos(first.a0) * out), sz = Math.round(f.z + Math.sin(first.a0) * out);
+  const tiles = new Map();
+  const tile = (x, z) => {
+    const key = x + ',' + z;
+    if (!tiles.has(key)) tiles.set(key, forms.at(x, z, base) ?? {});
+    return tiles.get(key);
+  };
+  // the highest surface of a tile that can be stepped onto from height `from`
+  const stepTo = (t, from) => {
+    let best = base.water && !t.dry ? 0 : t.h ?? base.h;
+    for (const [, hi] of t.slabs ?? []) if (hi <= from + 0.5) best = Math.max(best, hi);
+    return best <= from + 0.5 ? best : null;
+  };
+  const seen = new Set([sx + ',' + sz]), queue = [[sx, sz, stepTo(tile(sx, sz), 99)]];
+  while (queue.length) {
+    const [x, z, y] = queue.shift();
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz, key = nx + ',' + nz;
+      if (seen.has(key) || Math.hypot(nx - f.x, nz - f.z) > f.reach) continue;
+      const t = tile(nx, nz), ny = stepTo(t, y);
+      if (ny === null || (!t.path && ny < first.hi)) continue;
+      if (ny === f.h && !t.path) return true;
+      seen.add(key);
+      queue.push([nx, nz, ny]);
+    }
+  }
+  return false;
+}
+
 describe('settling the rock above a tile', () => {
   it('joins rock that is too close to the ground onto the ground', () => {
     expect(settle(0, [[1, 3]], false)).toEqual({ h: 3, slabs: undefined });
@@ -149,4 +183,16 @@ describe('landforms planned from the seed', () => {
     }
     expect(over).toBeGreaterThan(0);
   });
+  it('has a walkable way up every plateau, tier by tier, and every mesa and island', () => {
+    for (const seed of [1, 7]) {
+      const land = allLand(seed), sea = allSea(seed);
+      const inland = land.near(0, 0, 4000), coast = sea.near(0, 0, 1500);
+      const tiered = of(inland, 'plateau').filter((f) => f.tiers.length > 1);
+      expect(tiered.length).toBeGreaterThan(3);
+      for (const f of [...of(inland, 'plateau').slice(0, 6), ...tiered.slice(0, 4), ...of(inland, 'mesa').slice(0, 3)]) {
+        expect(routeClimbs(land, f, GROUND), `${f.layer.id} at ${f.x},${f.z} in seed ${seed}`).toBe(true);
+      }
+      for (const f of of(coast, 'island').slice(0, 6)) expect(routeClimbs(sea, f, SEA), `island at ${f.x},${f.z} in seed ${seed}`).toBe(true);
+    }
+  }, 30000);
 });
