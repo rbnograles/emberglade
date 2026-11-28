@@ -152,7 +152,8 @@ export function buildTerrain(gen, cx, cz) {
         const roofed = nt.slabs ? dimmed(cover(gen, x + dx, z + dz)) : 1;
         (mine ?? [[-Infinity, h]]).forEach(([a, b], i) => {
           const lipColour = i === 0 ? c : top; // the ground's own colour, or the grass on top of a slab
-          const bank = lipColour.map((v, j) => v * 0.45 + SIDE_TINT[j] * 0.3);
+          // the dark stone of a castle's cliff, or the darkened colour of the ground
+          const bank = t.cliff ? [0.16, 0.17, 0.18].map((v) => v * shade) : lipColour.map((v, j) => v * 0.45 + SIDE_TINT[j] * 0.3);
           for (const [y0, y1] of gaps(a, b, theirs)) {
             const under = nt.slabs && y1 <= nt.slabs[0][0] ? roofed : 1;
             if (!kind) {

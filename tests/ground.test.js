@@ -571,4 +571,24 @@ describe('drawing the ground', () => {
     const at = (5 * CHUNK + 5) * 4 * 3;
     expect(roofed.col[at + 1]).toBeLessThan(open.col[at + 1]);
   });
+
+  it('keeps the dark stone walls of a castle cliff, and the earthy bank everywhere else', () => {
+    // the +x face of a raised tile: the vertices at x = 6 that face along +x
+    const wallColour = (tile) => {
+      const { land } = buildTerrain(flatGen({ '5,5': tile }), 0, 0);
+      const out = [];
+      for (let i = 0; i < land.pos.length; i += 3) if (land.pos[i] === 6 && land.pos[i + 2] >= 5 && land.pos[i + 2] <= 6 && land.norm[i] === 1) out.push(Array.from(land.col.slice(i, i + 3)));
+      return out;
+    };
+    const stone = wallColour({ h: 3, cliff: true }), earth = wallColour({ h: 3 });
+    expect(stone.length).toBe(4);
+    // lip vertices (the brighter pair) are the full colour; the foot is dimmer
+    const lip = (w) => w.reduce((a, b) => (b[1] > a[1] ? b : a));
+    const [r, g, b] = lip(stone);
+    expect(r).toBeGreaterThan(0.14); expect(r).toBeLessThan(0.18);
+    expect(Math.abs(r - g)).toBeLessThan(0.03); expect(Math.abs(g - b)).toBeLessThan(0.03);
+    const e = lip(earth);
+    expect(e[0]).toBeGreaterThan(r + 0.05); // the ordinary bank is lighter and warmer, not grey
+    expect(e[0]).toBeGreaterThan(e[2] + 0.1);
+  });
 });
