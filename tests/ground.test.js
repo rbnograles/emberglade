@@ -64,23 +64,38 @@ function slabsAreSound(slabs, floor) {
   return true;
 }
 
-// Can someone who steps up no more than half a tile walk from outside a landform to its top?
-// Every surface counts: the ground, and the top of any slab (a cave's roof is walked on like a bench).
-// They keep to the routes and to rock at least as high as the first tier, as a climber would.
-function routeClimbs(forms, f, base) {
-  const first = f.tiers[0], out = first.r * (1 + f.layer.amp) + f.layer.lip;
-  const sx = Math.round(f.x + Math.cos(first.a0) * out), sz = Math.round(f.z + Math.sin(first.a0) * out);
+// The ground of a world made of landforms over one kind of base tile, read tile by tile as the
+// game reads it.
+function reshaped(forms, base) {
   const tiles = new Map();
-  const tile = (x, z) => {
+  return (x, z) => {
     const key = x + ',' + z;
-    if (!tiles.has(key)) tiles.set(key, forms.at(x, z, base) ?? {});
+    if (!tiles.has(key)) {
+      const form = forms.at(x, z, base) ?? {};
+      tiles.set(key, { ...base, water: base.water && !form.dry, ...form });
+    }
     return tiles.get(key);
   };
-  // the highest surface of a tile that can be stepped onto from height `from`
+}
+
+// The game's own step rules: a swimmer floats this high (the surface less the float sink), and can
+// haul themselves out only onto ground no higher than BANK (the bank lip above that). On land a
+// step up is at most half a tile.
+const SWIM = WATER_Y - 0.95, BANK = SWIM + 1.45;
+
+// Can someone walk from outside a landform to its top, by those rules?
+// Every surface counts: the ground, and the top of any slab (a cave's roof is walked on like a bench).
+// They keep to the routes and to rock at least as high as the first tier, as a climber would.
+// tile(x, z): the tile at a spot, with h, water and slabs as Worldgen.tile gives them
+function climbs(tile, f) {
+  const first = f.tiers[0], out = first.r * (1 + f.layer.amp) + f.layer.lip;
+  const sx = Math.round(f.x + Math.cos(first.a0) * out), sz = Math.round(f.z + Math.sin(first.a0) * out);
+  // the highest surface of a tile that can be stepped onto from height `from` (SWIM: in the water)
   const stepTo = (t, from) => {
-    let best = base.water && !t.dry ? 0 : t.h ?? base.h;
-    for (const [, hi] of t.slabs ?? []) if (hi <= from + 0.5) best = Math.max(best, hi);
-    return best <= from + 0.5 ? best : null;
+    const top = from === SWIM ? BANK : from + 0.5;
+    let best = t.water ? SWIM : t.h;
+    for (const [, hi] of t.slabs ?? []) if (hi <= top) best = Math.max(best, hi);
+    return best <= top ? best : null;
   };
   const seen = new Set([sx + ',' + sz]), queue = [[sx, sz, stepTo(tile(sx, sz), 99)]];
   while (queue.length) {
@@ -194,10 +209,11 @@ describe('landforms planned from the seed', () => {
       const inland = land.near(0, 0, 4000), coast = sea.near(0, 0, 1500);
       const tiered = of(inland, 'plateau').filter((f) => f.tiers.length > 1);
       expect(tiered.length).toBeGreaterThan(3);
+      const onLand = reshaped(land, GROUND), atSea = reshaped(sea, SEA);
       for (const f of [...of(inland, 'plateau').slice(0, 6), ...tiered.slice(0, 4), ...of(inland, 'mesa').slice(0, 3)]) {
-        expect(routeClimbs(land, f, GROUND), `${f.layer.id} at ${f.x},${f.z} in seed ${seed}`).toBe(true);
+        expect(climbs(onLand, f), `${f.layer.id} at ${f.x},${f.z} in seed ${seed}`).toBe(true);
       }
-      for (const f of of(coast, 'island').slice(0, 6)) expect(routeClimbs(sea, f, SEA), `island at ${f.x},${f.z} in seed ${seed}`).toBe(true);
+      for (const f of of(coast, 'island').slice(0, 6)) expect(climbs(atSea, f), `island at ${f.x},${f.z} in seed ${seed}`).toBe(true);
     }
   }, 30000);
 });
@@ -205,33 +221,43 @@ describe('landforms planned from the seed', () => {
 const SEEDS = [1, 7, 42];
 const nearest = (gen, id, radius = 3000) => gen.landformsNear(0, 0, radius).find((f) => f.layer.id === id);
 
-// Can someone who steps up no more than half a tile walk from the foot of a landform to its top?
-// They keep to the routes and to rock at least as high as the first tier, as a climber would.
-function climbs(gen, f) {
-  const first = f.tiers[0];
-  const out = first.r * (1 + f.layer.amp) + f.layer.lip;
-  const sx = Math.round(f.x + Math.cos(first.a0) * out), sz = Math.round(f.z + Math.sin(first.a0) * out);
-  // the highest surface of a tile that can be stepped onto from height `from`
-  const stepTo = (t, from) => {
-    let best = t.water ? 0 : t.h;
-    for (const [, hi] of t.slabs ?? []) if (hi <= from + 0.5) best = Math.max(best, hi);
-    return best <= from + 0.5 ? best : null;
-  };
-  const seen = new Set([sx + ',' + sz]), queue = [[sx, sz, stepTo(gen.tile(sx, sz), 99)]];
-  while (queue.length) {
-    const [x, z, y] = queue.shift();
+// Can the player get from (sx, sz) to the top of a landform? The real game judges every step:
+// canEnter says whether they may move, and standY where they come to rest. They jump wherever they
+// are not swimming, and nothing that grows or is built is in their way.
+const JUMP = 0.9; // a little under the top of a jump
+function gameClimbs(g, f, sx, sz) {
+  const p = g.player, gen = g.gen;
+  g.blocked = () => false;
+  const put = (x, z, y) => Object.assign(p, { x: x + 0.5, z: z + 0.5, y, vy: 0 });
+  const y0 = g.standY(sx + 0.5, sz + 0.5, floorOf(gen.tile(sx, sz)));
+  const seen = new Set([sx + ',' + sz + ',' + y0]), queue = [[sx, sz, y0]];
+  for (let i = 0; i < queue.length; i++) {
+    const [x, z, y] = queue[i];
+    put(x, z, y);
+    const heights = g.swimming ? [y] : [y, Math.min(y + JUMP, ceilingAbove(gen.tile(x, z), y + 0.17) - PLAYER_HEIGHT)];
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx, nz = z + dz, key = nx + ',' + nz;
-      if (seen.has(key) || Math.hypot(nx - f.x, nz - f.z) > f.reach) continue;
-      const t = gen.tile(nx, nz), ny = stepTo(t, y);
-      if (ny === null || (!t.path && ny < first.hi)) continue;
-      if (ny === f.h && !t.path) return true;
-      seen.add(key);
-      queue.push([nx, nz, ny]);
+      const nx = x + dx, nz = z + dz;
+      if (Math.hypot(nx - f.x, nz - f.z) > f.reach + 10) continue;
+      for (const from of heights) {
+        put(x, z, from);
+        if (!g.canEnter(nx + 0.5, nz + 0.5)) continue;
+        const ny = g.standY(nx + 0.5, nz + 0.5, from), t = gen.tile(nx, nz);
+        if (ny === f.h && !t.path && !t.slabs) return true;
+        const key = nx + ',' + nz + ',' + ny;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        queue.push([nx, nz, ny]);
+      }
     }
   }
   return false;
 }
+// Just outside a landform, in line with its way up: out at sea beside an island, on the plain
+// beside a plateau or a mesa.
+const besideRoute = (f) => {
+  const a = f.tiers[0].a0, d = f.reach + 3;
+  return [Math.round(f.x + Math.cos(a) * d), Math.round(f.z + Math.sin(a) * d)];
+};
 
 describe('the new country in a world', () => {
   it('names its places and colours its rock', () => {
@@ -284,9 +310,27 @@ describe('the new country in a world', () => {
   it('has a walkable way up every island, plateau and mesa', () => {
     for (const seed of SEEDS) {
       const gen = new Worldgen(seed);
-      for (const id of ['island', 'plateau', 'mesa']) expect(climbs(gen, nearest(gen, id)), `${id} in seed ${seed}`).toBe(true);
+      for (const id of ['island', 'plateau', 'mesa']) expect(climbs((x, z) => gen.tile(x, z), nearest(gen, id)), `${id} in seed ${seed}`).toBe(true);
     }
   }, 60000);
+
+  it('lets the player swim to an island, climb out onto its way up and walk to the top', () => {
+    for (const seed of SEEDS) {
+      const g = new Game({ seed }), f = nearest(g.gen, 'island'), [sx, sz] = besideRoute(f);
+      Object.assign(g.player, { x: sx + 0.5, z: sz + 0.5, y: SWIM });
+      expect(g.swimming, `the sea beside the island in seed ${seed}`).toBe(true);
+      expect(gameClimbs(g, f, sx, sz), `island at ${f.x},${f.z} in seed ${seed}`).toBe(true);
+    }
+  }, 30000);
+
+  it('lets the player walk from the plain to the top of a plateau and of a mesa', () => {
+    const g = new Game({ seed: 1 });
+    for (const id of ['plateau', 'mesa']) {
+      const f = nearest(g.gen, id), [sx, sz] = besideRoute(f);
+      expect(g.gen.tile(sx, sz).water).toBe(false);
+      expect(gameClimbs(g, f, sx, sz), `${id} at ${f.x},${f.z}`).toBe(true);
+    }
+  }, 30000);
 
   it('spans the sea between stacks with arches a boat can pass under', () => {
     for (const seed of SEEDS) {

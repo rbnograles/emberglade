@@ -277,7 +277,11 @@ export class Landforms {
     if (!land) return null;
     const ground = base.water ? 0 : base.h;
     // a route is kept clear of everything: no rock over it, nothing growing on it
-    if (path !== null) return path > 0 ? { land, path: true, dry: true, h: Math.max(ground, path), biome } : { land, path: true, biome };
+    if (path !== null) {
+      if (path > 0) return { land, path: true, dry: true, h: Math.max(ground, path), biome };
+      // where its foot lies in water it is a strip of beach, low enough to climb out onto
+      return base.water ? { land, path: true, dry: true, shore: true, h: 0, biome } : { land, path: true, biome };
+    }
     if (rock > 0) {
       // caves: winding passages at ground level through any rock tall enough to hold them
       const s = this.world.seed;
