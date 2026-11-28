@@ -93,7 +93,9 @@ export function buildTerrain(gen, cx, cz) {
     for (let x = cx * CHUNK; x < (cx + 1) * CHUNK; x++) {
       const t = gen.tile(x, z);
       const k = hash2(x, z, 31), shade = 0.95 + hash2(x, z, 32) * 0.1;
-      // the colour of open ground here: also the colour of the top of any rock above it
+      // the colour of open ground here: also the colour of the top of any rock above it. Dry ground
+      // or rock whose biome is still ocean (a village laid over the sea, rock reaching out over it)
+      // is drawn as meadow, the grass that grows on all rock risen from the sea.
       const sky = t.land === 'stacks' && t.h >= 6 && hash2(x >> 1, z >> 1, 77) > 0.72 ? STONE : GROUND[t.biome === 'ocean' ? 'meadow' : t.biome];
       const top = [0, 1, 2].map((i) => (sky[0][i] + (sky[1][i] - sky[0][i]) * k) * shade);
       let c;
@@ -112,6 +114,7 @@ export function buildTerrain(gen, cx, cz) {
         };
         water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w, [foam(x, z), foam(x, z + 1), foam(x + 1, z + 1), foam(x + 1, z)]);
       } else {
+        // ground under rock keeps its biome's own colour: the bare stone patches belong to the top
         const pair = t.dug < 0 ? DIRT : t.ice ? ICE : t.shore ? SHORE_GROUND : t.slabs ? GROUND[t.biome] : sky;
         c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
         // lava glows: it gets its own unlit layer just above the rock

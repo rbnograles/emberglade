@@ -22,7 +22,7 @@ export const LAYERS = [
   { id: 'island', land: 'stacks', cell: 170, chance: 0.65, r: [20, 30], h: [14, 35], amp: 0.14, grain: 16, lip: 3, apron: 12, ramp: true, salt: 440 },
   { id: 'stack', land: 'stacks', cell: 44, chance: 0.6, r: [3, 11], h: [12, 35], amp: 0.22, grain: 6, lip: 3, apron: 0, ramp: false, salt: 460 },
 ];
-const STACK = LAYERS[3];
+const STACK = LAYERS.find((l) => l.id === 'stack');
 const PILLAR_CELL = 36, BRIDGE_CELL = 90;
 
 // Tidy the rock above one tile so it obeys the rules: sorted, never touching, and with HEADROOM
@@ -145,9 +145,10 @@ export class Landforms {
     return a < w ? 0 : Math.min(4, 1 + Math.floor((a - w) / 0.02));
   }
 
-  // A rock pillar standing on a canyon floor, or null: one possible per small square.
+  // A rock pillar standing on a canyon floor, or null: one possible per small square. Its height
+  // comes from the mesa, so the mesa's own square is part of what it is remembered by.
   pillar(f, cx, cz) {
-    return this.remember('pillar:' + cx + ',' + cz, () => {
+    return this.remember('pillar:' + f.cx + ',' + f.cz + ':' + cx + ',' + cz, () => {
       const s = this.world.seed + 480;
       if (hash2(cx, cz, s) > 0.5) return null;
       const x = cx * PILLAR_CELL + 8 + Math.floor(hash2(cx, cz, s + 1) * (PILLAR_CELL - 16));
@@ -157,9 +158,10 @@ export class Landforms {
     });
   }
 
-  // A natural bridge across a canyon, or null: one possible per square.
+  // A natural bridge across a canyon, or null: one possible per square. Like a pillar, it is
+  // remembered by the mesa it crosses as well, whose height sets its own.
   bridge(f, cx, cz) {
-    return this.remember('bridge:' + cx + ',' + cz, () => {
+    return this.remember('bridge:' + f.cx + ',' + f.cz + ':' + cx + ',' + cz, () => {
       const s = this.world.seed + 490;
       if (hash2(cx, cz, s) > 0.9) return null;
       const x = cx * BRIDGE_CELL + 30 + Math.floor(hash2(cx, cz, s + 1) * (BRIDGE_CELL - 60));

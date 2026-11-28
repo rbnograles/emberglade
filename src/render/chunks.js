@@ -18,6 +18,11 @@ export { CHUNK };
 // How living things move in the wind: sway is how freely, stem the height (above its foot) that stays put.
 const WIND_IN = { tree: { sway: 1, stem: 1.2 }, tallgrass: { sway: 1.8, stem: 0.08 }, flower: { sway: 1.5, stem: 0.08 }, bush: { sway: 0.45, stem: 0.25 }, bush_bare: { sway: 0.45, stem: 0.25 }, kelp: { sway: 1.6, stem: 0.1 } };
 const RADIUS = 3;
+// 4x4 ordered (Bayer) dither threshold for a pixel, in 0..1: the see-through circle around the
+// player thins objects and rock alike to this fine pattern.
+const PEEK_DITHER = `
+          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`;
 
 export function toGeometry({ pos, norm, col, idx, sway, rock }) {
   const g = new THREE.BufferGeometry();
@@ -82,10 +87,7 @@ export class Chunks {
       shader.uniforms.peek = this.peek;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
-          uniform vec4 peek;
-          // 4x4 ordered (Bayer) dither threshold for this pixel, in 0..1
-          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`)
+          uniform vec4 peek;${PEEK_DITHER}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
           if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7) {
             float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
@@ -125,9 +127,7 @@ export class Chunks {
           varying float vRock;
           uniform vec4 peek;
           uniform float peekY;
-          uniform vec3 rockTints[12];
-          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`)
+          uniform vec3 rockTints[12];${PEEK_DITHER}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
           if (peek.z > 0.0 && vPlace.y > peekY && vViewPosition.z < peek.w - 0.7) {
             float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
