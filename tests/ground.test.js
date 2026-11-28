@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { HEADROOM, PLAYER_HEIGHT, floorOf, surfaces, slabTopBelow, ceilingAbove, solidAt, solids } from '../src/world/columns.js';
 import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
+import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
+import { BIOMES, LAND_NAMES, ROCK_COLORS } from '../src/world/biomes.js';
+import { WORLD_TYPES } from '../src/world/worldtypes.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
 const sea = (bed, slabs) => ({ h: -0.3, water: true, bed, slabs });
@@ -195,4 +198,164 @@ describe('landforms planned from the seed', () => {
       for (const f of of(coast, 'island').slice(0, 6)) expect(routeClimbs(sea, f, SEA), `island at ${f.x},${f.z} in seed ${seed}`).toBe(true);
     }
   }, 30000);
+});
+
+const SEEDS = [1, 7, 42];
+const nearest = (gen, id, radius = 3000) => gen.landformsNear(0, 0, radius).find((f) => f.layer.id === id);
+
+// Can someone who steps up no more than half a tile walk from the foot of a landform to its top?
+// They keep to the routes and to rock at least as high as the first tier, as a climber would.
+function climbs(gen, f) {
+  const first = f.tiers[0];
+  const out = first.r * (1 + f.layer.amp) + f.layer.lip;
+  const sx = Math.round(f.x + Math.cos(first.a0) * out), sz = Math.round(f.z + Math.sin(first.a0) * out);
+  // the highest surface of a tile that can be stepped onto from height `from`
+  const stepTo = (t, from) => {
+    let best = t.water ? 0 : t.h;
+    for (const [, hi] of t.slabs ?? []) if (hi <= from + 0.5) best = Math.max(best, hi);
+    return best <= from + 0.5 ? best : null;
+  };
+  const seen = new Set([sx + ',' + sz]), queue = [[sx, sz, stepTo(gen.tile(sx, sz), 99)]];
+  while (queue.length) {
+    const [x, z, y] = queue.shift();
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz, key = nx + ',' + nz;
+      if (seen.has(key) || Math.hypot(nx - f.x, nz - f.z) > f.reach) continue;
+      const t = gen.tile(nx, nz), ny = stepTo(t, y);
+      if (ny === null || (!t.path && ny < first.hi)) continue;
+      if (ny === f.h && !t.path) return true;
+      seen.add(key);
+      queue.push([nx, nz, ny]);
+    }
+  }
+  return false;
+}
+
+describe('the new country in a world', () => {
+  it('names its places and colours its rock', () => {
+    expect(BIOMES.canyon.name).toBe('Canyon Lands');
+    expect(LAND_NAMES).toEqual({ stacks: 'Stack Coast', table: 'Tablelands', canyon: 'Canyon Lands' });
+    for (const land of Object.keys(LAND_NAMES)) expect(ROCK_COLORS[land]).toHaveLength(4);
+    expect(WORLD_TYPES.continents.rugged).toBe(1);
+    expect(WORLD_TYPES.isles.rugged).toBe(1.5);
+    expect(WORLD_TYPES.highlands.rugged).toBe(1.5);
+  });
+
+  it('has every kind within 3000 tiles and none at the heart of the world', () => {
+    for (const seed of SEEDS) {
+      const gen = new Worldgen(seed);
+      for (const id of ['stack', 'island', 'plateau', 'mesa']) expect(nearest(gen, id), `${id} in seed ${seed}`).toBeTruthy();
+      for (let x = -200; x <= 200; x += 8) {
+        for (let z = -200; z <= 200; z += 8) {
+          if (Math.hypot(x, z) > 200) continue;
+          const t = gen.tile(x, z);
+          expect(t.land).toBeUndefined();
+          expect(t.slabs).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it('gives the same ground for the same seed, and sound slabs everywhere', () => {
+    const a = new Worldgen(7), b = new Worldgen(7);
+    let slabTiles = 0;
+    for (const id of ['stack', 'island', 'plateau', 'mesa']) {
+      const f = nearest(a, id), reach = Math.ceil(f.reach), step = id === 'mesa' ? 3 : id === 'plateau' ? 2 : 1;
+      for (let x = f.x - reach; x <= f.x + reach; x += step) {
+        for (let z = f.z - reach; z <= f.z + reach; z += step) {
+          const t = a.tile(x, z), u = b.tile(x, z);
+          expect([u.h, u.slabs, u.land, u.path]).toEqual([t.h, t.slabs, t.land, t.path]);
+          if (t.land) {
+            expect(t.frost).toBe(0);
+            expect(t.heat).toBe(0);
+            expect(['mountain', 'snow', 'volcano']).not.toContain(t.biome);
+          }
+          if (!t.slabs) continue;
+          slabTiles++;
+          expect(slabsAreSound(t.slabs, t.water ? 0 : t.h), `${id} at ${x},${z}`).toBe(true);
+        }
+      }
+    }
+    expect(slabTiles).toBeGreaterThan(200);
+  });
+
+  it('has a walkable way up every island, plateau and mesa', () => {
+    for (const seed of SEEDS) {
+      const gen = new Worldgen(seed);
+      for (const id of ['island', 'plateau', 'mesa']) expect(climbs(gen, nearest(gen, id)), `${id} in seed ${seed}`).toBe(true);
+    }
+  }, 60000);
+
+  it('spans the sea between stacks with arches a boat can pass under', () => {
+    for (const seed of SEEDS) {
+      const gen = new Worldgen(seed), stack = LAYERS.find((l) => l.id === 'stack');
+      const mids = [];
+      const n = Math.ceil(3000 / stack.cell);
+      for (let cz = -n; cz < n; cz++) {
+        for (let cx = -n; cx < n; cx++) {
+          for (const axis of [0, 1]) {
+            const arch = gen.forms.arch(cx, cz, axis);
+            if (!arch) continue;
+            const m = (arch.from + arch.to) / 2;
+            mids.push(gen.tile(Math.round(arch.x + arch.dx * m), Math.round(arch.z + arch.dz * m)));
+          }
+        }
+      }
+      expect(mids.length).toBeGreaterThan(5);
+      expect(mids.some((t) => t.water && t.slabs && t.slabs[0][0] - WATER_Y >= 4)).toBe(true);
+    }
+  });
+
+  it('keeps settlements off it', () => {
+    for (const seed of SEEDS) {
+      const gen = new Worldgen(seed);
+      for (const st of gen.settlementsNear(0, 0, 3000)) {
+        expect(gen.natural(st.x, st.z).land).toBeUndefined();
+        for (let dx = -st.radius; dx <= st.radius; dx += 3) {
+          for (let dz = -st.radius; dz <= st.radius; dz += 3) {
+            const t = gen.tile(st.x + dx, st.z + dz);
+            if (t.settled) expect([t.land, t.slabs, t.path]).toEqual([undefined, undefined, undefined]);
+          }
+        }
+      }
+    }
+  });
+
+  it('grows nothing on a route and only stone and sticks under rock', () => {
+    const gen = new Worldgen(1);
+    let routes = 0, under = 0;
+    for (const id of ['island', 'plateau']) {
+      const f = nearest(gen, id), reach = Math.ceil(f.reach);
+      for (let x = f.x - reach; x <= f.x + reach; x++) {
+        for (let z = f.z - reach; z <= f.z + reach; z++) {
+          const t = gen.tile(x, z), obj = gen.object(x, z);
+          if (t.path) {
+            routes++;
+            expect(obj).toBe(null);
+          } else if (t.slabs && !t.water && obj) {
+            under++;
+            expect(['pebble', 'stick', 'boulder'].includes(obj.t) || obj.t.startsWith('rock_')).toBe(true);
+          }
+        }
+      }
+    }
+    expect(routes).toBeGreaterThan(50);
+    expect(under).toBeGreaterThan(0);
+  });
+
+  it('leaves the mountains where they were', () => {
+    const gen = new Worldgen(42);
+    let peaks = 0;
+    for (let x = -3000; x <= 3000; x += 37) {
+      for (let z = -3000; z <= 3000; z += 37) {
+        const t = gen.natural(x, z);
+        if (t.biome !== 'mountain' && t.biome !== 'snow') continue;
+        peaks++;
+        expect(gen.mountainRise(x, z)).toBeGreaterThanOrEqual(0.5);
+        expect(gen.plain(x, z)).toBe(false);
+        expect(t.land).toBeUndefined();
+      }
+    }
+    expect(peaks).toBeGreaterThan(20);
+  });
 });

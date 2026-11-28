@@ -2,6 +2,7 @@ import { fbm, hash2 } from '../core/noise.js';
 import { BIOMES, SHORE, SEABED } from './biomes.js';
 import { CELL, planSettlement, castleGround } from './structures.js';
 import { WORLD_TYPES, worldType } from './worldtypes.js';
+import { Landforms } from './landforms.js';
 
 export const WATER_Y = -0.3;
 export const DIG_STEP = 0.5; // how far one spadeful lowers or raises the ground
@@ -11,6 +12,8 @@ export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swu
 const SNOW_LINE = 18; // mountains this high are snow-capped (much lower inside the frozen region)
 const VOLCANO_CELL = 560; // one possible volcano per square of this many tiles, inside the volcanic region
 const REGION_DISTANCE = 4300; // how far from the centre of the world the two harsh regions lie
+// What still grows or lies on dry ground with rock overhead: no trees, bushes, grass or flowers.
+const UNDER_ROCK = new Set(['pebble', 'stick', 'boulder']);
 
 // Deterministic description of every tile: height, water, biome and natural object.
 export class Worldgen {
@@ -23,6 +26,11 @@ export class Worldgen {
     this.dug = new Map(); // "x,z" -> steps the player has dug down (negative) or built up
     this.settlements = new Map(); // settlement grid square -> village, castle or null
     this.volcanoes = new Map(); // grid cell -> volcano or null
+    // stacks, islands, plateaus and canyon mesas: the rugged country between the gentle lowlands
+    this.forms = new Landforms({
+      seed: this.seed, sea: this.type.sea, rugged: this.type.rugged,
+      continent: (x, z) => this.continent(x, z), plain: (x, z) => this.plain(x, z),
+    });
     // Each world has exactly one frozen region and one volcanic region, on roughly opposite sides.
     // They are put where there is the most land, so neither is lost at sea.
     const start = hash2(this.seed, 1, 900) * Math.PI * 2;
@@ -62,6 +70,26 @@ export class Worldgen {
     const depth = (c, r) => Math.max(0, Math.min(1, 1 - Math.hypot(x - c.x, z - c.z) / r + wobble));
     const frost = depth(this.frostCentre, this.type.frost);
     return { frost, heat: frost > 0 ? 0 : depth(this.heatCentre, this.type.heat) };
+  }
+
+  // How far the mountains lift the land at a spot, in tiles: 0 where there are none.
+  // Great massifs in the heart of each continent: the land climbs steadily from the lowlands near
+  // the coast to very high peaks far inland, with valleys and terraces cut into the slopes.
+  mountainRise(x, z, cont = this.continent(x, z)) {
+    const s = this.seed, OCEAN = this.type.sea, MOUNTAIN = this.type.mountain;
+    if (cont < OCEAN + 0.002) return 0; // the sea and the coast
+    const heart = Math.min(1, Math.max(0, (cont - OCEAN - 0.06) / 0.12));
+    const range = fbm(x / 1500, z / 1500, s + 30, 3) + heart * 0.12;
+    if (range <= MOUNTAIN || heart <= 0) return 0;
+    const fade = Math.min(1, Math.max(0, (Math.hypot(x, z) - 40) / 40)) * heart * (2 - heart);
+    const rough = 0.72 + 0.28 * fbm(x / 46, z / 46, s + 31, 3);
+    return Math.floor((range - MOUNTAIN) * 230 * rough * fade * 2) / 2;
+  }
+
+  // Is this a spot nothing else has shaped: no mountain, and neither of the harsh regions?
+  plain(x, z) {
+    const { frost, heat } = this.climate(x, z);
+    return frost <= 0 && heat <= 0 && this.mountainRise(x, z) < 0.5;
   }
 
   // The volcano whose slopes cover (x, z), with the distance to its centre, or null.
@@ -106,7 +134,7 @@ export class Worldgen {
         t.cliff = true;
         if (t.water || t.lava || t.ice) t.biome = 'meadow';
       }
-      Object.assign(t, { h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true });
+      Object.assign(t, { h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true, slabs: undefined, land: undefined, path: undefined });
     }
     // ground the player has dug out or built up, in half-tile steps
     const steps = this.dug.size ? this.dug.get(x + ',' + z) : 0;
@@ -163,10 +191,13 @@ export class Worldgen {
     return out;
   }
 
+  // Every stack, island, plateau and mesa whose middle is within `radius` tiles, nearest first.
+  landformsNear(x, z, radius) { return this.forms.near(x, z, radius); }
+
   // The land as it would be with nobody living on it. A fresh object each time; tile() is the cached, final answer.
   natural(x, z) {
     const s = this.seed;
-    const OCEAN = this.type.sea, MOUNTAIN = this.type.mountain;
+    const OCEAN = this.type.sea;
     const d = Math.hypot(x, z);
     // Shapes at several scales: continents and vast oceans, mountain ranges, and local bumps with ponds.
     // The old start area at the origin is lifted so it is always dry, gentle land.
@@ -224,28 +255,20 @@ export class Worldgen {
         else if (temp < -0.12) biome = 'autumn';
       }
 
-      // Mountains: broad ranges that climb very high, fading in away from the old start and the coast.
-      // Great massifs in the heart of each continent: the land climbs steadily from the lowlands near
-      // the coast to very high peaks far inland, with valleys and terraces cut into the slopes.
       const inland = Math.min(1, Math.max(0, (cont - OCEAN - 0.002) / 0.05));
-      const heart = Math.min(1, Math.max(0, (cont - OCEAN - 0.06) / 0.12));
-      const range = fbm(x / 1500, z / 1500, s + 30, 3) + heart * 0.12;
-      if (range > MOUNTAIN && heart > 0 && !coast) {
-        const fade = Math.min(1, Math.max(0, (d - 40) / 40)) * heart * (2 - heart);
-        const rough = 0.72 + 0.28 * fbm(x / 46, z / 46, s + 31, 3);
-        const rise = Math.floor((range - MOUNTAIN) * 230 * rough * fade * 2) / 2;
-        if (rise >= 0.5) {
-          if (water) {
-            water = false;
-            bed = null;
-            h = 0;
-          }
-          ice = lava = false;
-          h = Math.min(56, h + rise);
-          shore = false;
-          // snow caps: only the highest peaks elsewhere, nearly everything in the frozen region, none in the heat
-          biome = heat <= 0 && h >= (frost > 0 ? 5 : SNOW_LINE) ? 'snow' : 'mountain';
+      // Mountains: broad ranges that climb very high, fading in away from the old start and the coast.
+      const rise = this.mountainRise(x, z, cont);
+      if (rise >= 0.5) {
+        if (water) {
+          water = false;
+          bed = null;
+          h = 0;
         }
+        ice = lava = false;
+        h = Math.min(56, h + rise);
+        shore = false;
+        // snow caps: only the highest peaks elsewhere, nearly everything in the frozen region, none in the heat
+        biome = heat <= 0 && h >= (frost > 0 ? 5 : SNOW_LINE) ? 'snow' : 'mountain';
       }
 
       // Volcanoes: cones with a crater of lava at the top, found only in the volcanic region.
@@ -270,7 +293,27 @@ export class Worldgen {
     // lava: burns whoever stands in it. ice: frozen water, solid to walk on.
     // frost / heat: how deep this spot is in the frozen or the volcanic region (0 = outside).
     // boiling: scalding sea in the volcanic region.
-    return { h, bed, water, salt, biome, shore, lava, ice, boiling, frost, heat, obj: undefined };
+    // The rugged country: rock raised into stacks, plateaus and mesas, with slabs that overhang,
+    // arch over and roof caves. Never in the harsh regions, never on a mountain.
+    // slabs: rock above open space, [[lo, hi], ...]. land: which rugged country this is.
+    // path: part of a route up, kept clear.
+    let slabs, land, path;
+    if (frost <= 0 && heat <= 0 && !ice && !lava && biome !== 'mountain' && biome !== 'snow') {
+      const form = this.forms.at(x, z, { h, water, salt, bed });
+      if (form) {
+        if (form.dry) {
+          water = salt = shore = false;
+          bed = null;
+          if (biome === 'ocean') biome = 'meadow'; // rock that rises from the sea is grassed over
+        }
+        if (form.h !== undefined) h = form.h;
+        if (form.bed !== undefined) bed = form.bed;
+        if (form.shore) shore = true;
+        if (form.biome) biome = form.biome;
+        ({ slabs, land, path } = form);
+      }
+    }
+    return { h, bed, water, salt, biome, shore, lava, ice, boiling, frost, heat, slabs, land, path, obj: undefined };
   }
   // Natural object on a tile, or null. The returned object is shared: do not mutate it.
   object(x, z) {
@@ -281,6 +324,11 @@ export class Worldgen {
       const planned = this.settledCell(x, z)?.obj;
       t.obj = planned ? { ...planned } : null;
       return t.obj;
+    }
+    // a route up is kept clear from end to end
+    if (t.path) {
+      t.obj = null;
+      return null;
     }
     let obj = null;
     if ((t.salt || !t.water) && !t.lava && !t.ice && !t.boiling && Math.hypot(x, z) > 2) {
@@ -298,6 +346,8 @@ export class Worldgen {
         r -= p;
       }
     }
+    // under rock there is no light to grow by
+    if (obj && t.slabs && !t.water && !UNDER_ROCK.has(obj.t) && !obj.t.startsWith('rock_')) obj = null;
     t.obj = obj;
     return obj;
   }

@@ -442,13 +442,13 @@ export function planSettlement(seed, cellX, cellZ, natural) {
   const z = cellZ * CELL + MARGIN + Math.floor(hash2(cellX, cellZ, seed + 303) * span);
   if (Math.hypot(x, z) < 90) return null; // the start stays wild
   const here = natural(x, z);
-  if (here.water || here.shore || here.lava || here.frost > 0 || here.heat > 0) return null;
+  if (here.water || here.shore || here.lava || here.frost > 0 || here.heat > 0 || here.land) return null;
   if (kind === 'village' ? !LOWLAND.has(here.biome) : !(LOWLAND.has(here.biome) || (here.biome === 'mountain' && here.h < 9))) return null;
   // the ground around must be land and close to level, or the place would sit on a cliff or in a lake
   const reach = kind === 'village' ? 12 : 14;
   for (const [dx, dz] of [[-reach, -reach], [reach, -reach], [-reach, reach], [reach, reach], [0, -reach], [0, reach], [-reach, 0], [reach, 0]]) {
     const t = natural(x + dx, z + dz);
-    if (t.water || t.lava || Math.abs(t.h - here.h) > 1.5) return null;
+    if (t.water || t.lava || t.land || Math.abs(t.h - here.h) > 1.5) return null;
   }
   let n = 0;
   const rand = () => hash2(cellX * 7 + n, cellZ * 13 - n++, seed + 310);

@@ -7,7 +7,8 @@
 //   frost, heat  radius of the frozen and the volcanic region, in tiles
 //   wet       pushes the lowlands toward forest (+) or open country (-)
 //   trees     how thickly trees grow, against the usual
-const CLASSIC = { sea: -0.05, scale: 6000, mid: 0.035, fine: 0.02, mountain: 0.13, frost: 2600, heat: 2200, wet: 0, trees: 1 };
+//   rugged    how common the stack coasts, tablelands and canyon lands are, against the usual
+const CLASSIC = { sea: -0.05, scale: 6000, mid: 0.035, fine: 0.02, mountain: 0.13, frost: 2600, heat: 2200, wet: 0, trees: 1, rugged: 1 };
 
 export const WORLD_TYPES = {
   continents: {
@@ -16,7 +17,7 @@ export const WORLD_TYPES = {
   },
   isles: {
     name: 'Thousand Isles', text: 'A scatter of islands large and small. A boat is the first thing worth building.',
-    ...CLASSIC, sea: 0.15, scale: 2200, mid: 0.11, fine: 0.045, mountain: 0.2,
+    ...CLASSIC, sea: 0.15, scale: 2200, mid: 0.11, fine: 0.045, mountain: 0.2, rugged: 1.5,
   },
   ocean: {
     name: 'Endless Ocean', text: 'Water to every horizon and a few lonely shores. For divers and sailors.',
@@ -28,7 +29,7 @@ export const WORLD_TYPES = {
   },
   highlands: {
     name: 'Highlands', text: 'Mountains crowd the land. Ore and crystal are near; flat ground is not.',
-    ...CLASSIC, sea: -0.14, mountain: -0.06,
+    ...CLASSIC, sea: -0.14, mountain: -0.06, rugged: 1.5,
   },
   frostbound: {
     name: 'Frostbound', text: 'The frozen wastes have swallowed half the world. Warm clothes are not optional.',
