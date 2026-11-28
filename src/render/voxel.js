@@ -137,7 +137,9 @@ export class Vox {
 }
 
 // Copies placed models into one set of buffers.
-// placements: [{m, x, y, z, rot (0-3 quarter turns), scale}]
+// placements: [{m, x, y, z, rot (0-3 quarter turns), scale, sway, stem}]
+// sway: how freely the thing moves in the wind (0 = rigid). stem: height below which it stays still
+// (a trunk). The result carries a sway weight per corner, growing with height above the stem.
 export function mergeModels(placements) {
   let nv = 0, ni = 0;
   for (const p of placements) {
@@ -145,9 +147,10 @@ export function mergeModels(placements) {
     ni += p.m.idx.length;
   }
   const pos = new Float32Array(nv * 3), norm = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
+  const sway = new Float32Array(nv);
   const idx = new Uint32Array(ni);
   let v = 0, i = 0;
-  for (const { m, x, y, z, rot = 0, scale = 1 } of placements) {
+  for (const { m, x, y, z, rot = 0, scale = 1, sway: wind = 0, stem = 0 } of placements) {
     const a = rot === 0 ? 1 : rot === 2 ? -1 : 0; // x' = a*x + b*z, z' = -b*x + a*z
     const b = rot === 1 ? 1 : rot === 3 ? -1 : 0;
     for (let k = 0; k < m.nv; k++) {
@@ -155,6 +158,7 @@ export function mergeModels(placements) {
       const px = m.pos[s], pz = m.pos[s + 2], nx = m.norm[s], nz = m.norm[s + 2];
       pos[t] = (a * px + b * pz) * scale + x;
       pos[t + 1] = m.pos[s + 1] * scale + y;
+      if (wind) sway[v + k] = wind * Math.max(0, m.pos[s + 1] * scale - stem);
       pos[t + 2] = (-b * px + a * pz) * scale + z;
       norm[t] = a * nx + b * nz;
       norm[t + 1] = m.norm[s + 1];
@@ -165,5 +169,5 @@ export function mergeModels(placements) {
     v += m.nv;
     i += m.idx.length;
   }
-  return { pos, norm, col, idx, nv };
+  return { pos, norm, col, idx, nv, sway };
 }

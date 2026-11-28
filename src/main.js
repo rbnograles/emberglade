@@ -1059,6 +1059,7 @@ function step(dt) {
     game.primary(target.x, target.z);
   }
 
+  chunks.time.value = clock;
   sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock, game.raining, haze);
   fires.update(chunks.fires(), p.x, p.z, clock, game.isNight);
   // a held torch lights the way

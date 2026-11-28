@@ -14,6 +14,8 @@ export const FRONT_TURN = [1, 0, 3, 2];
 export const turnOf = (obj) => (obj.rotation === undefined ? 0 : (OBJECTS[obj.t].stairs ? STAIR_TURN : FRONT_TURN)[obj.rotation]);
 
 export const CHUNK = 16;
+// How living things move in the wind: sway is how freely, stem the height (above its foot) that stays put.
+const WIND_IN = { tree: { sway: 1, stem: 1.2 }, tallgrass: { sway: 1.8, stem: 0.08 }, flower: { sway: 1.5, stem: 0.08 }, bush: { sway: 0.45, stem: 0.25 }, bush_bare: { sway: 0.45, stem: 0.25 }, kelp: { sway: 1.6, stem: 0.1 } };
 const RADIUS = 3;
 
 const linearPair = (pair) => pair.map(rgb);
@@ -25,11 +27,12 @@ const DIRT = linearPair([0x8f633f, 0x7a5233]); // ground the player has dug show
 const SEABED = [rgb(SEABED_COLORS.shallow), rgb(SEABED_COLORS.deep)];
 const LAVA = linearPair(LAVA_COLORS), ICE = linearPair(ICE_COLORS), BOIL = linearPair([0xd9703a, 0xc25a2e]);
 
-export function toGeometry({ pos, norm, col, idx }) {
+export function toGeometry({ pos, norm, col, idx, sway }) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (sway) g.setAttribute('sway', new THREE.BufferAttribute(sway, 1));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeBoundingSphere();
   return g;
@@ -57,7 +60,26 @@ export class Chunks {
     // inside a circle around them, so the character is never lost behind a tree or a wall.
     // peek = (player's screen x, y in pixels, radius in pixels, player's distance from the camera)
     this.peek = { value: new THREE.Vector4(0, 0, 0, 0) };
+    // Seconds, for everything that moves by itself: wind in the leaves, waves, the glow of lava.
+    this.time = { value: 0 };
+    // Wind: each corner carries a sway weight (none for trunks, walls and rocks; more the higher up
+    // a crown or a blade of grass it is). Gusts roll across the land, so neighbours move together.
+    const WIND = `
+      float gust = sin(uTime * 1.5 + windAt.x * 0.55 + windAt.z * 0.4) + 0.5 * sin(uTime * 2.7 + windAt.z * 0.9);
+      transformed.x += gust * 0.03 * sway;
+      transformed.z += cos(uTime * 1.2 + windAt.x * 0.5 - windAt.z * 0.3) * 0.022 * sway;`;
+    const windy = (shader) => {
+      shader.uniforms.uTime = this.time;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float sway;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vec3 windAt = (modelMatrix * vec4(position, 1.0)).xyz;${WIND}`);
+    };
+    // the shadow of a swaying tree sways with it
+    this.objectDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    this.objectDepth.onBeforeCompile = windy;
     this.objectMat.onBeforeCompile = (shader) => {
+      windy(shader);
       shader.uniforms.peek = this.peek;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
@@ -72,8 +94,60 @@ export class Chunks {
             float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
             if (keep < peekDither(gl_FragCoord.xy)) discard;
           }`);
-    };    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+    };
+    // Where in the world a pixel is, snapped to an eighth of a tile, so every effect below is drawn
+    // in little squares that match the voxels. Kept within one 64-tile block so the numbers stay
+    // small enough to be exact on a phone.
+    const PLACE = {
+      vertexHead: '#include <common>\nvarying vec3 vPlace;',
+      vertexBody: '#include <begin_vertex>\nvPlace = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+      fragmentHead: `#include <common>
+        varying vec3 vPlace;
+        uniform float uTime;
+        float grainAt(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`,
+    };
+    const placed = (shader, vertexExtra = '') => {
+      shader.uniforms.uTime = this.time;
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', PLACE.vertexHead + '\nuniform float uTime;')
+        .replace('#include <begin_vertex>', PLACE.vertexBody + vertexExtra);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', PLACE.fragmentHead);
+    };
+
+    // Ground: a fine grain, so grass, sand and rock are not flat sheets of one colour.
+    this.terrainMat.onBeforeCompile = (shader) => {
+      placed(shader);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 cell = floor(mod(vPlace, 64.0) * 8.0 + 0.001);
+        float grain = grainAt(cell), blotch = grainAt(floor(cell / 4.0));
+        diffuseColor.rgb *= 0.95 + 0.07 * grain + 0.035 * blotch;`);
+    };
+
+    // Lava: slow bright veins crawling through it, and a pulse like breathing.
+    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+    this.lavaMat.onBeforeCompile = (shader) => {
+      placed(shader);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 at = floor(mod(vPlace.xz, 64.0) * 4.0) / 4.0;
+        float vein = sin(at.x * 2.3 + uTime * 0.5 + sin(at.y * 1.7 - uTime * 0.35) * 1.6) * sin(at.y * 2.1 + uTime * 0.4);
+        diffuseColor.rgb *= 0.82 + 0.1 * sin(uTime * 1.1 + at.x + at.y);
+        diffuseColor.rgb += vec3(0.5, 0.32, 0.08) * smoothstep(0.55, 1.0, vein);
+        diffuseColor.rgb *= mix(1.0, 0.6, smoothstep(0.5, 1.0, -vein));`);
+    };
+
+    // Water: the surface rises and falls in long waves, and ripples cross it that catch the light.
     this.waterMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthWrite: false });
+    this.waterMat.onBeforeCompile = (shader) => {
+      placed(shader, `
+        transformed.y += (sin(vPlace.x * 0.8 + uTime * 1.3) + sin(vPlace.z * 1.05 + uTime * 1.0)) * 0.03;`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 at = floor(mod(vPlace.xz, 64.0) * 8.0) / 8.0;
+        float ripple = sin(at.x * 3.1 + uTime * 1.6 + sin(at.y * 2.3 + uTime * 0.8) * 1.3) * sin(at.y * 2.7 - uTime * 1.2 + sin(at.x * 1.9) * 1.1);
+        float glint = smoothstep(0.8, 1.0, ripple);
+        diffuseColor.rgb *= 1.0 + 0.07 * sin(at.x * 0.6 + at.y * 0.5 + uTime * 0.6); // slow light and dark bands
+        diffuseColor.rgb += glint * 0.2;
+        diffuseColor.rgb *= mix(1.0, 0.9, smoothstep(0.75, 1.0, -ripple)); // the troughs between
+        diffuseColor.a = min(1.0, diffuseColor.a + glint * 0.22);`);
+    };
     this.groundDirty = new Set();
     this.world.onChange((x, z, ground = false) => {
       if (ground) for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) this.groundDirty.add(Math.floor((x + dx) / CHUNK) + ',' + Math.floor((z + dz) / CHUNK));
@@ -149,6 +223,7 @@ export class Chunks {
     const objects = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     objects.castShadow = true;
     objects.receiveShadow = true;
+    objects.customDepthMaterial = this.objectDepth;
     const roof = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     roof.castShadow = true;
     this.roofGroup.add(roof);
@@ -205,7 +280,12 @@ export class Chunks {
           const w = t.boiling
             ? [0, 1, 2].map((i) => BOIL[0][i] + (BOIL[1][i] - BOIL[0][i]) * k)
             : [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
-          water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w);
+          // paler where it laps against land: a line of foam along every shore
+          const foam = (gx, gz) => {
+            for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) if (!this.gen.tile(gx + ox, gz + oz).water) return 1.55;
+            return 1;
+          };
+          water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w, [foam(x, z), foam(x, z + 1), foam(x + 1, z + 1), foam(x + 1, z)]);
         } else {
           const pair = t.dug < 0 ? DIRT : t.ice ? ICE : t.shore ? SHORE_GROUND : GROUND[t.biome];
           c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
@@ -282,7 +362,7 @@ export class Chunks {
         if (!obj) continue;
         if (obj.t === 'soil') {
           add(obj.wet ? 'soil_wet' : 'soil');
-          if (obj.crop >= 0) add((!obj.species || obj.species === 'wheat' ? 'crop' : obj.species) + obj.crop, { y: y + 0.07 });
+          if (obj.crop >= 0) add((!obj.species || obj.species === 'wheat' ? 'crop' : obj.species) + obj.crop, { y: y + 0.07, sway: 1.2, stem: 0.15 });
         } else if (obj.t === 'gate') {
           add(obj.open ? 'gate_open' : 'gate');
         } else if (obj.t === 'fence') {
@@ -311,6 +391,7 @@ export class Chunks {
             m: M.get(obj.t === 'flower' ? 'flower' + (obj.v ?? 0) : M.has(alt) ? alt : obj.t),
             x: px + (hash2(x, z, 93) - 0.5) * j, y, z: pz + (hash2(x, z, 94) - 0.5) * j,
             rot: (hash2(x, z, 91) * 4) | 0, scale: tall ? 0.8 + hash2(x, z, 92) * 0.5 : 0.85 + hash2(x, z, 92) * 0.3,
+            ...WIND_IN[obj.t.startsWith('tree_') && obj.t !== 'tree_dead' ? 'tree' : obj.t],
           });
         }
       }
