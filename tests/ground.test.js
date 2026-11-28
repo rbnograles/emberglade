@@ -5,6 +5,7 @@ import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
 import { Game, needsRelocation } from '../src/game/game.js';
+import { buildTerrain, gaps, CHUNK } from '../src/render/terrain.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
 const sea = (bed, slabs) => ({ h: -0.3, water: true, bed, slabs });
@@ -509,5 +510,65 @@ describe('rules beside and beneath rock', () => {
       const s = g.wildSpawn();
       expect(g.gen.tile(s.x, s.z).land).toBeUndefined();
     }
+  });
+});
+
+// A generator that knows only flat meadow at height 0, except where `tiles` says otherwise.
+const flatGen = (tiles = {}) => ({
+  tile: (x, z) => ({ h: 0, bed: null, water: false, salt: false, biome: 'meadow', shore: false, lava: false, ice: false, boiling: false, ...tiles[x + ',' + z] }),
+});
+const quads = (mesh) => mesh.idx.length / 6;
+const rockCorners = (mesh) => mesh.rock.filter((r) => r > 0).length;
+
+describe('drawing the ground', () => {
+  it('finds the parts of a range that nothing covers', () => {
+    expect(gaps(0, 10, [])).toEqual([[0, 10]]);
+    expect(gaps(0, 10, [[-Infinity, 4]])).toEqual([[4, 10]]);
+    expect(gaps(0, 10, [[-Infinity, 2], [5, 7]])).toEqual([[2, 5], [7, 10]]);
+    expect(gaps(3, 5, [[-Infinity, 0], [3, 5]])).toEqual([]);
+    expect(gaps(-Infinity, 4, [[-Infinity, 6]])).toEqual([]);
+  });
+
+  it('draws flat ground as one square per tile', () => {
+    const { land, water, lava } = buildTerrain(flatGen(), 0, 0);
+    expect(quads(land)).toBe(CHUNK * CHUNK);
+    expect(quads(water)).toBe(0);
+    expect(quads(lava)).toBe(0);
+    expect(land.rock.length).toBe(land.pos.length / 3);
+    expect(rockCorners(land)).toBe(0);
+  });
+
+  it('draws a lone slab with a top, an underside and four sides', () => {
+    const { land } = buildTerrain(flatGen({ '5,5': { slabs: [[3, 5]] } }), 0, 0);
+    expect(quads(land)).toBe(CHUNK * CHUNK + 6);
+  });
+
+  it('draws nothing between two slabs that touch', () => {
+    const { land } = buildTerrain(flatGen({ '5,5': { slabs: [[3, 5]] }, '6,5': { slabs: [[3, 5]] } }), 0, 0);
+    expect(quads(land)).toBe(CHUNK * CHUNK + 2 * 2 + 6);
+  });
+
+  it('draws a cliff beside a slab only where the rock next to it is open', () => {
+    // a plateau tile 5 high beside a tile whose slab covers 3..5: the cliff shows from 0 to 3 only
+    const { land } = buildTerrain(flatGen({ '5,5': { h: 5 }, '6,5': { slabs: [[3, 5]] } }), 0, 0);
+    const xs = [];
+    for (let i = 0; i < land.pos.length; i += 3) if (land.pos[i] === 6 && land.norm[i] === 1) xs.push(land.pos[i + 1]);
+    expect(Math.max(...xs)).toBe(3);
+    expect(Math.min(...xs)).toBe(0);
+  });
+
+  it('marks the cliffs of rugged country as layered rock, with a lip in the colour of the top', () => {
+    const { land } = buildTerrain(flatGen({ '5,5': { slabs: [[3, 5]], land: 'stacks' } }), 0, 0);
+    // each of the four sides is a half-tile lip plus the rock below it
+    expect(quads(land)).toBe(CHUNK * CHUNK + 2 + 8);
+    expect(rockCorners(land)).toBe(16);
+    expect(new Set(land.rock)).toEqual(new Set([0, 1]));
+  });
+
+  it('darkens the ground under rock', () => {
+    const open = buildTerrain(flatGen(), 0, 0).land, roofed = buildTerrain(flatGen({ '5,5': { slabs: [[3, 5]] } }), 0, 0).land;
+    // the first square drawn for tile (5,5) is its ground: 4 corners, in the same place in both meshes
+    const at = (5 * CHUNK + 5) * 4 * 3;
+    expect(roofed.col[at + 1]).toBeLessThan(open.col[at + 1]);
   });
 });
