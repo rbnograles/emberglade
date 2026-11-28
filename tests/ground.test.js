@@ -803,3 +803,55 @@ describe('naming and mapping the rugged country', () => {
     expect(roofColour({ biome: 'meadow' })).toBe(null);
   });
 });
+
+describe("the developers' plane", () => {
+  it('takes off on the spot, flies over a cliff and holds its height', () => {
+    const g = rockWorld({ '3,0': { h: 20 } });
+    expect(g.devPlane()).toBe(true);
+    expect(g.flying).toBe(true);
+    const start = g.vehicle.y;
+    g.physics(1 / 60, false);
+    expect(g.vehicle.y).toBe(start);
+    for (let i = 0; i < 60; i++) {
+      g.move(0.1, 0);
+      g.physics(1 / 60, false);
+    }
+    expect(Math.floor(g.player.x)).toBeGreaterThan(3); // the cliff did not stop it
+    g.player.x = g.vehicle.x = 3.5;
+    g.physics(1 / 60, false);
+    expect(g.vehicle.y).toBeGreaterThanOrEqual(22); // lifted clear of the top
+  });
+
+  it('climbs and sinks, but never into the ground', () => {
+    const g = rockWorld();
+    g.devPlane();
+    const start = g.vehicle.y;
+    for (let i = 0; i < 30; i++) g.physics(1 / 60, true);
+    expect(g.vehicle.y).toBeGreaterThan(start);
+    for (let i = 0; i < 600; i++) g.physics(1 / 60, false, true);
+    expect(g.vehicle.y).toBe(2);
+  });
+
+  it('keeps its pilot from harm and hunger, lands on the rock below, and is never saved', () => {
+    const g = rockWorld({ '0,0': { slabs: [[4, 9]] } });
+    g.devPlane();
+    const health = g.player.health;
+    g.hurt(5);
+    expect(g.player.health).toBe(health);
+    expect(g.serialize().vehicles.some((v) => v.kind === 'plane')).toBe(false);
+    expect(g.dismount()).toBe(true); // F lands it too
+    expect(g.flying).toBe(false);
+    expect(g.vehicles.length).toBe(0);
+    expect(g.player.y).toBe(9);
+    g.hurt(1);
+    expect(g.player.health).toBeLessThan(health);
+  });
+
+  it('will not replace a vehicle already being ridden', () => {
+    const g = rockWorld();
+    g.vehicles.push({ id: 99, kind: 'trail_cart', x: 0.5, z: 0.5, y: 0, dir: 0 });
+    g.player.riding = 99;
+    expect(g.devPlane()).toBe(false);
+    expect(g.vehicle.kind).toBe('trail_cart');
+  });
+});

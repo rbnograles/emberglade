@@ -9,7 +9,7 @@ import { Wildlife } from './wildlife.js';
 import { Villagers } from './villagers.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH, DIG_STEP, DIG_LIMIT } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
-import { HEADROOM, PLAYER_HEIGHT, slabTopBelow, ceilingAbove, solidAt } from '../world/columns.js';
+import { HEADROOM, PLAYER_HEIGHT, slabTopBelow, ceilingAbove, solidAt, surfaces } from '../world/columns.js';
 import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
 import { cropFor } from '../world/crops.js';
 import { OBJECTS } from '../world/objects.js';
@@ -38,7 +38,12 @@ export const VEHICLES = {
   trail_cart: { speed: 8, land: true, seat: 0.45 },
   boat: { speed: 6.2, dive: false, float: -0.2, seat: 0.25 },
   submarine: { speed: 5, dive: true, float: -0.75, seat: 0 },
+  // for developers only (see devPlane): flies over everything, fast, at whatever height it is left
+  plane: { speed: 40, fly: true, seat: 0.3 },
 };
+const PLANE_CLIMB = 12; // tiles a second the plane rises or sinks
+const PLANE_CLEAR = 2; // it never comes lower than this above what is beneath it
+const PLANE_CEILING = 120;
 export const MAX_BREATH = 10;
 const BREATH_SECONDS = 26; // seconds of air on a full breath
 const SUFFOCATE_SECONDS = 1.2; // seconds per heart lost once the air is gone
@@ -145,6 +150,8 @@ export class Game {
       lift(this.player);
       this.vehicles.forEach(lift);
     }
+    // a vehicle that was never saved (the developers' plane) leaves its rider standing
+    if (this.player.riding && !this.vehicle) this.player.riding = null;
     this.player.y ??= this.ground(this.player.x, this.player.z);
     this.player.vy ??= 0;
     this.player.thirst ??= MAX_THIRST;
@@ -245,7 +252,7 @@ export class Game {
     return {
       seed: this.seed, worldType: this.gen.kind, difficulty: this.difficulty, rules: this.rules, character: this.character, gen: GEN_VERSION, cliffCastles: true, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
       livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
-      armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
+      armor: this.armor.slots, vehicles: this.vehicles.filter((v) => !VEHICLES[v.kind].fly), inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
     };
   }
@@ -306,6 +313,38 @@ export class Game {
     return best;
   }
 
+  // In the developers' plane: nothing can hurt, and nobody gets hungry or tired.
+  get flying() { return !!this.vehicle && !!VEHICLES[this.vehicle.kind].fly; }
+
+  // The highest thing to stand on at a spot: the ground, the top of any rock over it, or the water.
+  topAt(x, z) {
+    const t = this.gen.tile(Math.floor(x), Math.floor(z));
+    return Math.max(t.water ? WATER_Y : t.h, ...surfaces(t));
+  }
+
+  // For developers: get into a plane on the spot, or land it and step out onto whatever is below.
+  // The plane is never saved and never offered to players; main.js wires it up on the dev server only.
+  devPlane() {
+    const p = this.player, v = this.vehicle;
+    if (v && !VEHICLES[v.kind].fly) return false; // already riding something else
+    if (v) {
+      this.vehicles.splice(this.vehicles.indexOf(v), 1);
+      p.riding = null;
+      p.vy = 0;
+      // onto the highest ground or rock below; over open water, into it
+      const top = this.topAt(p.x, p.z);
+      p.y = top <= WATER_Y ? this.standY(p.x, p.z, WATER_Y) : top;
+      this.emit('ride', { kind: null });
+      return true;
+    }
+    const plane = { id: this.nextVehicleId++, kind: 'plane', x: p.x, z: p.z, y: this.topAt(p.x, p.z) + PLANE_CLEAR + 4, dir: 0 };
+    this.vehicles.push(plane);
+    p.riding = plane.id;
+    p.vy = 0;
+    this.emit('ride', { kind: 'plane' });
+    return true;
+  }
+
   board(v = this.vehicleNear()) {
     if (!v || this.player.riding) return false;
     const p = this.player;
@@ -327,6 +366,7 @@ export class Game {
   dismount() {
     const v = this.vehicle, p = this.player;
     if (!v) return false;
+    if (VEHICLES[v.kind].fly) return this.devPlane();
     p.riding = null;
     const px = Math.floor(v.x), pz = Math.floor(v.z);
     // generous reach, so a boat nosed up to a ragged coast can always be left
@@ -518,6 +558,15 @@ export class Game {
   move(dx, dz) {
     const p = this.player;
     const v = this.vehicle;
+    if (v && VEHICLES[v.kind].fly) {
+      // the plane goes over everything
+      p.x += dx;
+      p.z += dz;
+      if (dx || dz) v.dir = Math.atan2(-dz, dx);
+      v.x = p.x;
+      v.z = p.z;
+      return;
+    }
     if (v) {
       // a boat goes anywhere there is water; a submarine needs room to dive
       const ok = (x, z) => {
@@ -545,7 +594,11 @@ export class Game {
     if (v) {
       // a boat rides the surface; a submarine holds whatever depth you leave it at
       const spec = VEHICLES[v.kind];
-      if (spec.dive) {
+      if (spec.fly) {
+        // the plane climbs, sinks or holds its height, and is lifted over whatever rises beneath it
+        const rate = jump ? PLANE_CLIMB : dive ? -PLANE_CLIMB : 0;
+        v.y = Math.min(PLANE_CEILING, Math.max(this.topAt(p.x, p.z) + PLANE_CLEAR, v.y + rate * dt));
+      } else if (spec.dive) {
         const bed = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).bed ?? WATER_Y;
         const rate = dive ? -DIVE_SPEED : jump ? RISE_SPEED : 0;
         v.y = Math.min(WATER_Y + spec.float, Math.max(bed + 0.3, v.y + rate * dt));
@@ -1776,6 +1829,7 @@ export class Game {
   // Damage to the player, reduced by armor (10% per point, up to 60%).
   // from: {x, z} of whatever hit the player, used to shove them away from it.
   hurt(amount, from = null) {
+    if (this.flying) return;
     const p = this.player;
     p.health = Math.max(0, p.health - amount * (1 - Math.min(0.6, this.defense * 0.1)));
     if (from) {
@@ -1952,7 +2006,7 @@ export class Game {
       if (tickStamina(this.player, dt, sprinting, drain, mods)) this.toast('Out of breath. Walk for a moment to recover');
     }
     const needs = drain * this.progress.needsScale;
-    if (tickSurvival(this.player, dt, sprinting, this.hungerRate, needs, { maxHealth: this.maxHealth, regen: this.progress.has('mender') ? 2 : 1 })) this.faint();
+    if (!this.flying && tickSurvival(this.player, dt, sprinting, this.hungerRate, needs, { maxHealth: this.maxHealth, regen: this.progress.has('mender') ? 2 : 1 })) this.faint();
   }
 
   // Everything outside the hotbar is left in a pack where you fell (hotbar and worn items stay with you).

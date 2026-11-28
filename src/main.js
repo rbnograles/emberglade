@@ -126,7 +126,7 @@ const animals = new Animals(scene, game, models);
 const folk = new VillagerFigures(scene, game, itemModels);
 const enemies = new Enemies(scene, game, models);
 const fish = new Fish(scene, game, models.get('fish'));
-const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine') });
+const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine'), plane: models.get('plane') });
 const playerModel = new PlayerModel(look, itemModels);
 const rain = new Rain(scene);
 const snow = new Flurry(scene, 0xffffff, 0.075);
@@ -1032,7 +1032,7 @@ function step(dt) {
   }
 
   game.tick(dt, sprinting);
-  chunks.update(p.x, p.z);
+  chunks.update(p.x, p.z, game.flying ? 8 : 2); // the ground has to keep up with a plane
 
   // camera
   // Ease everything: turning, tilting, zooming and following. Height follows more slowly than
@@ -1215,5 +1215,15 @@ step(0);
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
+  // Developers' plane, on the dev server only: P gets in where you stand and P again lands.
+  // Space climbs, the sprint key sinks, and it crosses the map at many times walking pace.
+  const tag = Object.assign(document.createElement('div'), { textContent: 'DEV: plane · Space up · Shift down · P to land' });
+  Object.assign(tag.style, { position: 'fixed', top: '56px', left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: '10px', background: 'rgba(30,26,20,0.85)', color: '#f2c94c', font: 'bold 13px Nunito, sans-serif', zIndex: 20, display: 'none' });
+  document.body.append(tag);
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyP' || e.repeat || paused || /INPUT|TEXTAREA/.test(document.activeElement?.tagName ?? '')) return;
+    game.devPlane();
+    tag.style.display = game.flying ? 'block' : 'none';
+  });
   window.__emberglade = { game, chunks, camera, scene, setPaused, setView: (yaw, pitch) => ((yawGoal = yaw), (pitchGoal = pitch)), camState: () => ({ camYaw, camPitch, camDist, y: camera.position.y }) };
 }

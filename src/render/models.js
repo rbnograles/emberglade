@@ -201,6 +201,11 @@ export function buildModels() {
       .build(0.12));
   }
   // ---- vehicles (facing +x) ----
+  // the developers' plane: nose toward +x
+  m.set('plane', new Vox()
+    .box(0, 1, 2, 9, 2, 3, 0xd9483b).box(10, 1, 2, 10, 1, 3, 0x2b2b33).box(6, 3, 2, 7, 3, 3, 0x9fd8f0)
+    .box(4, 2, 0, 6, 2, 5, 0xf2f2f2).box(4, 2, -2, 6, 2, 7, 0xf2f2f2).box(0, 2, 1, 1, 2, 4, 0xf2f2f2).box(0, 3, 2, 0, 4, 3, 0xd9483b)
+    .build(0.2));
   m.set('boat', new Vox()
     .box(0, 0, 1, 8, 0, 4, WOOD_DARK).box(0, 1, 0, 8, 1, 0, WOOD).box(0, 1, 5, 8, 1, 5, WOOD)
     .box(0, 1, 1, 0, 1, 4, WOOD).box(8, 1, 1, 8, 1, 4, WOOD).box(9, 1, 2, 9, 1, 3, WOOD_LIGHT).box(3, 1, 1, 3, 1, 4, WOOD_LIGHT)

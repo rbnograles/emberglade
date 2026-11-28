@@ -661,7 +661,7 @@ export class Vehicles {
   constructor(scene, game, models) {
     this.scene = scene;
     this.game = game;
-    this.geometries = { trail_cart: toGeometry(models.trail_cart), boat: toGeometry(models.boat), submarine: toGeometry(models.submarine) };
+    this.geometries = { trail_cart: toGeometry(models.trail_cart), boat: toGeometry(models.boat), submarine: toGeometry(models.submarine), plane: toGeometry(models.plane) };
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.meshes = new Map();
   }
