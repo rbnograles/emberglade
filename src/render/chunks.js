@@ -211,10 +211,12 @@ export class Chunks {
             if (this.world.get(x + dx, z + dz)?.t === 'fence') add('fence_arm', { rot });
           });
         } else if (obj.t === 'door') {
-          // The model spans the tile along x and is built around its corner; turn it when the walls run along z.
+          // Old saves have no rotation: retain their wall-derived orientation.
           const wallsAlongZ = OBJECTS[this.world.get(x, z - 1)?.t]?.block || OBJECTS[this.world.get(x, z + 1)?.t]?.block;
-          if (wallsAlongZ) list.push({ m: M.get('door'), x: x + 1, y, z, rot: 3 });
-          else list.push({ m: M.get('door'), x, y, z });
+          const rotation = obj.rotation ?? (wallsAlongZ ? 1 : 0);
+          const model = M.get(obj.open === true ? 'door_open' : 'door_closed');
+          if (rotation === 1) list.push({ m: model, x: x + 1, y, z, rot: 3 });
+          else list.push({ m: model, x, y, z });
         } else if (obj.placed && obj.t !== 'flower') {
           add(obj.t);
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });

@@ -157,11 +157,18 @@ export function buildModels() {
   m.set('chest', chest());
   m.set('wood_wall', new Vox().box(0, 0, 0, 3, 5, 3, (x, y) => (y % 2 ? 0xb9834a : 0xa8743c)).build(0.25, { jitter: 0.07 }));
   m.set('stone_wall', new Vox().box(0, 0, 0, 3, 5, 3, (x, y, z) => GRAYS[(x + y * 2 + z) % 3]).build(0.25, { jitter: 0.07 }));
-  // door: two posts and a lintel across the tile (along x) with a panel standing ajar
-  m.set('door', new Vox()
+  // door: two posts and a lintel across the tile (along x), with closed and swung-open panels
+  const doorClosed = new Vox()
+    .box(0, 0, 3, 0, 11, 4, WOOD_DARK).box(7, 0, 3, 7, 11, 4, WOOD_DARK).box(1, 11, 3, 6, 11, 4, WOOD_DARK)
+    .box(1, 0, 3, 6, 10, 4, WOOD_LIGHT).set(5, 5, 2, 0xf2c94c)
+    .build(0.125, { center: false });
+  const doorOpen = new Vox()
     .box(0, 0, 3, 0, 11, 4, WOOD_DARK).box(7, 0, 3, 7, 11, 4, WOOD_DARK).box(1, 11, 3, 6, 11, 4, WOOD_DARK)
     .box(1, 0, 5, 1, 10, 9, WOOD_LIGHT).set(1, 5, 8, 0xf2c94c)
-    .build(0.125, { center: false }));
+    .build(0.125, { center: false });
+  m.set('door_closed', doorClosed);
+  m.set('door_open', doorOpen);
+  m.set('door', doorClosed); // inventory icon and old callers
   m.set('wood_floor', new Vox().box(0, 0, 0, 3, 0, 3, (x) => (x % 2 ? 0xc9955a : 0xb9834a)).build(0.25, { ysize: 0.06, jitter: 0.04 }));
   m.set('stone_floor', new Vox().box(0, 0, 0, 3, 0, 3, (x, y, z) => GRAYS[(x + z) % 3]).build(0.25, { ysize: 0.06, jitter: 0.04 }));
   m.set('lostbag', new Vox().blob(0, 1.6, 0, 2.2, 2.0, 2.0, mix([0xc9a56a, 0xb9955a, 0xd9b57a], 31), 0.2, 31).box(-1, 3, -1, 0, 4, 0, 0x8a5a34).build(0.16));

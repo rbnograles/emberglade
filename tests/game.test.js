@@ -1007,8 +1007,12 @@ describe('game rules', () => {
     expect(g.blocked(1.05, 0.05, 0.1)).toBe(true); // the corner of a wall tile is solid too
     g.selected = 2;
     g.secondary(0, 1, true);
-    expect(g.blocked(0.5, 1.5)).toBe(false); // the player walks through a door
-    expect(g.blocked(0.5, 1.5, 0.28, true)).toBe(true); // animals do not
+    expect(g.world.get(0, 1)).toMatchObject({ t: 'door', open: false, rotation: 0 });
+    expect(g.blocked(0.5, 1.5)).toBe(true);
+    expect(g.blocked(0.5, 1.5, 0.28, true)).toBe(true);
+    expect(g.interact(0, 1)).toBe(true);
+    expect(g.blocked(0.5, 1.5)).toBe(false);
+    expect(g.blocked(0.5, 1.5, 0.28, true)).toBe(false);
     g.selected = 1;
     g.secondary(-1, 0, true);
     expect(g.world.getFloor(-1, 0)).toBe('wood_floor');
@@ -1025,6 +1029,31 @@ describe('game rules', () => {
     g.primary(1, 0);
     g.primary(1, 0);
     expect(g.inv.count('wood_wall')).toBe(2);
+  });
+
+  it('orients doors from walls then falls back to player facing', () => {
+    const g = newGame();
+    Object.assign(g.player, { x: 0.5, z: 2.5, y: g.ground(0.5, 2.5) });
+    for (const [x, z] of [[0, 0], [0, -1], [0, 1], [2, 2]]) g.world.set(x, z, { t: 'empty' });
+    g.world.set(0, -1, { t: 'wood_wall', placed: true });
+    g.world.set(0, 1, { t: 'wood_wall', placed: true });
+    g.inv.add('door', 2);
+
+    g.secondary(0, 0, true, 0);
+    expect(g.world.get(0, 0)).toMatchObject({ t: 'door', open: false, rotation: 1 });
+    g.secondary(2, 2, true, Math.PI / 2);
+    expect(g.world.get(2, 2)).toMatchObject({ t: 'door', open: false, rotation: 1 });
+  });
+
+  it('loads old doors closed and will not close one around the player', () => {
+    const g = newGame();
+    g.world.set(1, 0, { t: 'door', placed: true }); // old save: no open or rotation fields
+    expect(g.blocked(1.5, 0.5)).toBe(true);
+    expect(g.interact(1, 0)).toBe(true);
+    expect(g.world.get(1, 0).open).toBe(true);
+    Object.assign(g.player, { x: 1.5, z: 0.5 });
+    expect(g.interact(1, 0)).toBe(false);
+    expect(g.world.get(1, 0).open).toBe(true);
   });
 
   it('farms: till, plant, water, grow, harvest', () => {

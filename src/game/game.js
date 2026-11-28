@@ -303,7 +303,7 @@ export class Game {
         const obj = this.world.get(tx, tz);
         if (!obj) continue;
         const od = OBJECTS[obj.t];
-        if (od.block || (obj.t === 'gate' && !obj.open) || (animal && (od.door || obj.t === 'fence'))) {
+        if (od.block || (obj.t === 'gate' && !obj.open) || (od.door && obj.open !== true) || (animal && obj.t === 'fence')) {
           const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
           if (Math.hypot(x - nx, z - nz) < r) return true;
         } else if (od.solid && Math.hypot(x - tx - 0.5, z - tz - 0.5) < r + od.solid) return true;
@@ -1003,6 +1003,14 @@ export class Game {
   }
 
   // Could the held item be placed on this tile? Shared by placing and by the placement preview.
+  doorRotation(tx, tz, facing = 0) {
+    const wall = (x, z) => !!OBJECTS[this.world.get(x, z)?.t]?.block;
+    const northSouth = wall(tx, tz - 1) || wall(tx, tz + 1);
+    const eastWest = wall(tx - 1, tz) || wall(tx + 1, tz);
+    if (northSouth !== eastWest) return northSouth ? 1 : 0;
+    return Math.abs(Math.sin(facing)) > Math.abs(Math.cos(facing)) ? 1 : 0;
+  }
+
   canPlace(tx, tz) {
     const def = this.held ? ITEMS[this.held.id] : null;
     if (def?.vehicle) return !this.launchProblem(def.vehicle, tx, tz);
@@ -1016,7 +1024,7 @@ export class Game {
   }
 
   // ---- right click: place / plant / water / eat / interact ----
-  secondary(tx, tz, hasTarget) {
+  secondary(tx, tz, hasTarget, facing = 0) {
     const held = this.held;
     const def = held ? ITEMS[held.id] : null;
     const p = this.player;
@@ -1076,6 +1084,7 @@ export class Game {
     if (def?.place && !obj) {
       if (!this.canPlace(tx, tz)) return;
       const placed = { t: def.place, placed: true };
+      if (def.place === 'door') Object.assign(placed, { open: false, rotation: this.doorRotation(tx, tz, facing) });
       if (def.place === 'chest' || def.place === 'cabinet') placed.items = Array(CHEST_SLOTS).fill(null);
       if (def.place === 'flower') placed.v = (Math.random() * 4) | 0;
       if (def.place === 'bed') p.bed = { x: tx, z: tz };
@@ -1107,7 +1116,7 @@ export class Game {
       if (this.give(OBJECTS[obj.t].cache, 2)) this.world.set(tx, tz, { ...obj, claimedDay: this.day });
       return true;
     }
-    if (obj.t === 'gate') {
+    if (obj.t === 'gate' || obj.t === 'door') {
       if (obj.open && tx === Math.floor(this.player.x) && tz === Math.floor(this.player.z)) return false;
       this.world.set(tx, tz, { ...obj, open: !obj.open });
     } else if (obj.t === 'bed') {

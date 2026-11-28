@@ -415,7 +415,7 @@ addEventListener('mouseup', (e) => {
 function secondaryAction() {
   camera.updateMatrixWorld();
   target = currentTarget();
-  if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach);
+  if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach, playerModel.facing);
   hud.refresh();
 }
 addEventListener('contextmenu', (e) => e.preventDefault());
@@ -590,7 +590,7 @@ const colorFor = (t) => hitEffect(t, false).color;
 
 // ---------- placement preview ----------
 // A see-through copy of the held buildable on the targeted tile: white where it can go, red where it cannot.
-const GHOST_MODEL = { fence: 'fence_post', flower: 'flower0' };
+const GHOST_MODEL = { fence: 'fence_post', flower: 'flower0', door: 'door_closed' };
 const ghostGeometry = new Map();
 const ghost = new THREE.Mesh(
   new THREE.BufferGeometry(),
@@ -633,12 +633,10 @@ function updateGhost() {
   ghost.material.opacity = ok ? 0.7 : 0.55;
   const tile = game.gen.tile(target.x, target.z);
   const y = def.roof ? tile.h + 1.55 : def.vehicle && !VEHICLES[what].land && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + 0.02;
-  const isWall = (x, z) => !!OBJECTS[game.world.get(x, z)?.t]?.block;
   if (what !== 'door') {
     ghost.position.set(target.x + 0.5, y, target.z + 0.5);
     ghost.rotation.y = 0;
-  } else if (isWall(target.x, target.z - 1) || isWall(target.x, target.z + 1)) {
-    // same turn the chunk builder gives a door set between walls that run along z
+  } else if (game.doorRotation(target.x, target.z, playerModel.facing) === 1) {
     ghost.position.set(target.x + 1, y, target.z);
     ghost.rotation.y = -Math.PI / 2;
   } else {

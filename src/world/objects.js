@@ -62,7 +62,7 @@ export const OBJECTS = {
   fence: { ...placed('Fence', 0.45), hp: 1, item: 'fence' },
   bed: { ...placed('Bed', 0.45), item: 'bed' },
   chest: { ...placed('Chest'), item: 'chest' },
-  // block: fills the whole tile (square collision). door: the player passes, animals do not.
+  // block: fills the whole tile (square collision). A closed door blocks the tile until used.
   wood_wall: { name: 'Wood wall', block: true, hp: 2, tool: null, pickR: 0.75, item: 'wood_wall' },
   stone_wall: { name: 'Stone wall', block: true, hp: 3, tool: null, pickR: 0.75, item: 'stone_wall' },
   door: { name: 'Door', door: true, hp: 2, tool: null, pickR: 0.6, item: 'door' },

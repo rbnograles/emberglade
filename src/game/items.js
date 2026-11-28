@@ -83,7 +83,7 @@ export const ITEMS = {
   // base building. floor: laid under a tile (things can stand on it) and counts as shelter.
   wood_wall: { name: 'Wood wall', place: 'wood_wall', hint: 'RMB: place' },
   stone_wall: { name: 'Stone wall', place: 'stone_wall', hint: 'RMB: place' },
-  door: { name: 'Door', place: 'door', hint: 'RMB: place (you can walk through, animals cannot)' },
+  door: { name: 'Door', place: 'door', hint: 'RMB: place. Use to open or close' },
   wood_floor: { name: 'Wood floor', floor: true, hint: 'RMB: lay floor (shelter from the cold)' },
   stone_floor: { name: 'Stone floor', floor: true, hint: 'RMB: lay floor (shelter from the cold)' },
   flask: { name: 'Water flask', flask: true, stack: 1, hint: 'X: drink. Refills when you drink at a pond' },

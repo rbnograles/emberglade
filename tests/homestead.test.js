@@ -58,6 +58,14 @@ describe('models', () => {
     expect(world.get('tree_oak#1')).not.toBe(world.get('tree_oak'));
     expect(world.get('tree_pine#1')).toBeTruthy();
   });
+
+  it('has distinct open and closed door models', () => {
+    const world = buildModels();
+    const closed = world.get('door_closed');
+    const open = world.get('door_open');
+    const different = !!closed && !!open && JSON.stringify(closed.pos) !== JSON.stringify(open.pos);
+    expect({ closed: !!closed, open: !!open, different }).toEqual({ closed: true, open: true, different: true });
+  });
 });
 
 describe('farm', () => {
