@@ -4,7 +4,7 @@ import { DIFFICULTIES } from './survival.js';
 import { Wildlife } from './wildlife.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
-import { WorldState } from '../world/worldstate.js';
+import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
 import { cropFor } from '../world/crops.js';
 import { OBJECTS } from '../world/objects.js';
 import { ITEMS, stackSize, ARMOR_SLOTS, MAX_DEFENSE, BASE_STORAGE, FLASK_DRINKS } from './items.js';
@@ -69,7 +69,9 @@ export class Game {
     this.seed = save?.seed ?? ((Math.random() * 2 ** 31) | 0);
     this.difficulty = Object.hasOwn(DIFFICULTIES, save?.difficulty) ? save.difficulty : 'standard';
     this.gen = new Worldgen(this.seed);
-    this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs);
+    this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs, save?.upper);
+    this.lastLevel = 0;
+    this.buildShift = 0; // storeys above (+1) or below (-1) the player's own that building is aimed at
     this.armor = new Inventory(ARMOR_SLOTS.length, save?.armor); // worn items: head, body, feet
     this.status = 'ok'; // 'ok' | 'cold' | 'warm' | 'sheltered'
     this.statusTimer = 0;
@@ -173,7 +175,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs),
+      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(),
       livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
@@ -288,10 +290,21 @@ export class Game {
   }
 
   // ---- movement ----  // animal: doors count as walls for animals
-  blocked(x, z, r = 0.28, animal = false) {
+  // level: the storey being walked on. Things on other storeys are not in the way; animals and
+  // creatures never leave the ground.
+  blocked(x, z, r = 0.28, animal = false, level = animal ? 0 : this.playerLevel) {
     const cx = Math.floor(x), cz = Math.floor(z);
     for (let tz = cz - 1; tz <= cz + 1; tz++) {
       for (let tx = cx - 1; tx <= cx + 1; tx++) {
+        if (level > 0) {
+          const up = this.world.getAt(tx, tz, level), ud = up && OBJECTS[up.t];
+          if (!ud || ud.stairs) continue;
+          if (ud.block || (up.t === 'gate' && !up.open) || (ud.door && up.open !== true)) {
+            const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
+            if (Math.hypot(x - nx, z - nz) < r) return true;
+          } else if (ud.solid && Math.hypot(x - tx - 0.5, z - tz - 0.5) < r + ud.solid) return true;
+          continue;
+        }
         if (this.gen.tile(tx, tz).water) {
           // the player wades and swims; animals and creatures stay out of the water
           if (animal) {
@@ -303,6 +316,7 @@ export class Game {
         const obj = this.world.get(tx, tz);
         if (!obj) continue;
         const od = OBJECTS[obj.t];
+        if (od.stairs && !animal) continue; // stairs are walked up, not round: canEnter judges them by height
         if (od.block || (obj.t === 'gate' && !obj.open) || (od.door && obj.open !== true) || (animal && obj.t === 'fence')) {
           const nx = Math.max(tx, Math.min(x, tx + 1)), nz = Math.max(tz, Math.min(z, tz + 1));
           if (Math.hypot(x - nx, z - nz) < r) return true;
@@ -321,13 +335,61 @@ export class Game {
   }
 
   // Height the player's feet rest at: the ground, the bed of shallow water, or afloat in deep water.
-  standY(x, z) {
-    const t = this.gen.tile(Math.floor(x), Math.floor(z));
-    if (!t.water) {
-      if (this.world.get(Math.floor(x), Math.floor(z))?.t === 'stairs') return t.h + Math.floor((x - Math.floor(x)) * 4 + 1) * 0.25;
-      return t.h;
+  // On land this is the highest surface at or just below `y`: the ground, a built floor on an upper
+  // storey, or the slope of a staircase. So someone upstairs stays upstairs, and someone walking
+  // underneath stays on the ground.
+  standY(x, z, y = this.player.y) {
+    const tx = Math.floor(x), tz = Math.floor(z), t = this.gen.tile(tx, tz);
+    if (t.water) return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
+    const lip = y + STEP_LIP + 0.02;
+    let best = t.h;
+    for (let l = 0; l <= TOP_LEVEL; l++) {
+      const base = t.h + l * STOREY;
+      if (l > 0 && base <= lip && this.world.getFloor(tx, tz, l)) best = Math.max(best, base);
+      const h = this.stairHeight(x, z, l);
+      if (h !== null && h <= lip) best = Math.max(best, h);
     }
-    return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
+    return best;
+  }
+
+  // Height of the staircase on storey `level` at this exact spot, or null when there is none.
+  // Stairs climb one whole storey across their tile, in the direction they were placed facing:
+  // rotation 0 rises toward +x, 1 toward +z, 2 toward -x, 3 toward -z.
+  stairHeight(x, z, level) {
+    const tx = Math.floor(x), tz = Math.floor(z), o = this.world.getAt(tx, tz, level);
+    if (!o || !OBJECTS[o.t].stairs) return null;
+    const fx = x - tx, fz = z - tz;
+    const up = [fx, fz, 1 - fx, 1 - fz][o.rotation ?? 0];
+    return this.gen.tile(tx, tz).h + level * STOREY + Math.min(1, Math.max(0, up)) * STOREY;
+  }
+
+  // Which storey the player's feet are on: 0 on the ground, 1 or 2 on the floors above.
+  get playerLevel() {
+    const p = this.player;
+    return Math.max(0, Math.min(TOP_LEVEL, Math.round((p.y - this.ground(p.x, p.z)) / STOREY)));
+  }
+
+  // The storey that building and dismantling act on: the player's own, or one above or below it
+  // while something buildable is held and the builder has asked for that.
+  get buildLevel() {
+    const def = this.held ? ITEMS[this.held.id] : null;
+    const shift = def && (def.place || def.floor || def.roof) ? this.buildShift : 0;
+    return Math.max(0, Math.min(TOP_LEVEL, this.playerLevel + shift));
+  }
+
+  shiftBuildLevel(by) {
+    const before = this.buildLevel;
+    this.buildShift = Math.max(-1, Math.min(1, this.buildShift + by));
+    // a shift that the top or bottom storey swallowed is not kept, so the next press works at once
+    if (this.buildLevel === before) this.buildShift = this.buildLevel - this.playerLevel;
+    this.emit('inv');
+    return this.buildLevel;
+  }
+
+  // Does something on any storey of this tile satisfy `test`?
+  anyStorey(x, z, test) {
+    for (let l = 0; l <= TOP_LEVEL; l++) if (test(this.world.getAt(x, z, l))) return true;
+    return false;
   }
 
   // riding a vehicle keeps you out of the water
@@ -341,7 +403,16 @@ export class Game {
     // deep water is open at any depth; the bed pushes a diver up where it rises
     if (this.deepAt(x, z)) return !this.blocked(x, z);
     // from the water you can haul yourself out onto a low bank
-    return !this.blocked(x, z) && this.standY(x, z) <= this.player.y + (this.inWater ? BANK_LIP : STEP_LIP);
+    if (this.blocked(x, z)) return false;
+    // the side or the high end of a staircase is a solid block; only its slope lets you on
+    const y = this.player.y;
+    for (let l = 0; l <= TOP_LEVEL; l++) {
+      const h = this.stairHeight(x, z, l);
+      if (h === null) continue;
+      const base = this.gen.tile(Math.floor(x), Math.floor(z)).h + l * STOREY;
+      if (h > y + STEP_LIP + 0.02 && base < y + 1.2) return false;
+    }
+    return this.standY(x, z) <= y + (this.inWater ? BANK_LIP : STEP_LIP);
   }
 
   move(dx, dz) {
@@ -414,6 +485,10 @@ export class Game {
     }
     if (p.y <= g + 1e-4) this.gliding = false;
     p.y = Math.max(g, p.y + p.vy * dt);
+    // arriving on another storey puts the builder's aim back on the storey underfoot
+    const level = this.playerLevel;
+    if (level !== this.lastLevel) this.buildShift = 0;
+    this.lastLevel = level;
   }
 
   inReach(tx, tz) {
@@ -701,8 +776,10 @@ export class Game {
     const px = Math.floor(this.player.x), pz = Math.floor(this.player.z);
     for (let z = pz - 3; z <= pz + 3; z++) {
       for (let x = px - 3; x <= px + 3; x++) {
-        const o = this.world.get(x, z);
-        if (o && (o.t === 'workbench' || o.t === 'campfire')) s.add(o.t);
+        for (let l = 0; l <= TOP_LEVEL; l++) {
+          const o = this.world.getAt(x, z, l);
+          if (o && (o.t === 'workbench' || o.t === 'campfire')) s.add(o.t);
+        }
       }
     }
     return s;
@@ -868,9 +945,9 @@ export class Game {
     const biome = this.gen.tile(px, pz).biome;
     const freezing = biome === 'winter' || biome === 'snow';
     if (!this.isNight && !freezing) return (this.status = 'ok');
-    if (this.world.getFloor(px, pz)) return (this.status = 'sheltered');
+    if (this.world.getFloor(px, pz, this.playerLevel)) return (this.status = 'sheltered');
     for (let z = pz - 5; z <= pz + 5; z++) {
-      for (let x = px - 5; x <= px + 5; x++) if (this.world.get(x, z)?.t === 'campfire') return (this.status = 'warm');
+      for (let x = px - 5; x <= px + 5; x++) if (this.anyStorey(x, z, (o) => o?.t === 'campfire')) return (this.status = 'warm');
     }
     return (this.status = 'cold');
   }
@@ -887,7 +964,7 @@ export class Game {
     const depth = kind === 'frost' ? t.frost : t.heat;
     let need = Math.min(3, 1 + Math.floor(depth * 3));
     // a fire or a floor underfoot beats the cold; only a submarine's hull beats the heat
-    if (kind === 'frost' && (this.world.getFloor(px, pz) || this.nearCampfire(p.x, p.z, 5))) need = 0;
+    if (kind === 'frost' && (this.world.getFloor(px, pz, this.playerLevel) || this.nearCampfire(p.x, p.z, 5))) need = 0;
     if (kind === 'heat' && this.vehicle?.kind === 'submarine') need = 0;
     const prop = kind === 'frost' ? 'warm' : 'cool';
     const have = this.armor.slots.reduce((sum, s) => sum + (s ? ITEMS[s.id][prop] ?? 0 : 0), 0);
@@ -900,6 +977,7 @@ export class Game {
 
   // ---- left click: use tool / harvest ----
   primary(tx, tz) {
+    if (this.buildLevel > 0) return void this.primaryUpper(tx, tz, this.buildLevel);
     const def = this.held ? ITEMS[this.held.id] : null;
     const obj = this.world.get(tx, tz);
     const tile = this.gen.tile(tx, tz);
@@ -989,6 +1067,45 @@ export class Game {
     else if (od.drops) this.giveDrops(od.drops);
   }
 
+  // Take apart what is on an upper storey: the roof (with a roof in hand or empty hands), then
+  // whatever stands there, then the floor. Each piece comes back as the item it was built from.
+  primaryUpper(tx, tz, level) {
+    const def = this.held ? ITEMS[this.held.id] : null, w = this.world;
+    this.emit('swing', { x: tx, z: tz });
+    const obj = w.getAt(tx, tz, level), roof = w.getRoof(tx, tz, level), floor = w.getFloor(tx, tz, level);
+    if (roof && (def?.roof || (!obj && !def))) {
+      w.setRoof(tx, tz, null, level);
+      this.give(roof, 1);
+      return;
+    }
+    if (obj) {
+      const od = OBJECTS[obj.t];
+      if (obj.items?.some(Boolean)) return void this.toast('Empty it first');
+      const key = tx + ',' + tz + ',' + level;
+      const hp = (this.damage.get(key) ?? od.hp ?? 1) - 1;
+      this.emit('hit', { x: tx, z: tz, object: obj.t, destroyed: hp <= 0, level });
+      if (hp > 0) return void this.damage.set(key, hp);
+      this.damage.delete(key);
+      const bed = this.player.bed;
+      if (obj.t === 'bed' && bed && bed.x === tx && bed.z === tz && (bed.l ?? 0) === level) this.player.bed = null;
+      w.removeAt(tx, tz, level);
+      if (od.item) this.give(od.item, 1);
+      return;
+    }
+    if (floor) {
+      const p = this.player;
+      if (this.playerLevel === level && tx === Math.floor(p.x) && tz === Math.floor(p.z)) return void this.toast('Step off it first');
+      w.setFloor(tx, tz, null, level);
+      this.emit('hit', { x: tx, z: tz, object: floor, destroyed: true, level });
+      this.give(floor, 1);
+      return;
+    }
+    if (roof) {
+      w.setRoof(tx, tz, null, level);
+      this.give(roof, 1);
+    }
+  }
+
   // Using a tool or weapon wears it down; at zero it breaks.
   wearTool() {
     const s = this.held, uses = s && ITEMS[s.id].uses;
@@ -1003,8 +1120,8 @@ export class Game {
   }
 
   // Could the held item be placed on this tile? Shared by placing and by the placement preview.
-  doorRotation(tx, tz, facing = 0) {
-    const wall = (x, z) => !!OBJECTS[this.world.get(x, z)?.t]?.block;
+  doorRotation(tx, tz, facing = 0, level = 0) {
+    const wall = (x, z) => !!OBJECTS[this.world.getAt(x, z, level)?.t]?.block;
     const northSouth = wall(tx, tz - 1) || wall(tx, tz + 1);
     const eastWest = wall(tx - 1, tz) || wall(tx + 1, tz);
     if (northSouth !== eastWest) return northSouth ? 1 : 0;
@@ -1017,10 +1134,52 @@ export class Game {
     if (!def || (!def.place && !def.floor && !def.roof) || !this.inReach(tx, tz)) return false;
     const obj = this.world.get(tx, tz);
     if (this.gen.tile(tx, tz).water || this.gen.tile(tx, tz).lava) return false;
-    if (def.roof) return !this.world.getRoof(tx, tz) && (!obj || obj.placed);
+    const level = this.buildLevel;
+    if (level > 0) return this.canPlaceUpper(tx, tz, level, def);
+    // a roof and the floor of the storey above cannot share a tile
+    if (def.roof) return !this.world.getRoof(tx, tz) && !this.world.getFloor(tx, tz, 1) && (!obj || obj.placed);
     if (def.floor) return !this.world.getFloor(tx, tz) && !(obj && !obj.placed) && obj?.t !== 'soil';
+    if (OBJECTS[def.place].stairs && (this.world.getFloor(tx, tz, 1) || this.world.getAt(tx, tz, 1))) return false; // nowhere to come up
     const p = this.player;
-    return !obj && !(tx === Math.floor(p.x) && tz === Math.floor(p.z));
+    return !obj && !(tx === Math.floor(p.x) && tz === Math.floor(p.z) && this.playerLevel === 0);
+  }
+
+  // Building above the ground needs something to stand on:
+  //   a floor     rests on a floor or a built piece directly below (never over a staircase: the stairwell stays open)
+  //   anything standing (wall, door, window, stairs, furniture)   needs a floor under it on its own storey
+  //   a roof      caps a tile that is part of the building, and cannot share it with the floor above
+  // and the storey must be the builder's own or the next one up or down.
+  canPlaceUpper(tx, tz, level, def) {
+    const w = this.world, t = this.gen.tile(tx, tz);
+    if (t.water || t.lava || Math.abs(level - this.playerLevel) > 1) return false;
+    const built = (o) => !!o?.placed && !OBJECTS[o.t].stairs;
+    const here = w.getAt(tx, tz, level), under = w.getAt(tx, tz, level - 1);
+    if (def.floor) {
+      if (w.getFloor(tx, tz, level) || w.getRoof(tx, tz, level - 1) || OBJECTS[under?.t]?.stairs) return false;
+      return !!w.getFloor(tx, tz, level - 1) || built(under);
+    }
+    if (def.roof) {
+      if (w.getRoof(tx, tz, level) || (level < TOP_LEVEL && w.getFloor(tx, tz, level + 1))) return false;
+      return !!w.getFloor(tx, tz, level) || built(here);
+    }
+    if (here || !w.getFloor(tx, tz, level)) return false;
+    if (OBJECTS[def.place].stairs && (level >= TOP_LEVEL || w.getFloor(tx, tz, level + 1) || w.getAt(tx, tz, level + 1))) return false;
+    const p = this.player;
+    return !(tx === Math.floor(p.x) && tz === Math.floor(p.z) && this.playerLevel === level);
+  }
+
+  // A newly placed thing, with whatever it needs to remember: a door's swing, stairs' direction, a chest's slots.
+  newPlaced(kind, tx, tz, facing, level) {
+    const placed = { t: kind, placed: true };
+    if (kind === 'door') Object.assign(placed, { open: false, rotation: this.doorRotation(tx, tz, facing, level) });
+    if (OBJECTS[kind].stairs) {
+      const sx = Math.sin(facing), sz = Math.cos(facing);
+      placed.rotation = Math.abs(sx) > Math.abs(sz) ? (sx > 0 ? 0 : 2) : (sz > 0 ? 1 : 3); // climbs the way the builder faces
+    }
+    if (kind === 'chest' || kind === 'cabinet') placed.items = Array(CHEST_SLOTS).fill(null);
+    if (kind === 'flower') placed.v = (Math.random() * 4) | 0;
+    if (kind === 'bed') this.player.bed = level ? { x: tx, z: tz, l: level } : { x: tx, z: tz };
+    return placed;
   }
 
   // ---- right click: place / plant / water / eat / interact ----
@@ -1035,6 +1194,25 @@ export class Game {
     if (def?.flask) return void this.drinkWater();
     if (def?.vehicle) return void this.launch(tx, tz);
     if (!hasTarget) return;
+    const level = this.buildLevel;
+    if (level > 0) {
+      // upstairs: build on that storey, or use what stands there
+      if (!def?.roof && !def?.floor && !def?.place) return void this.interact(tx, tz);
+      if (!this.canPlace(tx, tz)) return;
+      this.inv.removeAt(this.selected, 1);
+      if (def.roof) this.world.setRoof(tx, tz, held.id, level);
+      else if (def.floor) {
+        this.world.setFloor(tx, tz, held.id, level);
+        this.record('place:floor');
+      } else {
+        this.world.setAt(tx, tz, level, this.newPlaced(def.place, tx, tz, facing, level));
+        this.record('place:' + def.place);
+        if (OBJECTS[def.place].block) this.record('place:wall');
+      }
+      this.record('place:upper');
+      this.emit('inv');
+      return;
+    }
     const obj = this.world.get(tx, tz);
     const tile = this.gen.tile(tx, tz);
 
@@ -1083,11 +1261,7 @@ export class Game {
 
     if (def?.place && !obj) {
       if (!this.canPlace(tx, tz)) return;
-      const placed = { t: def.place, placed: true };
-      if (def.place === 'door') Object.assign(placed, { open: false, rotation: this.doorRotation(tx, tz, facing) });
-      if (def.place === 'chest' || def.place === 'cabinet') placed.items = Array(CHEST_SLOTS).fill(null);
-      if (def.place === 'flower') placed.v = (Math.random() * 4) | 0;
-      if (def.place === 'bed') p.bed = { x: tx, z: tz };
+      const placed = this.newPlaced(def.place, tx, tz, facing, 0);
       this.inv.removeAt(this.selected, 1);
       this.world.set(tx, tz, placed);
       this.record('place:' + def.place);
@@ -1101,7 +1275,8 @@ export class Game {
 
   // ---- E: use a placed object ----
   interact(tx, tz) {
-    const obj = this.world.get(tx, tz);
+    const level = this.playerLevel;
+    const obj = this.world.getAt(tx, tz, level);
     if (!obj) return false;
     if (OBJECTS[obj.t].hoard) {
       // a one-time treasure: it is gone for good once opened
@@ -1117,12 +1292,12 @@ export class Game {
       return true;
     }
     if (obj.t === 'gate' || obj.t === 'door') {
-      if (obj.open && tx === Math.floor(this.player.x) && tz === Math.floor(this.player.z)) return false;
-      this.world.set(tx, tz, { ...obj, open: !obj.open });
+      if (obj.open && tx === Math.floor(this.player.x) && tz === Math.floor(this.player.z)) return false; // not shut on yourself
+      this.world.setAt(tx, tz, level, { ...obj, open: !obj.open });
     } else if (obj.t === 'bed') {
-      this.player.bed = { x: tx, z: tz };
+      this.player.bed = level ? { x: tx, z: tz, l: level } : { x: tx, z: tz };
       this.sleep();
-    } else if (obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz });
+    } else if (obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz, l: level });
     else if (obj.t === 'campfire' || obj.t === 'workbench') this.emit('open', { what: 'craft' });
     else return false;
     return true;
@@ -1155,7 +1330,7 @@ export class Game {
     const cx = Math.floor(x), cz = Math.floor(z), r = Math.ceil(radius);
     for (let tz = cz - r; tz <= cz + r; tz++) {
       for (let tx = cx - r; tx <= cx + r; tx++) {
-        if (this.world.get(tx, tz)?.t === 'campfire' && Math.hypot(tx + 0.5 - x, tz + 0.5 - z) <= radius) return true;
+        if (this.anyStorey(tx, tz, (o) => o?.t === 'campfire') && Math.hypot(tx + 0.5 - x, tz + 0.5 - z) <= radius) return true;
       }
     }
     return false;
@@ -1491,7 +1666,10 @@ export class Game {
       p.x = p.spawn.x + 0.5;
       p.z = p.spawn.z + 0.5;
     }
-    p.y = this.ground(p.x, p.z);
+    // beside the bed on its own storey; if that floor is gone, on the ground below
+    const bedLevel = p.bed?.l ?? 0;
+    const upstairs = bedLevel > 0 && this.world.getFloor(Math.floor(p.x), Math.floor(p.z), bedLevel);
+    p.y = this.ground(p.x, p.z) + (upstairs ? bedLevel * STOREY : 0);
     p.vy = 0;
     for (const e of [...this.enemies]) this.removeEnemy(e);
     this.startDay(true);

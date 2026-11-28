@@ -21,7 +21,7 @@
         </div>
       </div>
       <div id="topright">
-        <div class="daybar"><div id="day"></div><button id="btn-pause" title="Pause (Esc)">&#9776;</button></div>
+        <div class="daybar"><div id="day"></div><button id="btn-full" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button><button id="btn-pause" title="Pause (Esc)">&#9776;</button></div>
         <div id="status" class="hidden"></div>
       </div>
       <div id="waypoints"></div>
@@ -60,12 +60,7 @@
       <div id="walk-stick" aria-label="Movement stick"><i></i></div>
       <div class="touch-bar">
         <button data-action="inventory">Pack</button><button data-action="map">Map</button><button data-action="sheet">Skills</button>
-        <button data-action="eat">Eat</button><button data-action="drink">Drink</button>
-      </div>
-      <div class="touch-view" aria-label="View">
-        <button data-action="camLeft" aria-label="Turn view left">&#9664;</button><button data-action="camRight" aria-label="Turn view right">&#9654;</button>
-        <button data-action="zoomIn" aria-label="Zoom in">+</button><button data-action="zoomOut" aria-label="Zoom out">&minus;</button>
-        <button data-action="fullscreen" class="wide">Full screen</button>
+        <button data-action="layerDown" class="layer" hidden>&minus; Layer</button><button data-action="layerUp" class="layer" hidden>+ Layer</button>
       </div>
       <div class="touch-pad">
         <button data-action="strike" class="tool">Tool</button>
@@ -138,13 +133,14 @@
               <li><kbd>1</kbd>–<kbd>9</kbd> hotbar (drag a slot onto another to swap)</li>
               <li><kbd>Tab</kbd> inventory and crafting &nbsp; <kbd>M</kbd> world map &nbsp; <kbd>K</kbd> character sheet (level, stats, skills)</li>
               <li><kbd>C</kbd> eat &nbsp; <kbd>X</kbd> drink at a pond or from a flask</li>
-              <li><kbd>F</kbd> use bed, chest, campfire, workbench; board or leave a boat or submarine</li>
+              <li><kbd>F</kbd> use bed, chest, door, campfire, workbench; board or leave a boat or submarine</li>
+              <li><kbd>[</kbd> <kbd>]</kbd> build one storey lower or higher while holding a wall, floor, stairs or roof</li>
               <li>In deep water: <kbd>Shift</kbd> dives, <kbd>Space</kbd> swims up</li>
               <li>With a glider held: jump from a height and hold <kbd>Space</kbd></li>
               <li><kbd>Esc</kbd> pause</li>
             </ul>
             <h3>Touch</h3>
-            <p>Move with the thumbstick. Tap terrain to aim, then hold Tool or tap Place. Drag with two fingers to turn, or pinch to zoom. Run dives and Jump surfaces.</p>
+            <p>Move with the thumbstick. The big button aims for you and names what it will do: Pick up, Chop, Mine, Attack, and Eat or Drink when nothing else is in reach. Tap anything in the world to act on it. Place builds, Use opens doors, chests and beds. Drag with two fingers to turn, or pinch to zoom. Run dives and Jump surfaces. While building, &minus; Layer and + Layer choose the storey.</p>
             <h3>Gamepad</h3>
             <p>Left stick moves, right stick aims. Hold the right stick button to orbit. RT uses tools, B places, X interacts, A jumps and LT sprints or dives. Bumpers select a slot. Y opens your pack, View opens the map and Start pauses. D-pad up eats and down drinks.</p>
             <p>In menus, D-pad up and down move focus. Left and right adjust settings. A selects and B returns.</p>

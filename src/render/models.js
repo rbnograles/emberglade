@@ -271,6 +271,7 @@ export function buildItemModels(world) {
   // straight from the world
   for (const id of ['campfire', 'workbench', 'bed', 'chest', 'wood_wall', 'stone_wall', 'coral_wall', 'door', 'wood_floor', 'stone_floor',
     'lantern', 'boat', 'submarine', 'kelp', 'clam', 'coral']) use(id);
+  for (const id of ['slate_roof', 'tile_roof', 'stone_stairs', 'brick_stairs']) use(id);
   for (const id of ['roof', 'stairs', 'window', 'brick_floor', 'brick_wall', 'table', 'chair', 'shelf', 'cabinet',
     'lamp', 'planter', 'gate', 'irrigator', 'turnip', 'pumpkin', 'turnip_seeds', 'pumpkin_seeds',
     'hull', 'oar', 'pressure_hull', 'propeller', 'axle', 'trail_cart']) use(id);

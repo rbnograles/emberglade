@@ -18,7 +18,10 @@ export const OBJECTS = {
   // one-time treasures deep in the harsh regions (F to open)
   frost_hoard: { name: 'Frozen hoard', solid: 0.45, pickR: 0.7, hoard: [['rimeglass', 5, 7], ['iron_bar', 2, 4], ['crystal', 1, 2], ['pearl', 1, 1, 0.5]] },
   ember_hoard: { name: 'Ember hoard', solid: 0.45, pickR: 0.7, hoard: [['emberglass', 5, 7], ['iron_bar', 2, 4], ['crystal', 2, 3], ['coal', 3, 6]] },
-  stairs: { ...placed('Timber stairs', 0), item: 'stairs' },
+  // stairs: climbed, not walked round. They rise one whole storey across their tile.
+  stairs: { ...placed('Timber stairs', 0), item: 'stairs', stairs: true },
+  stone_stairs: { ...placed('Stone stairs', 0), item: 'stone_stairs', stairs: true, hp: 3 },
+  brick_stairs: { ...placed('Brick stairs', 0), item: 'brick_stairs', stairs: true, hp: 3 },
   window: { ...placed('Lattice window', 0.35), item: 'window', block: true },
   brick_wall: { ...placed('Brick wall', 0.35), item: 'brick_wall', block: true },
   table: { ...placed('Kitchen table', 0.35), item: 'table' },

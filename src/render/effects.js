@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 const dummy = new THREE.Object3D();
 
-const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 0x9a9fa6, soil: 0x8f633f, bush: 0x6cc257 };
+// by the first word of the object's id: wood for trees, grey for stone, leaf green, earth, brick red, coral
+const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 0x9a9fa6, stone: 0x9a9fa6, slate: 0x6f7c8c, soil: 0x8f633f, bush: 0x6cc257, tallgrass: 0x6cc257, flower: 0x6cc257, brick: 0xb86e50, tile: 0xc9603f, coral: 0xf0728a };
 
 // Pure presentation choice shared by the renderer and tests.
 export function hitEffect(object = '', destroyed = false) {

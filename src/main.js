@@ -20,6 +20,7 @@ import { buildMenu } from './ui/menu.js';
 import { cropFor } from './world/crops.js';
 import { OBJECTS } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
+import { STOREY } from './world/worldstate.js';
 import { ITEMS } from './game/items.js';
 import { buildModels, buildItemModels } from './render/models.js';
 import { renderItemIcons } from './render/itemicons.js';
@@ -32,6 +33,7 @@ import '@fontsource/nunito/latin-500.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
 import { Hud, drawFace, objectToolVerb } from './ui/hud.js';
+import { needAction, NEED_LABEL } from './ui/touch-actions.js';
 import { setRenderedIcons, iconURL } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
@@ -124,6 +126,8 @@ $('minimap').addEventListener('mousedown', (e) => {
 $('minimap').addEventListener('contextmenu', (e) => e.preventDefault());
 const waypoints = new Waypoints(scene, game, $('waypoints'));
 const toolButton = document.querySelector('.touch-pad .tool');
+const useButton = document.querySelector('.touch-pad .use');
+const layerButtons = [...document.querySelectorAll('#touch-controls .layer')];
 const compass = new Compass(game);
 const sheet = new Sheet(game);
 drawFace(settings.look);
@@ -158,6 +162,14 @@ game.on((type, data) => {
     hud.refresh();
     sheet.render();
   }
+  // Every blow throws chips in the colour of what was struck, and a bigger burst when it breaks.
+  // This is its own check, not part of the chain below: there a hit is already taken by its sound.
+  if (type === 'hit') {
+    const y = game.gen.tile(data.x, data.z).h + (data.level ?? 0) * STOREY + 0.4;
+    const effect = data.object ? hitEffect(data.object, data.destroyed) : { color: hitColor, cubes: 6, sparks: 4 };
+    particles.burst(data.x + 0.5, y, data.z + 0.5, effect.color, effect.cubes);
+    sparks.burst(data.x + 0.5, y + 0.2, data.z + 0.5, data.destroyed ? effect.color : 0xfff6e3, effect.sparks, data.destroyed ? 3.6 : 2.2);
+  }
   // sounds
   if (type === 'hit') sfx(hitSound);
   else if (type === 'eat' || type === 'drink' || type === 'hurt' || type === 'break') sfx(type);
@@ -185,12 +197,6 @@ game.on((type, data) => {
     } else if (data.key === 'sleep') sparks.rise(p.x, p.y + 0.3, p.z, 0xbfe6f5, 8, 0.5);
   } else if (type === 'newday') sfx('morning');
   else if (type === 'charm') sparks.rise(data.x, game.ground(data.x, data.z) + 0.5, data.z, 0xff8ab0, data.born ? 14 : 7, 0.4, 1.6);
-  else if (type === 'hit') {
-    const y = game.gen.tile(data.x, data.z).h + 0.4;
-    const effect = data.object ? hitEffect(data.object, data.destroyed) : { color: hitColor, cubes: 6, sparks: 4 };
-    particles.burst(data.x + 0.5, y, data.z + 0.5, effect.color, effect.cubes);
-    sparks.burst(data.x + 0.5, y + 0.2, data.z + 0.5, data.destroyed ? effect.color : 0xfff6e3, effect.sparks, data.destroyed ? 3.6 : 2.2);
-  }
   else if (type === 'swing') {
     playerModel.startSwing();
     playerModel.facing = Math.atan2(data.x + 0.5 - p.x, data.z + 0.5 - p.z);
@@ -311,6 +317,15 @@ $('gear').addEventListener('mousedown', (e) => {
 });
   },
 });
+$('btn-full').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  toggleFullscreen();
+});
+// the hunger and thirst warning doubles as a button
+$('hungry').addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  if (!paused) tendNeed();
+});
 $('btn-pause').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   setPaused(true);
@@ -354,6 +369,10 @@ addEventListener('keydown', (e) => {
   } else if (e.code === K.inventory) {
     panels.toggle();
     sfx('ui');
+  } else if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+    // choose the storey to build on: one below or above your own
+    game.shiftBuildLevel(e.code === 'BracketRight' ? 1 : -1);
+    hud.refresh();
   } else if (e.code === K.sheet) {
     sheet.toggle();
     sfx('ui');
@@ -431,19 +450,39 @@ function interact() {
   if (target?.reach && game.interact(target.x, target.z)) return;
   // an animal beside you: feed it, or gather eggs or fleece from a tame one
   if (game.wildlife.handle(game.wildlife.near(p.x, p.z, 1.6))) return;
-  const px = Math.floor(p.x), pz = Math.floor(p.z);
+  const best = nearestUsable();
+  if (best) game.interact(best.x, best.z);
+}
+
+// The closest thing on the player's own storey that Use works on, or null.
+function nearestUsable() {
+  const px = Math.floor(p.x), pz = Math.floor(p.z), level = game.playerLevel;
   let best = null, bestD = 2.6;
   for (let z = pz - 3; z <= pz + 3; z++) {
     for (let x = px - 3; x <= px + 3; x++) {
-      const t = game.world.get(x, z)?.t;
+      const obj = game.world.getAt(x, z, level);
       const d = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z);
-      if (t && usable(t) && d < bestD) {
-        best = [x, z];
+      if (obj && usable(obj.t) && d < bestD) {
+        best = { x, z, obj };
         bestD = d;
       }
     }
   }
-  if (best) game.interact(best[0], best[1]);
+  return best;
+}
+
+// What the Use button would do right now, for its label on touch screens.
+function useVerb() {
+  if (game.player.riding) return 'Get off';
+  if (game.vehicleNear()) return 'Board';
+  const aimed = target?.reach ? game.world.getAt(target.x, target.z, game.playerLevel) : null;
+  const obj = aimed && usable(aimed.t) ? aimed : nearestUsable()?.obj;
+  if (!obj) return game.wildlife.near(p.x, p.z, 1.6) ? 'Tend' : 'Use';
+  if (obj.t === 'door' || obj.t === 'gate') return obj.open ? 'Close' : 'Open';
+  if (obj.t === 'bed') return 'Sleep';
+  if (obj.t === 'campfire' || obj.t === 'workbench') return 'Craft';
+  if (OBJECTS[obj.t].cache || OBJECTS[obj.t].hoard) return 'Search';
+  return 'Open';
 }
 
 // ---------- cursor targeting ----------
@@ -455,7 +494,7 @@ let tapHold = 0; // seconds a tapped tile stays the target before aiming goes ba
 addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touchMode = true; }, true);
 addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') touchMode = false; }, true);
 
-const USABLE = ['bed', 'chest', 'cabinet', 'campfire', 'workbench', 'gate', 'lostbag'];
+const USABLE = ['bed', 'chest', 'cabinet', 'campfire', 'workbench', 'gate', 'door', 'lostbag'];
 const usable = (t) => USABLE.includes(t) || !!OBJECTS[t]?.cache || !!OBJECTS[t]?.hoard;
 
 // The nearest thing within reach, favouring whatever the character is facing. With something to
@@ -477,7 +516,7 @@ function autoTarget() {
   const px = Math.floor(p.x), pz = Math.floor(p.z);
   for (let z = pz - 4; z <= pz + 4; z++) {
     for (let x = px - 4; x <= px + 4; x++) {
-      const obj = game.world.get(x, z);
+      const obj = objAt(x, z);
       if (!obj || !game.inReach(x, z)) continue;
       if (wantsSoil && obj.t !== 'soil') continue;
       const dx = x + 0.5 - p.x, dz = z + 0.5 - p.z, d = Math.hypot(dx, dz) || 0.001;
@@ -496,10 +535,32 @@ function autoTarget() {
 const currentTarget = () => (touchMode && tapHold <= 0 ? autoTarget() : pickTarget());
 
 // What the Tool button will do right now, for its label on touch screens.
+// On touch, with nothing in reach to hit or pick up, the big button eats or drinks instead.
+// Returns 'eat', 'drink' or null. A hoe keeps its job of tilling the ground ahead.
+function touchNeed() {
+  if (!touchMode || pickFoe()) return null;
+  // what is in the hand decides first: food is for eating, a flask for drinking
+  const held = ITEMS[game.held?.id];
+  if (held?.food) return 'eat';
+  if (held?.flask) return 'drink';
+  if (target?.reach && objAt(target.x, target.z)) return null;
+  if (ITEMS[game.held?.id]?.tool === 'hoe') return null;
+  return needAction(game);
+}
+
 function toolVerb() {
   if (pickFoe()) return 'Attack';
-  const obj = target?.reach ? game.world.get(target.x, target.z) : null;
+  const need = touchNeed();
+  if (need) return NEED_LABEL[need];
+  const obj = target?.reach ? objAt(target.x, target.z) : null;
   return objectToolVerb(ITEMS[game.held?.id]?.tool, obj);
+}
+
+// Eat or drink, whichever is more pressing; used by the big button and by tapping the warning banner.
+function tendNeed(need = p.thirst <= p.hunger ? 'drink' : 'eat') {
+  if (need === 'drink') game.drinkWater();
+  else game.eatFood();
+  hud.refresh();
 }
 
 function toggleFullscreen() {
@@ -511,8 +572,33 @@ function toggleFullscreen() {
   }
   root.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')?.catch(() => {})).catch(() => {});
 }
+// What stands on the storey that building and tools are aimed at.
+const objAt = (x, z) => game.world.getAt(x, z, game.buildLevel);
+const STOREY_NAMES = ['Ground', 'Floor 2', 'Floor 3'];
+const holdingBuildable = () => {
+  const def = ITEMS[game.held?.id];
+  return !!(def && (def.place || def.floor || def.roof));
+};
+// Which way stairs placed now would climb: 0 toward +x, 1 +z, 2 -x, 3 -z (the way the character faces).
+const stairRotation = () => {
+  const sx = Math.sin(playerModel.facing), sz = Math.cos(playerModel.facing);
+  return Math.abs(sx) > Math.abs(sz) ? (sx > 0 ? 0 : 2) : (sz > 0 ? 1 : 3);
+};
+
 function pickTarget() {
   raycaster.setFromCamera(mouse, camera);
+  // Aiming at a storey above the ground: the cursor points at that storey's own level plane, so
+  // the tile under it is the one meant, however the camera is tilted.
+  const level = game.buildLevel;
+  if (level > 0) {
+    const ray = raycaster.ray, planeY = game.ground(p.x, p.z) + level * STOREY + 0.05;
+    if (Math.abs(ray.direction.y) < 1e-4) return null;
+    const t = (planeY - ray.origin.y) / ray.direction.y;
+    if (t <= 0) return null;
+    const hx = ray.origin.x + ray.direction.x * t, hz = ray.origin.z + ray.direction.z * t;
+    const tx = Math.floor(hx), tz = Math.floor(hz);
+    return { x: tx, z: tz, reach: game.inReach(tx, tz), px: hx, pz: hz };
+  }
   // under water the cursor points at the seabed, not the surface above it
   const hits = raycaster.intersectObjects(chunks.nearMeshes(p.x, p.z, !game.submerged), false);
   const def = ITEMS[game.held?.id];
@@ -577,7 +663,7 @@ function pickFoe() {
 
 function targetLabel() {
   if (!target?.reach) return '';
-  const obj = game.world.get(target.x, target.z);
+  const obj = objAt(target.x, target.z);
   if (!obj) return '';
   if (obj.t !== 'soil') return OBJECTS[obj.t].name;
   if (obj.crop < 0) return obj.wet ? 'Soil (watered)' : 'Soil';
@@ -632,11 +718,13 @@ function updateGhost() {
   ghost.material.color.setHex(ok ? 0xffffff : 0xff4a4a);
   ghost.material.opacity = ok ? 0.7 : 0.55;
   const tile = game.gen.tile(target.x, target.z);
-  const y = def.roof ? tile.h + 1.55 : def.vehicle && !VEHICLES[what].land && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + 0.02;
+  const level = def.vehicle ? 0 : game.buildLevel, lift = level * STOREY;
+  const y = def.roof ? tile.h + lift + 1.55 : def.vehicle && !VEHICLES[what].land && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + lift + 0.02;
   if (what !== 'door') {
     ghost.position.set(target.x + 0.5, y, target.z + 0.5);
-    ghost.rotation.y = 0;
-  } else if (game.doorRotation(target.x, target.z, playerModel.facing) === 1) {
+    // stairs show the way they will climb
+    ghost.rotation.y = OBJECTS[what]?.stairs ? [0, -Math.PI / 2, Math.PI, Math.PI / 2][stairRotation()] : 0;
+  } else if (game.doorRotation(target.x, target.z, playerModel.facing, level) === 1) {
     ghost.position.set(target.x + 1, y, target.z);
     ghost.rotation.y = -Math.PI / 2;
   } else {
@@ -669,9 +757,17 @@ const controllers = installControllers(canvas, {
       return;
     }
     if (action === 'fullscreen') return void toggleFullscreen();
+    if (action === 'layerUp' || action === 'layerDown') {
+      if (!paused && holdingBuildable()) game.shiftBuildLevel(action === 'layerUp' ? 1 : -1);
+      return;
+    }
     if (action === 'sheet' && !paused) return void sheet.toggle();
     if (paused || panels.open || bigmap.open || sheet.open) return;
-    if (action === 'strike') clicked = true;
+    if (action === 'strike') {
+      const need = touchNeed();
+      if (need) return void tendNeed(need);
+      clicked = true;
+    }
     else if (action === 'secondary') secondaryAction();
     else if (action === 'inventory') panels.show();
     else if (action === 'interact') interact();
@@ -829,7 +925,7 @@ function step(dt) {
   marker.visible = !!target?.reach;
   if (marker.visible) {
     const tt = game.gen.tile(target.x, target.z);
-    marker.position.set(target.x + 0.5, (tt.water && game.submerged ? tt.bed : tt.h) + 0.04, target.z + 0.5);
+    marker.position.set(target.x + 0.5, (tt.water && game.submerged ? tt.bed : tt.h) + game.buildLevel * STOREY + 0.04, target.z + 0.5);
   }
   updateGhost();
   swingCooldown -= dt;
@@ -924,10 +1020,15 @@ function step(dt) {
   compass.draw(camYaw);
     hud.refresh();
   }
-  hud.setHint(targetLabel());
+  // while building, the hint names the storey being built on, and touch gets its layer buttons
+  const building = holdingBuildable(), label = targetLabel();
+  hud.setHint(building ? (label ? label + ' · ' : '') + STOREY_NAMES[game.buildLevel] : label);
+  for (const b of layerButtons) if (b.hidden === building) b.hidden = !building;
   if (touchMode) {
     const verb = toolVerb();
     if (toolButton.textContent !== verb) toolButton.textContent = verb;
+    const use = useVerb();
+    if (useButton.textContent !== use) useButton.textContent = use;
   }
   saveTimer += dt;
   if (saveTimer > 30) {

@@ -54,7 +54,7 @@ export class Panels {
   get open() { return !this.root.classList.contains('hidden'); }
 
   show(chestPos = null) {
-    const obj = chestPos && this.game.world.get(chestPos.x, chestPos.z);
+    const obj = chestPos && this.game.world.getAt(chestPos.x, chestPos.z, chestPos.l ?? 0);
     this.chest = obj?.t === 'chest' || obj?.t === 'cabinet' || obj?.t === 'lostbag' ? new Inventory(0, obj.items) : null;
     this.root.classList.remove('hidden');
     this.render();

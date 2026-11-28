@@ -4,6 +4,10 @@ import { BIOMES, SHORE, WATER_COLORS, SEABED_COLORS, LAVA_COLORS, ICE_COLORS } f
 import { WATER_Y } from '../world/worldgen.js';
 import { rgb, mergeModels } from './voxel.js';
 import { OBJECTS } from '../world/objects.js';
+import { STOREY, TOP_LEVEL } from '../world/worldstate.js';
+
+// Stairs are sculpted rising toward +x. Their saved rotation (0 +x, 1 +z, 2 -x, 3 -z) as quarter turns for the mesh builder.
+export const STAIR_TURN = [0, 3, 2, 1];
 
 export const CHUNK = 16;
 const RADIUS = 3;
@@ -34,8 +38,13 @@ export class Chunks {
     this.world = game.world;
     this.models = models;
     this.map = new Map();
-    this.roofGroup = new THREE.Group();
-    this.scene.add(this.roofGroup);
+    this.game = game;
+    // Each storey above the ground, and each storey's roofs, are drawn in a group of their own, so
+    // everything above the player can be lifted out of view when they step indoors.
+    this.roofGroups = [0, 1, 2].map(() => new THREE.Group());
+    this.storeyGroups = [null, new THREE.Group(), new THREE.Group()];
+    this.roofGroup = this.roofGroups[0];
+    this.scene.add(...this.roofGroups, this.storeyGroups[1], this.storeyGroups[2]);
     this.dirty = new Set();
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.objectMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -71,7 +80,13 @@ export class Chunks {
   // budget: how many missing chunks to build this frame
   update(px, pz, budget = 2) {
     const ccx = Math.floor(px / CHUNK), ccz = Math.floor(pz / CHUNK);
-    this.roofGroup.visible = !this.world.getRoof(Math.floor(px), Math.floor(pz));
+    // Under a roof or the floor of the storey above, hide what is overhead so the room can be seen.
+    const tx = Math.floor(px), tz = Math.floor(pz), level = this.game.playerLevel;
+    const covered = !!this.world.getRoof(tx, tz, level) || (level < TOP_LEVEL && !!this.world.getFloor(tx, tz, level + 1));
+    for (let l = 0; l <= TOP_LEVEL; l++) {
+      this.roofGroups[l].visible = !(covered && l >= level);
+      if (l > 0) this.storeyGroups[l].visible = !(covered && l > level);
+    }
     const missing = [];
     for (let dz = -RADIUS; dz <= RADIUS; dz++) {
       for (let dx = -RADIUS; dx <= RADIUS; dx++) {
@@ -89,6 +104,12 @@ export class Chunks {
         c.lava.geometry.dispose();
         this.roofGroup.remove(c.roof);
         c.roof.geometry.dispose();
+        for (let l = 1; l <= TOP_LEVEL; l++) {
+          this.storeyGroups[l].remove(c.upper[l]);
+          this.roofGroups[l].remove(c.upperRoof[l]);
+          c.upper[l].geometry.dispose();
+          c.upperRoof[l].geometry.dispose();
+        }
         c.objects.geometry.dispose();
         this.map.delete(key);
       }
@@ -113,7 +134,14 @@ export class Chunks {
     const roof = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
     roof.castShadow = true;
     this.roofGroup.add(roof);
-    const c = { cx, cz, terrain, water, lava, objects, roof, fires: [] };
+    const c = { cx, cz, terrain, water, lava, objects, roof, upper: [null], upperRoof: [null], fires: [] };
+    for (let l = 1; l <= TOP_LEVEL; l++) {
+      c.upper[l] = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
+      c.upperRoof[l] = new THREE.Mesh(new THREE.BufferGeometry(), this.objectMat);
+      c.upper[l].castShadow = c.upper[l].receiveShadow = c.upperRoof[l].castShadow = true;
+      this.storeyGroups[l].add(c.upper[l]);
+      this.roofGroups[l].add(c.upperRoof[l]);
+    }
     this.buildObjects(c);
     this.scene.add(terrain, water, lava, objects);
     this.map.set(cx + ',' + cz, c);
@@ -185,14 +213,38 @@ export class Chunks {
 
   buildObjects(c) {
     const list = [], roofs = [];
+    const upper = [null, [], []], upperRoofs = [null, [], []];
     c.fires = [];
     const M = this.models;
+    // One built piece on an upper storey. Doors and stairs are turned the way they were placed.
+    const piece = (obj, x, z, y, out) => {
+      const px = x + 0.5, pz = z + 0.5;
+      if (obj.t === 'gate') out.push({ m: M.get(obj.open ? 'gate_open' : 'gate'), x: px, y, z: pz });
+      else if (obj.t === 'door') {
+        const model = M.get(obj.open === true ? 'door_open' : 'door_closed');
+        if ((obj.rotation ?? 0) === 1) out.push({ m: model, x: x + 1, y, z, rot: 3 });
+        else out.push({ m: model, x, y, z });
+      } else if (obj.t === 'fence') out.push({ m: M.get('fence_post'), x: px, y, z: pz });
+      else if (M.has(obj.t)) {
+        out.push({ m: M.get(obj.t), x: px, y, z: pz, rot: OBJECTS[obj.t].stairs ? STAIR_TURN[obj.rotation ?? 0] : 0 });
+        if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
+        if (obj.t === 'lantern' || obj.t === 'lamp') c.fires.push({ x: px, y, z: pz, lantern: true });
+      }
+    };
     for (let z = c.cz * CHUNK; z < (c.cz + 1) * CHUNK; z++) {
       for (let x = c.cx * CHUNK; x < (c.cx + 1) * CHUNK; x++) {
         const obj = this.world.get(x, z);
         const floor = this.world.getFloor(x, z);
         const roof = this.world.getRoof(x, z);
         if (roof) roofs.push({ m: M.get(roof), x: x + 0.5, y: this.gen.tile(x, z).h + 1.55, z: z + 0.5 });
+        for (let l = 1; l <= TOP_LEVEL; l++) {
+          const cell = this.world.cell(x, z, l);
+          if (!cell) continue;
+          const base = this.gen.tile(x, z).h + l * STOREY;
+          if (cell.floor && M.has(cell.floor)) upper[l].push({ m: M.get(cell.floor), x: x + 0.5, y: base, z: z + 0.5 });
+          if (cell.obj) piece(cell.obj, x, z, base, upper[l]);
+          if (cell.roof && M.has(cell.roof)) upperRoofs[l].push({ m: M.get(cell.roof), x: x + 0.5, y: base + 1.55, z: z + 0.5 });
+        }
         if (!obj && !floor) continue;
         // things in the sea rest on the bed
         const tile = this.gen.tile(x, z);
@@ -218,7 +270,7 @@ export class Chunks {
           if (rotation === 1) list.push({ m: model, x: x + 1, y, z, rot: 3 });
           else list.push({ m: model, x, y, z });
         } else if (obj.placed && obj.t !== 'flower') {
-          add(obj.t);
+          add(obj.t, OBJECTS[obj.t].stairs ? { rot: STAIR_TURN[obj.rotation ?? 0] } : {});
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
           if (obj.t === 'lantern' || obj.t === 'lamp') c.fires.push({ x: px, y, z: pz, lantern: true });
         } else {
@@ -239,6 +291,12 @@ export class Chunks {
     c.objects.geometry = toGeometry(mergeModels(list));
     c.roof.geometry.dispose();
     c.roof.geometry = toGeometry(mergeModels(roofs));
+    for (let l = 1; l <= TOP_LEVEL; l++) {
+      c.upper[l].geometry.dispose();
+      c.upper[l].geometry = toGeometry(mergeModels(upper[l]));
+      c.upperRoof[l].geometry.dispose();
+      c.upperRoof[l].geometry = toGeometry(mergeModels(upperRoofs[l]));
+    }
   }
 
   // Meshes of the 3x3 chunks around a position, for cursor picking.
@@ -251,6 +309,8 @@ export class Chunks {
         const c = this.map.get(ccx + dx + ',' + (ccz + dz));
         if (c) {
           out.push(c.terrain, c.objects);
+          // built storeys can be pointed at too, unless they are hidden for being overhead
+          for (let l = 1; l <= TOP_LEVEL; l++) if (this.storeyGroups[l].visible) out.push(c.upper[l]);
           if (withWater) out.push(c.water);
         }
       }

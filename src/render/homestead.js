@@ -10,14 +10,23 @@ function legs(v, width, depth, height) {
 
 export function homesteadModels(m) {
   const add = (id, vox, size = 0.125) => m.set(id, vox.build(size));
-  const roof = new Vox(), stairs = new Vox();
-  for (let x = 0; x < 8; x++) {
-    const rise = Math.min(x, 7 - x);
-    roof.box(x, rise, 0, x, rise + 1, 7, (a, b, z) => [0x984d3e, 0xb5634f, 0xa85644][(x + (z >> 1)) % 3]);
-    stairs.box(x, 0, 0, x, (x >> 1) * 2 + 1, 7, x % 2 ? oak : honey);
+  // A ridged roof and a flight of stairs in each of the three building materials. The stairs rise
+  // toward +x and are a whole storey tall (twelve voxels), in eight treads.
+  const families = [
+    ['roof', 'stairs', [0x984d3e, 0xb5634f, 0xa85644], [oak, honey]],
+    ['slate_roof', 'stone_stairs', [0x5f6b7a, 0x6f7c8c, 0x566170], [0x9a9fa6, 0x8b9098]],
+    ['tile_roof', 'brick_stairs', [0xc9603f, 0xd9744e, 0xb85436], [0xa75a44, 0xc17a5a]],
+  ];
+  for (const [roofId, stairsId, tiles, treads] of families) {
+    const roof = new Vox(), stairs = new Vox();
+    for (let x = 0; x < 8; x++) {
+      const rise = Math.min(x, 7 - x);
+      roof.box(x, rise, 0, x, rise + 1, 7, (a, b, z) => tiles[(x + (z >> 1)) % 3]);
+      stairs.box(x, 0, 0, x, Math.round((x + 1) * 1.5) - 1, 7, treads[x % 2]);
+    }
+    add(roofId, roof);
+    add(stairsId, stairs);
   }
-  add('roof', roof);
-  add('stairs', stairs);
   add('brick_wall', new Vox().box(0, 0, 0, 3, 5, 3, brick), 0.25);
   add('brick_floor', new Vox().box(0, 0, 0, 7, 0, 7, brick));
   add('window', new Vox().box(0, 0, 0, 7, 3, 2, oak).box(0, 4, 1, 0, 11, 1, edge)

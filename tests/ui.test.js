@@ -19,14 +19,7 @@ describe('harvest presentation', () => {
   });
 });
 
-describe('touch survival actions', () => {
-  const load = async () => {
-    try {
-      return (await import('../src/ui/touch-actions.js')).touchActionState;
-    } catch {
-      return () => ({ eat: { visible: false, label: 'Eat' }, drink: { visible: false, label: 'Drink' } });
-    }
-  };
+describe('the touch button looks after hunger and thirst', () => {
   const game = ({ hunger = 5, thirst = 5, foodSlot = -1, source = null, held = null } = {}) => ({
     player: { hunger, thirst },
     held,
@@ -34,21 +27,27 @@ describe('touch survival actions', () => {
     drinkSource: () => source,
   });
 
-  it('offers Eat for held or inventory food only while hungry', async () => {
-    const touchActionState = await load();
-    expect(touchActionState(game({ held: { id: 'berries' }, foodSlot: 0 })).eat).toEqual({ visible: true, label: 'Eat' });
-    expect(touchActionState(game({ foodSlot: 12 })).eat).toEqual({ visible: true, label: 'Eat' });
-    expect(touchActionState(game({ hunger: 10, foodSlot: 0 })).eat).toEqual({ visible: false, label: 'Eat' });
-    expect(touchActionState(game()).eat).toEqual({ visible: false, label: 'Eat' });
+  it('eats when food is held, or when hunger is getting low and there is food', async () => {
+    const { needAction } = await import('../src/ui/touch-actions.js');
+    expect(needAction(game({ hunger: 9, held: { id: 'berries' }, foodSlot: 0 }))).toBe('eat');
+    expect(needAction(game({ hunger: 5, foodSlot: 12 }))).toBe('eat');
+    expect(needAction(game({ hunger: 8, foodSlot: 12 }))).toBe(null); // not pressing yet, and nothing held
+    expect(needAction(game({ hunger: 10, held: { id: 'berries' }, foodSlot: 0 }))).toBe(null); // full
+    expect(needAction(game({ hunger: 2 }))).toBe(null); // nothing to eat
   });
 
-  it('offers the exact available drink source only while thirsty', async () => {
-    const touchActionState = await load();
-    expect(touchActionState(game({ source: 'flask' })).drink).toEqual({ visible: true, label: 'Drink flask' });
-    expect(touchActionState(game({ source: 'pond' })).drink).toEqual({ visible: true, label: 'Drink pond' });
-    for (const unavailable of ['empty flask', 'salty sea', 'frozen water', 'boiling water', 'no source']) {
-      expect(touchActionState(game({ source: null })).drink, unavailable).toEqual({ visible: false, label: 'Drink' });
-    }
-    expect(touchActionState(game({ thirst: 10, source: 'pond' })).drink).toEqual({ visible: false, label: 'Drink pond' });
+  it('drinks at fresh water, from a held flask, or when thirst is getting low', async () => {
+    const { needAction } = await import('../src/ui/touch-actions.js');
+    expect(needAction(game({ thirst: 9, source: 'pond' }))).toBe('drink');
+    expect(needAction(game({ thirst: 9, source: 'flask', held: { id: 'flask' } }))).toBe('drink');
+    expect(needAction(game({ thirst: 5, source: 'flask' }))).toBe('drink');
+    expect(needAction(game({ thirst: 8, source: 'flask' }))).toBe(null);
+    expect(needAction(game({ thirst: 10, source: 'pond' }))).toBe(null); // not thirsty
+    expect(needAction(game({ thirst: 1, source: null }))).toBe(null); // salt, ice, boiling or no water: nothing to drink
+  });
+
+  it('puts thirst first when both are pressing', async () => {
+    const { needAction } = await import('../src/ui/touch-actions.js');
+    expect(needAction(game({ hunger: 2, thirst: 2, foodSlot: 3, source: 'flask' }))).toBe('drink');
   });
 });

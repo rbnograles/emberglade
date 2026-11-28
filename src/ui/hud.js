@@ -6,7 +6,6 @@ import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
 import { OBJECTS } from '../world/objects.js';
 import { cropFor } from '../world/crops.js';
 import { iconURL } from './icons.js';
-import { touchActionState } from './touch-actions.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,7 +108,7 @@ export function drawFace(look) {
 const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 const TOUCH_WORDS = [
   [/\bLMB\b/g, 'Tool'], [/\bRMB\b/g, 'Place'], [/\b([Pp])ress F\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Use'], [/\bF: /g, 'Use: '], [/\(F to /g, '(Use to '],
-  [/\b([Pp])ress X\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Drink'], [/\b([Pp])ress C\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Eat'],
+  [/\b([Pp])ress [XC]\b/g, (m, p) => (p === 'P' ? 'Tap here' : 'tap here')], [/\bX: drink\b/g, 'Tool: drink'],
   [/\b([Pp])ress K\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Skills'], [/\b([Pp])ress M\b/g, (m, p) => (p === 'P' ? 'Tap' : 'tap') + ' Map'],
   [/\bclick\b/g, 'tap'], [/\bClick\b/g, 'Tap'], [/\bhold Space\b/g, 'hold Jump'], [/\bHold Shift\b/g, 'Hold Run'], [/\bShift\b/g, 'Run'], [/\bSpace\b/g, 'Jump'],
 ];
@@ -118,8 +117,7 @@ export const touchWords = (text) => (TOUCH ? TOUCH_WORDS.reduce((s, [from, to]) 
 export class Hud {
   constructor(game) {
     this.game = game;
-    this.touchActions = Object.fromEntries(['eat', 'drink'].map((name) => [name,
-      document.querySelector(`#touch-controls [data-action="${name}"]`)]));
+
     this.hearts = segments($('hearts'));
     this.hunger = segments($('hunger'));
     this.thirst = segments($('thirst'));
@@ -198,14 +196,7 @@ export class Hud {
     // what the eat and drink keys would use right now, for the prompt below
     const foodSlot = g.foodSlot(), food = foodSlot >= 0 ? g.inv.slots[foodSlot] : null;
     const source = g.drinkSource();
-    const touchActions = touchActionState(g);
-    for (const [name, state] of Object.entries(touchActions)) {
-      const button = this.touchActions[name];
-      if (!button) continue;
-      button.textContent = state.label;
-      button.hidden = !state.visible;
-      button.setAttribute('aria-hidden', String(!state.visible));
-    }
+
     // One prompt at a time: thirst first, since it runs out sooner.
     const prompt = $('hungry');
     if (p.thirst < 4) {

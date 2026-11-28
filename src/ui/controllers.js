@@ -114,7 +114,7 @@ export function installControllers(canvas, actions) {
           navigatePanel(panel, Number(!!edge(13)) - Number(!!edge(12)), Number(!!edge(15)) - Number(!!edge(14)), edge(0));
         }
       } else {
-        const commands = { 1: 'secondary', 2: 'interact', 3: 'inventory', 4: 'previous', 5: 'next', 7: 'strike', 8: 'map', 9: 'back', 12: 'eat', 13: 'drink' };
+        const commands = { 1: 'secondary', 2: 'interact', 3: 'inventory', 4: 'previous', 5: 'next', 7: 'strike', 8: 'map', 9: 'back', 12: 'eat', 13: 'drink', 14: 'layerDown', 15: 'layerUp' };
         for (const [i, action] of Object.entries(commands)) if (edge(i)) actions.command(action);
         if (pressed[11]) actions.orbit(-axis(pad.axes[2]) * dt * 2, axis(pad.axes[3]) * dt);
         else if (pad) actions.nudgeAim(axis(pad.axes[2]) * dt, axis(pad.axes[3]) * dt);

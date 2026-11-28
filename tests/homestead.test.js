@@ -9,6 +9,7 @@ import { KEEPERS, carvingId } from '../src/game/keepers.js';
 import { suitsSite, attackWarnings, inWarning, rewardFor } from '../src/game/encounters.js';
 import { Progress, SKILLS, STAT_CAP, MAX_LEVEL, xpToNext } from '../src/game/progress.js';
 import { tickSurvival, tickStamina } from '../src/game/survival.js';
+import { STOREY } from '../src/world/worldstate.js';
 import { summarise, eventFor } from '../src/game/summary.js';
 import { cloud, syncWorld, fetchWorld } from '../src/cloud.js';
 import { buildModels, buildItemModels } from '../src/render/models.js';
@@ -174,15 +175,10 @@ describe('house', () => {
     expect(g.inv.count('roof')).toBe(2);
   });
 
-  it('climbs stairs a step at a time and stores things in a cabinet', () => {
+  it('stores things in a cabinet', () => {
     const g = newGame();
     const [x, z] = clearing(g, 2);
     standAt(g, x + 1, z + 1);
-    hold(g, 'stairs');
-    g.secondary(x, z, true);
-    const h = g.gen.tile(x, z).h;
-    expect(g.standY(x + 0.1, z + 0.5)).toBeCloseTo(h + 0.25);
-    expect(g.standY(x + 0.9, z + 0.5)).toBeCloseTo(h + 1);
     hold(g, 'cabinet');
     g.secondary(x + 1, z, true);
     expect(g.world.get(x + 1, z).items.length).toBeGreaterThan(0);
@@ -476,5 +472,192 @@ describe('cloud', () => {
     expect(cloud.status).toBe('Not set up');
     expect(await syncWorld(newGame(), 1)).toBe(false);
     expect(await fetchWorld(1)).toBe(null);
+  });
+});
+
+describe('multi-storey building', () => {
+  const EAST = Math.PI / 2; // facing +x
+  // A strip of ground floor two tiles deep with a staircase at its west end:
+  //   S B C      S = stairs (climbing east), B and C = floored tiles, and the row behind them floored too
+  function site() {
+    const g = newGame();
+    g.spawnTimer = g.golemTimer = Infinity;
+    const [x, z] = clearing(g, 6);
+    const S = [x + 1, z + 2], B = [x + 2, z + 2], C = [x + 3, z + 2], B2 = [x + 2, z + 3], C2 = [x + 3, z + 3];
+    standAt(g, x + 2, z + 4);
+    for (const [fx, fz] of [B, C, B2, C2]) {
+      hold(g, 'wood_floor');
+      g.secondary(fx, fz, true, EAST);
+    }
+    hold(g, 'stairs');
+    g.secondary(S[0], S[1], true, EAST);
+    return { g, S, B, C, B2, C2, ground: g.ground(x + 2.5, z + 2.5) };
+  }
+  const walk = (g, dx, dz, steps) => {
+    for (let i = 0; i < steps; i++) {
+      g.move(dx, dz);
+      g.physics(0.016, false);
+    }
+  };
+  const climb = (g, S) => {
+    Object.assign(g.player, { x: S[0] + 0.05, z: S[1] + 0.5, y: g.ground(S[0] + 0.5, S[1] + 0.5), vy: 0 });
+    walk(g, 0.04, 0, 40); // to the middle of the tile beyond the stairs
+  };
+
+  it('builds upward only where there is support, and keeps what it cannot place', () => {
+    const { g, S, B, C } = site();
+    expect(g.world.get(S[0], S[1]).rotation).toBe(0); // climbs the way the builder faced
+    hold(g, 'wood_floor', 5);
+    expect(g.buildLevel).toBe(0);
+    expect(g.shiftBuildLevel(-1)).toBe(0); // nothing below the ground
+    expect(g.shiftBuildLevel(1)).toBe(1);
+    expect(g.shiftBuildLevel(1)).toBe(1); // only one storey away from your own
+    expect(g.canPlace(B[0], B[1])).toBe(true); // over a ground floor
+    expect(g.canPlace(S[0], S[1])).toBe(false); // the stairwell stays open
+    expect(g.canPlace(B[0], B[1] - 1)).toBe(false); // over bare ground: nothing to rest on
+    g.secondary(B[0], B[1] - 1, true, EAST);
+    expect(g.inv.count('wood_floor')).toBe(5); // nothing spent on a refusal
+    g.secondary(B[0], B[1], true, EAST);
+    g.secondary(C[0], C[1], true, EAST);
+    expect(g.world.getFloor(B[0], B[1], 1)).toBe('wood_floor');
+    expect(g.world.getFloor(B[0], B[1])).toBe('wood_floor'); // the ground floor is its own layer
+    expect(g.inv.count('wood_floor')).toBe(3);
+    // a wall upstairs needs the upstairs floor under it
+    hold(g, 'wood_wall', 2);
+    expect(g.canPlace(C[0], C[1])).toBe(true);
+    expect(g.canPlace(C[0], C[1] - 1)).toBe(false);
+    // holding something that is not for building always aims at your own storey
+    hold(g, 'stone_axe');
+    expect(g.buildLevel).toBe(0);
+  });
+
+  it('climbs the stairs, walks over the room below and falls off the edge', () => {
+    const { g, S, B, C, ground } = site();
+    hold(g, 'wood_floor', 2);
+    g.shiftBuildLevel(1);
+    g.secondary(B[0], B[1], true, EAST);
+    g.secondary(C[0], C[1], true, EAST);
+    g.shiftBuildLevel(-1);
+    hold(g, 'wood_wall');
+    g.secondary(C[0], C[1], true, EAST); // a ground-storey wall under the upper floor
+    expect(g.blocked(C[0] + 0.5, C[1] + 0.5, 0.28, false, 0)).toBe(true);
+    expect(g.blocked(C[0] + 0.5, C[1] + 0.5, 0.28, false, 1)).toBe(false);
+
+    // the side and the high end of the stairs are solid; only the low end lets you on
+    Object.assign(g.player, { x: S[0] + 0.5, z: S[1] - 0.4, y: ground, vy: 0 });
+    walk(g, 0, 0.04, 20);
+    expect(g.player.z).toBeLessThan(S[1]);
+
+    climb(g, S);
+    expect(g.player.y).toBeCloseTo(ground + STOREY);
+    expect(g.playerLevel).toBe(1);
+    expect(Math.floor(g.player.x)).toBe(B[0]);
+    walk(g, 0.04, 0, 25); // on over the wall below
+    expect(Math.floor(g.player.x)).toBe(C[0]);
+    expect(g.player.y).toBeCloseTo(ground + STOREY);
+    // someone on the ground walks under the upper floor without popping up onto it
+    expect(g.standY(B[0] + 0.5, B[1] + 0.5, ground)).toBe(ground);
+    // and stepping off the end of the floor drops you back to the ground
+    walk(g, 0.04, 0, 60);
+    for (let i = 0; i < 80; i++) g.physics(0.016, false);
+    expect(g.player.y).toBeCloseTo(g.ground(g.player.x, g.player.z));
+    expect(g.playerLevel).toBe(0);
+  });
+
+  it('takes one storey apart at a time and hands back the same pieces', () => {
+    const { g, S, B, C, ground } = site();
+    hold(g, 'wood_floor', 2);
+    g.shiftBuildLevel(1);
+    g.secondary(B[0], B[1], true, EAST);
+    g.secondary(C[0], C[1], true, EAST);
+    climb(g, S);
+    g.inv.slots.fill(null);
+    hold(g, 'brick_wall');
+    g.secondary(C[0], C[1], true, EAST);
+    expect(g.world.getAt(C[0], C[1], 1).t).toBe('brick_wall');
+    expect(g.blocked(C[0] + 0.5, C[1] + 0.5, 0.28, false, 1)).toBe(true);
+    hold(g, 'slate_roof');
+    g.secondary(C[0], C[1], true, EAST);
+    expect(g.world.getRoof(C[0], C[1], 1)).toBe('slate_roof');
+    g.inv.slots.fill(null);
+    g.selected = 8; // an empty hand, and it stays empty as the pieces come back into the first slots
+    // the wall first (it takes its hits), then the roof with empty hands, then the floor
+    for (let i = 0; i < 6 && g.world.getAt(C[0], C[1], 1); i++) g.primary(C[0], C[1]);
+    expect(g.inv.count('brick_wall')).toBe(1);
+    g.primary(C[0], C[1]);
+    expect(g.inv.count('slate_roof')).toBe(1);
+    g.primary(C[0], C[1]);
+    expect(g.inv.count('wood_floor')).toBe(1);
+    expect(g.world.getFloor(C[0], C[1], 1)).toBe(null);
+    expect(g.world.getFloor(C[0], C[1])).toBe('wood_floor'); // the storey below is untouched
+    g.primary(B[0], B[1]); // you cannot pull the floor out from under yourself
+    expect(g.world.getFloor(B[0], B[1], 1)).toBe('wood_floor');
+    expect(g.player.y).toBeCloseTo(ground + STOREY);
+  });
+
+  it('shelters, opens doors, sleeps and wakes upstairs, and survives saving', () => {
+    const { g, S, B, C, B2, C2, ground } = site();
+    hold(g, 'wood_floor', 4);
+    g.shiftBuildLevel(1);
+    for (const [fx, fz] of [B, C, B2, C2]) g.secondary(fx, fz, true, EAST);
+    climb(g, S);
+    g.time = 0.7;
+    g.updateStatus();
+    expect(g.status).toBe('sheltered');
+    hold(g, 'door');
+    g.secondary(C[0], C[1], true, EAST);
+    expect(g.blocked(C[0] + 0.5, C[1] + 0.5, 0.28, false, 1)).toBe(true);
+    g.interact(C[0], C[1]);
+    expect(g.world.getAt(C[0], C[1], 1).open).toBe(true);
+    expect(g.blocked(C[0] + 0.5, C[1] + 0.5, 0.28, false, 1)).toBe(false);
+    hold(g, 'bed');
+    g.secondary(B2[0] + 1, B2[1] - 1 === C[1] ? B2[1] : B2[1], true, EAST); // on C2's neighbour row
+    const bed = g.player.bed;
+    expect(bed.l).toBe(1);
+    // a roof may not share a tile with the floor above it, and the top storey takes no stairs
+    hold(g, 'tile_roof');
+    expect(g.canPlace(B[0], B[1])).toBe(true);
+    g.secondary(B[0], B[1], true, EAST);
+    hold(g, 'wood_floor');
+    g.shiftBuildLevel(1);
+    expect(g.buildLevel).toBe(2);
+    expect(g.canPlace(B[0], B[1])).toBe(false);
+
+    const again = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(again.world.getFloor(C[0], C[1], 1)).toBe('wood_floor');
+    expect(again.world.getAt(C[0], C[1], 1)).toMatchObject({ t: 'door', open: true });
+    expect(again.world.getRoof(B[0], B[1], 1)).toBe('tile_roof');
+    expect(again.player.bed).toEqual(bed);
+    expect(again.playerLevel).toBe(1);
+
+    // a world saved before upper storeys existed loads as it was; nonsense entries are dropped
+    const old = JSON.parse(JSON.stringify(g.serialize()));
+    delete old.upper;
+    const legacy = new Game(old);
+    expect(legacy.world.upper.size).toBe(0);
+    expect(legacy.world.getFloor(B[0], B[1])).toBe('wood_floor');
+    expect(legacy.world.get(S[0], S[1]).t).toBe('stairs');
+    const odd = JSON.parse(JSON.stringify(g.serialize()));
+    Object.assign(odd.upper, { 'a,b,c': { floor: 'wood_floor' }, '1,2,9': { floor: 'wood_floor' }, '3,4,1': null });
+    expect(new Game(odd).world.upper.size).toBe(g.world.upper.size);
+
+    // fainting wakes you beside the bed, on its own storey when there is floor there
+    g.faint();
+    const wake = [Math.floor(g.player.x), Math.floor(g.player.z)];
+    const floored = !!g.world.getFloor(wake[0], wake[1], 1);
+    expect(g.player.y).toBeCloseTo(g.ground(g.player.x, g.player.z) + (floored ? STOREY : 0));
+    expect(ground).toBe(g.ground(B[0] + 0.5, B[1] + 0.5));
+  });
+
+  it('comes in wood, stone and brick, each with walls, floors, stairs and a roof', () => {
+    for (const [wall, floor, stairs, roof] of [
+      ['wood_wall', 'wood_floor', 'stairs', 'roof'], ['stone_wall', 'stone_floor', 'stone_stairs', 'slate_roof'], ['brick_wall', 'brick_floor', 'brick_stairs', 'tile_roof'],
+    ]) {
+      expect(OBJECTS[wall].block, wall).toBe(true);
+      expect(ITEMS[floor].floor, floor).toBe(true);
+      expect(OBJECTS[stairs].stairs, stairs).toBe(true);
+      expect(ITEMS[roof].roof, roof).toBe(true);
+      for (const id of [wall, floor, stairs, roof]) expect(recipeFor(id), id).toBeTruthy();
+    }
   });
 });
