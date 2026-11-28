@@ -29,7 +29,7 @@ import { ITEMS } from './game/items.js';
 import { buildModels, buildItemModels } from './render/models.js';
 import { loadVoxModels } from './render/voxfile.js';
 import { renderItemIcons } from './render/itemicons.js';
-import { Chunks, toGeometry } from './render/chunks.js';
+import { Chunks, toGeometry, PEEK_STEP } from './render/chunks.js';
 import { Sky } from './render/sky.js';
 import { PlayerModel, Animals, Enemies, Fish, Vehicles, VillagerFigures } from './render/characters.js';
 import { openTrade } from './ui/trade.js';
@@ -716,8 +716,11 @@ function pickTarget() {
   const peek = chunks.peek.value;
   const insidePeek = Math.hypot((mouse.x + 1) * peekSize.x / 2 - peek.x,
     (mouse.y + 1) * peekSize.y / 2 - peek.y) < peek.z * 0.45;
-  const hit = placing && insidePeek ? hits.find(h => h.object.material !== chunks.objectMat ||
-    -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z >= peek.w - 0.7) : hits[0];
+  // what the circle has thinned away cannot be pointed at: the cursor goes through it too
+  const thinned = (h) => (h.object.material === chunks.objectMat || h.object.material === chunks.terrainMat) &&
+    h.point.y > chunks.peekFeet.value + PEEK_STEP &&
+    -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z < peek.w - 0.7;
+  const hit = placing && insidePeek ? hits.find(h => !thinned(h)) : hits[0];
   if (!hit) return null;
   const pt = hit.point;
   let best = null;
@@ -1063,6 +1066,7 @@ function step(dt) {
   const playerDepth = -peekPoint.clone().applyMatrix4(camera.matrixWorldInverse).z;
   peekPoint.project(camera);
   const buffer = renderer.getDrawingBufferSize(peekSize);
+  chunks.peekFeet.value = playerY;
   chunks.peek.value.set((peekPoint.x * 0.5 + 0.5) * buffer.x, (peekPoint.y * 0.5 + 0.5) * buffer.y, (buffer.y * 2.6) / camDist, playerDepth);
 
   tapHold -= dt;

@@ -9,6 +9,8 @@ import { STOREY, TOP_LEVEL } from '../world/worldstate.js';
 
 // Stairs are sculpted rising toward +x. Their saved rotation (0 +x, 1 +z, 2 -x, 3 -z) as quarter turns for the mesh builder.
 export const STAIR_TURN = [0, 3, 2, 1];
+// How far above the player's feet something must rise before the see-through circle thins it.
+export const PEEK_STEP = 0.3;
 // Everything else is sculpted with its front toward +z; the same saved rotation names where the front faces.
 export const FRONT_TURN = [1, 0, 3, 2];
 // Quarter turns for the mesh builder of a placed thing. Things saved before turning existed have no rotation and stay as they were.
@@ -61,6 +63,22 @@ export class Chunks {
     // inside a circle around them, so the character is never lost behind a tree or a wall.
     // peek = (player's screen x, y in pixels, radius in pixels, player's distance from the camera)
     this.peek = { value: new THREE.Vector4(0, 0, 0, 0) };
+    // Height of the player's feet. Only what rises above it can hide them: the floor they stand on,
+    // and the ground and steps below, are never thinned, however far toward the camera they reach.
+    this.peekFeet = { value: 0 };
+    const PEEK_HEAD = `
+      uniform vec4 peek;
+      uniform float peekFeet;
+      // 4x4 ordered (Bayer) dither threshold for this pixel, in 0..1
+      float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+      float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`;
+    const peekCut = (worldY) => `#include <clipping_planes_fragment>
+      if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7 && ${worldY} > peekFeet + ${PEEK_STEP.toFixed(2)}) {
+        float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
+        // nearly clear at the centre, solid again at the rim
+        float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
+        if (keep < peekDither(gl_FragCoord.xy)) discard;
+      }`;
     // Seconds, for everything that moves by itself: wind in the leaves, waves, the glow of lava.
     this.time = { value: 0 };
     // Wind: each corner carries a sway weight (none for trunks, walls and rocks; more the higher up
@@ -82,19 +100,13 @@ export class Chunks {
     this.objectMat.onBeforeCompile = (shader) => {
       windy(shader);
       shader.uniforms.peek = this.peek;
+      shader.uniforms.peekFeet = this.peekFeet;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vPeekY;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvPeekY = (modelMatrix * vec4(transformed, 1.0)).y;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>
-          uniform vec4 peek;
-          // 4x4 ordered (Bayer) dither threshold for this pixel, in 0..1
-          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`)
-        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-          if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7) {
-            float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
-            // nearly clear at the centre, solid again at the rim
-            float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
-            if (keep < peekDither(gl_FragCoord.xy)) discard;
-          }`);
+        .replace('#include <common>', '#include <common>\nvarying float vPeekY;' + PEEK_HEAD)
+        .replace('#include <clipping_planes_fragment>', peekCut('vPeekY'));
     };
     // Where in the world a pixel is, snapped to an eighth of a tile, so every effect below is drawn
     // in little squares that match the voxels. Kept within one 64-tile block so the numbers stay
@@ -117,6 +129,12 @@ export class Chunks {
     // Ground: a fine grain, so grass, sand and rock are not flat sheets of one colour.
     this.terrainMat.onBeforeCompile = (shader) => {
       placed(shader);
+      // a bank or cliff between the camera and the player is thinned like a wall
+      shader.uniforms.peek = this.peek;
+      shader.uniforms.peekFeet = this.peekFeet;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>' + PEEK_HEAD)
+        .replace('#include <clipping_planes_fragment>', peekCut('vPlace.y'));
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         vec3 cell = floor(mod(vPlace, 64.0) * 8.0 + 0.001);
         float grain = grainAt(cell), blotch = grainAt(floor(cell / 4.0));
