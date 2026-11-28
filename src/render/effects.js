@@ -2,6 +2,18 @@ import * as THREE from 'three';
 
 const dummy = new THREE.Object3D();
 
+const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 0x9a9fa6, soil: 0x8f633f, bush: 0x6cc257 };
+
+// Pure presentation choice shared by the renderer and tests.
+export function hitEffect(object = '', destroyed = false) {
+  const family = object.split('_')[0];
+  return {
+    color: HIT_COLORS[family] ?? 0xa8743c,
+    cubes: destroyed ? 16 : 6,
+    sparks: destroyed ? 10 : 4,
+  };
+}
+
 // Little cubes that burst out when something is hit or picked.
 export class Particles {
   constructor(scene, count = 96) {

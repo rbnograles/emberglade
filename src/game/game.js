@@ -915,7 +915,7 @@ export class Game {
       const floor = this.world.getFloor(tx, tz);
       if (floor) {
         this.world.setFloor(tx, tz, null);
-        this.emit('hit', { x: tx, z: tz });
+        this.emit('hit', { x: tx, z: tz, object: floor, destroyed: true });
         this.give(floor, 1);
         return;
       }
@@ -934,18 +934,23 @@ export class Game {
       const species = obj.species ?? 'wheat';
       if (obj.crop >= cropFor(obj).days) {
         this.world.set(tx, tz, { ...obj, crop: -1 });
-        this.emit('hit', { x: tx, z: tz });
+        this.emit('hit', { x: tx, z: tz, object: 'soil', destroyed: false });
         this.give(species, rand(1, 2));
         this.give(cropFor(obj).seed, rand(1, 2));
       } else if (obj.crop >= 0) this.toast('Not ready yet');
-      else if (def?.tool === 'hoe') this.world.remove(tx, tz);
+      else if (def?.tool === 'hoe') {
+        this.world.remove(tx, tz);
+        this.wearTool();
+        this.emit('hit', { x: tx, z: tz, object: 'soil', destroyed: true });
+      }
       return;
     }
 
-    if (od.pick) {
+    // A berry bush is gathered by hand, but an axe clears it as a building obstacle.
+    if (od.pick && !(obj.t === 'bush' && def?.tool === 'axe')) {
       if (od.becomes) this.world.set(tx, tz, { t: od.becomes, since: this.day, regrow: od.regrow });
       else this.world.remove(tx, tz, this.day, od.regrow);
-      this.emit('hit', { x: tx, z: tz });
+      this.emit('hit', { x: tx, z: tz, object: obj.t, destroyed: !od.becomes });
       this.giveDrops(od.drops);
       return;
     }
@@ -970,7 +975,7 @@ export class Game {
     }
     const key = tx + ',' + tz;
     const hp = (this.damage.get(key) ?? od.hp) - power;
-    this.emit('hit', { x: tx, z: tz });
+    this.emit('hit', { x: tx, z: tz, object: obj.t, destroyed: hp <= 0 });
     if (hp > 0) {
       this.damage.set(key, hp);
       return;
@@ -978,7 +983,7 @@ export class Game {
     this.damage.delete(key);
     const bed = this.player.bed;
     if (obj.t === 'bed' && bed && bed.x === tx && bed.z === tz) this.player.bed = null;
-    this.world.remove(tx, tz, this.day, od.regrow);
+    this.world.remove(tx, tz, this.day, obj.regrow ?? od.regrow);
     if (obj.t === 'lostbag') this.player.lost = null;
     if (od.item) this.give(od.item, 1);
     else if (od.drops) this.giveDrops(od.drops);

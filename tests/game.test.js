@@ -183,6 +183,64 @@ describe('game rules', () => {
     expect(g.inv.count('wood')).toBeGreaterThanOrEqual(3);
   });
 
+  it('gathers berries by hand and clears the bare bush with an axe', () => {
+    const g = newGame();
+    const [x, z] = findTile(g, isType('bush'));
+    g.primary(x, z);
+    expect(g.inv.count('berries')).toBeGreaterThanOrEqual(2);
+    expect(g.world.get(x, z).t).toBe('bush_bare');
+
+    g.inv.add('stone_axe', 1);
+    g.selected = g.inv.slots.findIndex((slot) => slot?.id === 'stone_axe');
+    const uses = ITEMS.stone_axe.uses;
+    g.primary(x, z);
+    g.primary(x, z);
+    expect(g.world.get(x, z)).toBe(null);
+    expect(g.held.d).toBe(uses - 2);
+
+    g.startDay();
+    expect(g.world.get(x, z)).toBe(null);
+    g.startDay();
+    expect(g.world.get(x, z).t).toBe('bush');
+  });
+
+  it('chops a berry bush with material-aware hit and destruction events', () => {
+    const g = newGame();
+    const [x, z] = findTile(g, isType('bush'));
+    const hits = [];
+    g.on((type, data) => { if (type === 'hit') hits.push(data); });
+    g.inv.add('stone_axe', 1);
+    g.primary(x, z);
+    g.primary(x, z);
+
+    expect(g.world.get(x, z)).toBe(null);
+    expect(g.inv.count('berries')).toBeGreaterThanOrEqual(2);
+    expect(hits).toEqual([
+      { x, z, object: 'bush', destroyed: false },
+      { x, z, object: 'bush', destroyed: true },
+    ]);
+  });
+
+  it('restores empty soil with a hoe but preserves planted soil', () => {
+    const g = newGame();
+    const [x, z] = findTile(g, emptyLand);
+    const hits = [];
+    g.on((type, data) => { if (type === 'hit') hits.push(data); });
+    g.inv.add('hoe', 1);
+    g.primary(x, z);
+    expect(g.world.get(x, z)).toMatchObject({ t: 'soil', crop: -1 });
+    g.primary(x, z);
+    expect(g.world.get(x, z)).toBe(null);
+    expect(g.held.d).toBe(ITEMS.hoe.uses - 2);
+    expect(hits.at(-1)).toEqual({ x, z, object: 'soil', destroyed: true });
+
+    g.primary(x, z);
+    g.world.set(x, z, { ...g.world.get(x, z), crop: 0 });
+    g.primary(x, z);
+    expect(g.world.get(x, z)).toMatchObject({ t: 'soil', crop: 0 });
+    expect(g.held.d).toBe(ITEMS.hoe.uses - 3);
+  });
+
   it('places and picks up a campfire, and blocks movement through it', () => {
     const g = newGame();
     g.inv.add('campfire', 1);

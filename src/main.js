@@ -27,11 +27,11 @@ import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
 import { PlayerModel, Animals, Enemies, Fish, Vehicles } from './render/characters.js';
 import { VEHICLES } from './game/game.js';
-import { Particles, Sparks, Fires } from './render/effects.js';
+import { Particles, Sparks, Fires, hitEffect } from './render/effects.js';
 import '@fontsource/nunito/latin-500.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
-import { Hud, drawFace } from './ui/hud.js';
+import { Hud, drawFace, objectToolVerb } from './ui/hud.js';
 import { setRenderedIcons, iconURL } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
 
@@ -187,8 +187,9 @@ game.on((type, data) => {
   else if (type === 'charm') sparks.rise(data.x, game.ground(data.x, data.z) + 0.5, data.z, 0xff8ab0, data.born ? 14 : 7, 0.4, 1.6);
   else if (type === 'hit') {
     const y = game.gen.tile(data.x, data.z).h + 0.4;
-    particles.burst(data.x + 0.5, y, data.z + 0.5, hitColor);
-    sparks.burst(data.x + 0.5, y + 0.2, data.z + 0.5, 0xfff6e3, 4, 2.2);
+    const effect = data.object ? hitEffect(data.object, data.destroyed) : { color: hitColor, cubes: 6, sparks: 4 };
+    particles.burst(data.x + 0.5, y, data.z + 0.5, effect.color, effect.cubes);
+    sparks.burst(data.x + 0.5, y + 0.2, data.z + 0.5, data.destroyed ? effect.color : 0xfff6e3, effect.sparks, data.destroyed ? 3.6 : 2.2);
   }
   else if (type === 'swing') {
     playerModel.startSwing();
@@ -498,13 +499,7 @@ const currentTarget = () => (touchMode && tapHold <= 0 ? autoTarget() : pickTarg
 function toolVerb() {
   if (pickFoe()) return 'Attack';
   const obj = target?.reach ? game.world.get(target.x, target.z) : null;
-  if (!obj) return ITEMS[game.held?.id]?.tool === 'hoe' ? 'Till' : 'Tool';
-  const od = OBJECTS[obj.t];
-  if (obj.t === 'soil') return obj.crop >= cropFor(obj).days ? 'Harvest' : 'Tool';
-  if (od.pick) return 'Pick up';
-  if (od.tool === 'axe') return 'Chop';
-  if (od.tool === 'pickaxe') return 'Mine';
-  return obj.placed ? 'Take' : 'Tool';
+  return objectToolVerb(ITEMS[game.held?.id]?.tool, obj);
 }
 
 function toggleFullscreen() {
@@ -591,8 +586,7 @@ function targetLabel() {
   return `${crop.name} sprout ${obj.crop}/${crop.days} (${obj.wet ? 'watered' : 'needs water'})`;
 }
 
-const HIT_COLORS = { tree: 0x8a5a34, rock: 0x9a9fa6, boulder: 0x9a9fa6, pebble: 0x9a9fa6, soil: 0xe9c545, stick: 0x8a5a34 };
-const colorFor = (t) => HIT_COLORS[t.split('_')[0]] ?? (OBJECTS[t].item ? 0xa8743c : 0x6cc257);
+const colorFor = (t) => hitEffect(t, false).color;
 
 // ---------- placement preview ----------
 // A see-through copy of the held buildable on the targeted tile: white where it can go, red where it cannot.

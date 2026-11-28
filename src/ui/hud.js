@@ -3,9 +3,24 @@ import { GOALS } from '../game/goals.js';
 import { xpToNext, MAX_LEVEL } from '../game/progress.js';
 import { BIOMES } from '../world/biomes.js';
 import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
+import { OBJECTS } from '../world/objects.js';
+import { cropFor } from '../world/crops.js';
 import { iconURL } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
+
+export function objectToolVerb(tool, obj) {
+  if (!obj) return tool === 'hoe' ? 'Till' : 'Tool';
+  if (obj.t === 'soil') {
+    if (obj.crop >= cropFor(obj).days) return 'Harvest';
+    return obj.crop < 0 && tool === 'hoe' ? 'Restore ground' : 'Tool';
+  }
+  const def = OBJECTS[obj.t];
+  if (def.pick && !(obj.t === 'bush' && tool === 'axe')) return obj.t === 'bush' ? 'Gather berries' : 'Pick up';
+  if (def.tool === 'axe') return 'Chop';
+  if (def.tool === 'pickaxe') return 'Mine';
+  return obj.placed ? 'Take' : 'Tool';
+}
 
 // Tooltip text: the item's name and what it does.
 export function describe(slot) {
