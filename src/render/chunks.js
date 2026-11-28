@@ -2,7 +2,8 @@ import { roofItem, roofTurn } from '../world/castle-roofs.js';
 import * as THREE from 'three';
 import { hash2 } from '../core/noise.js';
 import { buildTerrain, CHUNK } from './terrain.js';
-import { mergeModels } from './voxel.js';
+import { mergeModels, rgb } from './voxel.js';
+import { ROCK_COLORS } from '../world/biomes.js';
 import { OBJECTS } from '../world/objects.js';
 import { STOREY, TOP_LEVEL } from '../world/worldstate.js';
 
@@ -52,6 +53,12 @@ export class Chunks {
     // inside a circle around them, so the character is never lost behind a tree or a wall.
     // peek = (player's screen x, y in pixels, radius in pixels, player's distance from the camera)
     this.peek = { value: new THREE.Vector4(0, 0, 0, 0) };
+    // The same thinning for the ground itself: rock higher than the player's head (world height
+    // peekY) that stands between them and the camera, so they are never lost under an arch, in a
+    // cave or behind a stack. The ground underfoot is never above their head, so it stays whole.
+    this.peekY = { value: 1e9 };
+    // the layers of the cliffs: four colours each for limestone, earth and sandstone, in that order
+    this.rockTints = { value: [ROCK_COLORS.stacks, ROCK_COLORS.table, ROCK_COLORS.canyon].flat().map((hex) => new THREE.Color(...rgb(hex))) };
     // Seconds, for everything that moves by itself: wind in the leaves, waves, the glow of lava.
     this.time = { value: 0 };
     // Wind: each corner carries a sway weight (none for trunks, walls and rocks; more the higher up
@@ -105,13 +112,39 @@ export class Chunks {
       shader.fragmentShader = shader.fragmentShader.replace('#include <common>', PLACE.fragmentHead);
     };
 
-    // Ground: a fine grain, so grass, sand and rock are not flat sheets of one colour.
+    // Ground: a fine grain, so grass, sand and rock are not flat sheets of one colour; cliffs of
+    // the rugged country in layers of rock; and rock thinned away where it would hide the player.
     this.terrainMat.onBeforeCompile = (shader) => {
-      placed(shader);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        vec3 cell = floor(mod(vPlace, 64.0) * 8.0 + 0.001);
-        float grain = grainAt(cell), blotch = grainAt(floor(cell / 4.0));
-        diffuseColor.rgb *= 0.95 + 0.07 * grain + 0.035 * blotch;`);
+      placed(shader, '\nvRock = rock;');
+      shader.uniforms.peek = this.peek;
+      shader.uniforms.peekY = this.peekY;
+      shader.uniforms.rockTints = this.rockTints;
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float rock;\nvarying float vRock;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+          varying float vRock;
+          uniform vec4 peek;
+          uniform float peekY;
+          uniform vec3 rockTints[12];
+          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`)
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+          if (peek.z > 0.0 && vPlace.y > peekY && vViewPosition.z < peek.w - 0.7) {
+            float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
+            float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
+            if (keep < peekDither(gl_FragCoord.xy)) discard;
+          }`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          if (vRock > 0.5) {
+            // layers a tile and a half deep, lying a little higher or lower from one place to the next
+            float shift = floor(grainAt(vec3(floor(vPlace.x / 6.0), 3.0, floor(vPlace.z / 6.0))) * 3.0) * 0.5;
+            float layer = floor((vPlace.y + shift) / 1.5);
+            int tint = (int(vRock + 0.5) - 1) * 4 + int(grainAt(vec3(layer, 5.0, 1.0)) * 3.999);
+            diffuseColor.rgb *= rockTints[tint];
+          }
+          vec3 cell = floor(mod(vPlace, 64.0) * 8.0 + 0.001);
+          float grain = grainAt(cell), blotch = grainAt(floor(cell / 4.0));
+          diffuseColor.rgb *= 0.95 + 0.07 * grain + 0.035 * blotch;`);
     };
 
     // Lava: slow bright veins crawling through it, and a pulse like breathing.

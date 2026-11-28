@@ -716,8 +716,12 @@ function pickTarget() {
   const peek = chunks.peek.value;
   const insidePeek = Math.hypot((mouse.x + 1) * peekSize.x / 2 - peek.x,
     (mouse.y + 1) * peekSize.y / 2 - peek.y) < peek.z * 0.45;
-  const hit = placing && insidePeek ? hits.find(h => h.object.material !== chunks.objectMat ||
-    -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z >= peek.w - 0.7) : hits[0];
+  // rock thinned away around the character cannot be pointed at: the cursor goes through it
+  const thinned = h => h.object.material === chunks.terrainMat && insidePeek && h.point.y > chunks.peekY.value
+    && -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z < peek.w - 0.7;
+  const seen = hits.filter(h => !thinned(h));
+  const hit = placing && insidePeek ? seen.find(h => h.object.material !== chunks.objectMat ||
+    -peekPoint.copy(h.point).applyMatrix4(camera.matrixWorldInverse).z >= peek.w - 0.7) : seen[0];
   if (!hit) return null;
   const pt = hit.point;
   let best = null;
@@ -1064,6 +1068,7 @@ function step(dt) {
   peekPoint.project(camera);
   const buffer = renderer.getDrawingBufferSize(peekSize);
   chunks.peek.value.set((peekPoint.x * 0.5 + 0.5) * buffer.x, (peekPoint.y * 0.5 + 0.5) * buffer.y, (buffer.y * 2.6) / camDist, playerDepth);
+  chunks.peekY.value = playerY + 1.7; // just over the character's head
 
   tapHold -= dt;
   target = panels.open ? null : currentTarget();
