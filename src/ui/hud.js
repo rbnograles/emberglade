@@ -7,6 +7,7 @@ import { OBJECTS } from '../world/objects.js';
 import { cropFor } from '../world/crops.js';
 import { iconURL } from './icons.js';
 import { ENHANCEMENTS } from '../game/enhance.js';
+import { touchDrag } from './dragswap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -158,6 +159,13 @@ export class Hud {
         if (this.dragFrom === null || this.dragFrom === i) return;
         game.inv.swap(this.dragFrom, i);
         game.selected = i;
+        game.emit('inv');
+      });
+      touchDrag(el, (target) => {
+        const j = this.slots.indexOf(target);
+        if (j < 0) return;
+        game.inv.swap(i, j);
+        game.selected = j;
         game.emit('inv');
       });
       $('hotbar').append(el);

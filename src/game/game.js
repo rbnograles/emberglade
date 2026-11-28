@@ -1750,6 +1750,6 @@ export class Game {
     this.toast(dropped
       ? `You fainted and woke at ${wake}. Your pack is where you fell (red dot on the map)`
       : `You fainted and woke at ${wake} the next morning`);
-    this.emit('faint');
+    this.emit('faint', { wake, dropped });
   }
 }

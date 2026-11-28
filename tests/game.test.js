@@ -155,7 +155,16 @@ describe('goals and survival', () => {
     expect(p.health).toBeGreaterThan(5);
     expect(eat(p, 5)).toBe(true);
     p.hunger = 0;
-    expect(tickSurvival(p, 1000)).toBe(true);
+    // starving wears you down to one heart and stops there: it never knocks you out
+    expect(tickSurvival(p, 1000)).toBe(false);
+    expect(p.health).toBe(1);
+    p.thirst = 0;
+    expect(tickSurvival(p, 1000)).toBe(false);
+    expect(p.health).toBe(1);
+    // someone already hurt below that is not healed by it either
+    p.health = 0.4;
+    tickSurvival(p, 10);
+    expect(p.health).toBeCloseTo(0.4);
   });
 });
 
@@ -1131,10 +1140,20 @@ describe('game rules', () => {
     g.time = 0.7;
     expect(g.sleep()).toBe(true);
     expect(g.day).toBe(2);
+    // an empty stomach does not knock you out, however weak you are; real harm does
+    const there = { x: (g.player.x = 6.5), z: g.player.z };
     g.player.hunger = 0;
     g.player.health = 0.01;
     g.tick(1);
+    expect(g.day).toBe(2);
+    expect(g.player.x).toBe(there.x);
+    // nor does the day rolling over move you
+    g.time = 0.9999;
+    g.tick(1);
     expect(g.day).toBe(3);
+    expect([g.player.x, g.player.z]).toEqual([there.x, there.z]);
+    g.hurt(99);
+    expect(g.day).toBe(4);
     expect(g.player.health).toBe(6);
     const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
     expect(copy.serialize()).toEqual(g.serialize());

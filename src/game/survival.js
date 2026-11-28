@@ -11,6 +11,7 @@ export const MAX_STAMINA = 10;
 
 const HUNGER_SECONDS = 52; // seconds per food point at rest
 const THIRST_SECONDS = 44; // seconds per water point at rest
+export const WEAK_HEALTH = 1; // hunger and thirst never take health below this
 const STARVE_SECONDS = 8; // seconds per heart lost while starving or parched
 const REGEN_SECONDS = 6; // seconds per heart regained while well fed and watered
 const SPRINT_SECONDS = 6.5; // seconds of sprinting on full stamina
@@ -25,8 +26,11 @@ export function tickSurvival(p, dt, sprinting = false, hungerRate = 1, drain = 1
   const effort = (sprinting ? 2 : 1) * drain;
   p.hunger = Math.max(0, p.hunger - (dt * effort * hungerRate) / HUNGER_SECONDS);
   p.thirst = Math.max(0, p.thirst - (dt * effort) / THIRST_SECONDS);
-  if (p.hunger <= 0) p.health = Math.max(0, p.health - dt / STARVE_SECONDS);
-  if (p.thirst <= 0) p.health = Math.max(0, p.health - dt / STARVE_SECONDS);
+  // Going without food or water wears health down to a single heart and no further. It leaves you
+  // weak, not unconscious: only real harm (a creature, a fall, fire, drowning, the cold) can do that.
+  const least = Math.min(p.health, WEAK_HEALTH);
+  if (p.hunger <= 0) p.health = Math.max(least, p.health - dt / STARVE_SECONDS);
+  if (p.thirst <= 0) p.health = Math.max(least, p.health - dt / STARVE_SECONDS);
   if (p.hunger >= 7 && p.thirst >= 3) p.health = Math.min(mods.maxHealth ?? MAX_HEALTH, p.health + (dt * (mods.regen ?? 1)) / REGEN_SECONDS);
   return p.health <= 0;
 }

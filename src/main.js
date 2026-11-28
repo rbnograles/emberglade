@@ -275,6 +275,14 @@ game.on((type, data) => {
     game.toast(RESTORATION);
     bigmap.show();
   }
+  if (type === 'faint') {
+    // fainting moves you, so it is spelled out in a notice that has to be dismissed
+    setTimeout(() => ask({
+      title: 'You fainted',
+      text: `You were hurt too badly to go on, and woke the next morning at ${data.wake}.` + (data.dropped ? ' Your pack is where you fell: the red dot on the map.' : '') + ' Hunger and thirst alone never do this.',
+      yes: 'Get up',
+    }), 900);
+  }
   if (type === 'faint') logEvent('fainted', { day: game.day, level: game.progress.level }, currentSlot());
   if (type === 'inv' || type === 'goal' || type === 'newday' || type === 'faint') {
     hud.refresh();
@@ -318,6 +326,11 @@ $('gear').addEventListener('mousedown', (e) => {
   sfx('ui');
 });
   },
+});
+$('btn-pack').addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  if (!paused) panels.toggle();
+  sfx('ui');
 });
 $('btn-full').addEventListener('mousedown', (e) => {
   e.stopPropagation();
@@ -406,6 +419,8 @@ const canvas = renderer.domElement;
 // Right or middle button held and dragged turns the camera; a right click without dragging is the item action.
 let drag = null; // {button, x, y, moved}
 addEventListener('mousemove', (e) => {
+  // a finger on a button also sends a pretend mouse move; it must not drag the aim under that button
+  if (touchMode) return;
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;

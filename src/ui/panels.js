@@ -5,6 +5,7 @@ import { HOTBAR } from '../game/game.js';
 import { renderSlot } from './hud.js';
 import { iconURL } from './icons.js';
 import { ENHANCEMENTS, fits } from '../game/enhance.js';
+import { touchDrag } from './dragswap.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -52,6 +53,7 @@ export class Panels {
     };
     addEventListener('mousemove', follow);
     addEventListener('mousedown', follow, true);
+    addEventListener('resize', () => this.fit());
   }
 
   get open() { return !this.root.classList.contains('hidden'); }
@@ -102,6 +104,15 @@ export class Panels {
           return;
         }
         game.clickSlot(inv, i, e.button === 2 ? 2 : 0, e.shiftKey, other);
+      });
+      // on touch, drag a stack onto another slot to move it there or swap the two
+      slot.slotRef = { inv, i };
+      touchDrag(slot, (target) => {
+        const to = target.slotRef;
+        if (!to || game.cursor) return;
+        game.clickSlot(inv, i, 0, false, other); // pick the stack up
+        game.clickSlot(to.inv, to.i, 0, false, other); // put it down there
+        if (game.cursor) game.clickSlot(inv, i, 0, false, other); // what it displaced goes where it came from
       });
       grid.append(slot);
     }
@@ -191,7 +202,10 @@ export class Panels {
       const on = stations.has(station);
       badges.append(el('span', 'badge' + (on ? ' on' : ''), on ? `✓ At ${station}` : `No ${station}`));
     }
-    head.append(badges);
+    const close = el('button', 'close', '✕');
+    close.title = 'Close (Tab or Esc)';
+    close.addEventListener('click', () => this.hide());
+    head.append(badges, close);
     card.append(head);
 
     const tabs = el('div', 'tabs');
@@ -266,5 +280,20 @@ export class Panels {
     const [crafting, list] = this.renderCrafting();
     this.root.replaceChildren(this.renderInventory(), crafting);
     list.scrollTop = scroll;
+    this.fit();
+  }
+
+  // On a window too narrow for both cards side by side, shrink the pair to fit instead of letting
+  // one slide over the other. Phones have their own layout and are left alone.
+  fit() {
+    const r = this.root;
+    r.style.transform = '';
+    r.style.setProperty('--fit', 1);
+    if (!this.open || matchMedia('(pointer: coarse)').matches) return;
+    const wide = [...r.children].reduce((sum, c) => sum + c.offsetWidth, 0) + 22 * (r.children.length - 1);
+    const k = Math.min(1, (innerWidth - 28) / wide);
+    // scaled about its middle, so it stays centred on the screen
+    r.style.setProperty('--fit', k.toFixed(3));
+    if (k < 1) r.style.transform = `translate(-50%, -50%) scale(${k.toFixed(3)})`;
   }
 }

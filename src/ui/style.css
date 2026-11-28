@@ -829,3 +829,31 @@ canvas#game { touch-action: none; }
 .relocation.trade button:disabled { opacity: 0.45; cursor: default; }
 .relocation.trade .row-buttons { display: flex; justify-content: flex-end; margin-top: 12px; }
 @media (max-width: 560px) { .relocation.trade .lists { grid-template-columns: 1fr; } }
+
+/* ---------- backpack button by the hotbar, the panel's close button, dragged slots ---------- */
+#btn-pack { pointer-events: auto; flex: none; display: grid; place-items: center; width: 54px; height: 54px; padding: 0; color: var(--accent); background: var(--panel); border: 2px solid rgba(242, 201, 76, 0.55); border-radius: 12px; cursor: pointer; }
+#btn-pack:hover { background: rgba(242, 201, 76, 0.18); }
+#btn-pack svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#hotbar-row { flex-wrap: nowrap; }
+#panel .card { flex: none; }
+#panel header .close { margin-left: 8px; width: 34px; height: 34px; padding: 0; font: inherit; font-size: 16px; font-weight: 800; color: var(--cream); background: rgba(255, 246, 227, 0.1); border: 2px solid rgba(255, 246, 227, 0.2); border-radius: 9px; cursor: pointer; }
+#panel header .close:hover { color: #fff; background: #b8323f; border-color: #d9505b; }
+.slot.dragging { opacity: 0.35; }
+.drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -60%) scale(1.15); pointer-events: none; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3); border-color: var(--accent); }
+@media (pointer: coarse) {
+  #btn-pack { width: clamp(34px, 5.6vw, 46px); height: clamp(34px, 5.6vw, 46px); border-radius: 9px; }
+  #btn-pack svg { width: 62%; height: 62%; }
+  #hotbar-row { gap: 4px; max-width: 450px; }
+  .touch-close { display: none !important; } /* the panel has its own close button now */
+  #panel .card { flex: 1 1 0; }
+  /* the gaps between the round buttons, and the ring around the stick, swallow taps: a finger that
+     just misses a button must not place or strike in the world behind it */
+  .touch-pad { pointer-events: auto; touch-action: none; }
+  #walk-stick { box-shadow: 0 0 0 14px transparent; }
+  .touch-bar { pointer-events: none; }
+  .touch-bar button { pointer-events: auto; }
+}
+/* with a mouse the two cards always sit side by side; panels.js shrinks the pair to fit a narrow window */
+@media (pointer: fine) { #panel { flex-direction: row !important; align-items: flex-start !important; overflow: visible !important; max-width: none !important; padding: 0 !important; } }
+@media (pointer: fine) { #panel { width: max-content; max-height: none !important; } } /* as wide as its two cards, so centring and scaling work from the true size */
+@media (pointer: fine) { #panel .card { max-height: calc(88vh / var(--fit, 1)) !important; } } /* a shrunken panel may be taller in its own units, and still fits the window */
