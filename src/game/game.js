@@ -318,6 +318,11 @@ export class Game {
     return true;
   }
 
+  // The summits of stacks, islands and plateaus are not places one steps onto from the water: is
+  // this a tile of the rugged country whose ground is more than a bank above height `y`? Ground
+  // anywhere else can be stepped onto at any height, as it always could.
+  aboveBank(t, y) { return !!t.land && t.h > y + BANK_LIP; }
+
   // Step out: onto land beside the vehicle if there is any, otherwise into the water where it floats.
   dismount() {
     const v = this.vehicle, p = this.player;
@@ -328,8 +333,8 @@ export class Game {
     let best = null, bestD = 3;
     for (let z = pz - 3; z <= pz + 3; z++) {
       for (let x = px - 3; x <= px + 3; x++) {
-        const d = Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z);
-        if (d < bestD && !this.gen.tile(x, z).water && !this.blocked(x + 0.5, z + 0.5)) {
+        const d = Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z), t = this.gen.tile(x, z);
+        if (d < bestD && !t.water && !this.aboveBank(t, v.y) && !this.blocked(x + 0.5, z + 0.5)) {
           best = [x, z];
           bestD = d;
         }
@@ -1958,7 +1963,8 @@ export class Game {
     for (let r = 0; r <= 3; r++) {
       for (let z = pz - r; z <= pz + r; z++) {
         for (let x = px - r; x <= px + r; x++) {
-          if (this.world.get(x, z) || this.gen.tile(x, z).water) continue;
+          const t = this.gen.tile(x, z);
+          if (this.world.get(x, z) || t.water || this.aboveBank(t, p.y)) continue;
           const items = Array(27).fill(null);
           carried.forEach((s, i) => (items[i] = s));
           for (let i = HOTBAR; i < this.inv.slots.length; i++) this.inv.slots[i] = null;

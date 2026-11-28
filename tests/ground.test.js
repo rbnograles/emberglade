@@ -4,7 +4,7 @@ import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
 import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS, placeName, roofColour } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
-import { Game, needsRelocation } from '../src/game/game.js';
+import { Game, needsRelocation, VEHICLES, HOTBAR } from '../src/game/game.js';
 import { STOREY } from '../src/world/worldstate.js';
 import { Encounters, suitsSite } from '../src/game/encounters.js';
 import { KEEPER_BY_ID } from '../src/game/keepers.js';
@@ -559,6 +559,64 @@ describe('walking over and under rock', () => {
     // ordinary ground is underfoot as it always was
     stand(g, 3, 0, 1.5);
     expect(g.underfoot).toBe(g.ground(3.5, 0.5));
+  });
+});
+
+// A game on hand-made sea: deep water all round the middle, with `tiles` laid in it.
+const SEA_TILE = { h: WATER_Y, water: true, salt: true, bed: -4, biome: 'ocean' };
+function seaWorld(tiles) {
+  const all = {};
+  for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++) all[x + ',' + z] = SEA_TILE;
+  return rockWorld({ ...all, ...tiles });
+}
+
+describe('leaving the water beside the rugged country', () => {
+  const SUMMIT = { h: 20, land: 'stacks' }, BEACH = { h: 0, land: 'stacks', shore: true };
+  // step out of a boat floating on tile (0, 0); -> the tile the player ends on, and their height
+  const stepOut = (g) => {
+    g.vehicles.push({ id: 1, kind: 'boat', x: 0.5, z: 0.5, y: WATER_Y + VEHICLES.boat.float, dir: 0 });
+    Object.assign(g.player, { x: 0.5, z: 0.5, y: WATER_Y + VEHICLES.boat.float + VEHICLES.boat.seat, vy: 0, riding: 1 });
+    expect(g.dismount()).toBe(true);
+    expect(g.player.riding).toBe(null);
+    return [Math.floor(g.player.x), Math.floor(g.player.z), g.player.y];
+  };
+  // a swimmer on tile (0, 0) faints with something in their pack; -> where the pack was left, or null
+  const faintAt = (g) => {
+    stand(g, 0, 0, SWIM);
+    g.inv.slots[HOTBAR + 3] = { id: 'stick', n: 5 };
+    const dropped = g.dropPack();
+    expect(dropped).toBe(!!g.player.lost);
+    return dropped ? [g.player.lost.x, g.player.lost.z, g.world.get(g.player.lost.x, g.player.lost.z).t] : null;
+  };
+
+  it('steps out of a boat onto the beach, not onto a summit that is nearer', () => {
+    expect(stepOut(seaWorld({ '1,0': SUMMIT, '2,0': BEACH }))).toEqual([2, 0, 0]);
+    // and onto a low bank at the foot of a plateau
+    expect(stepOut(seaWorld({ '1,0': { h: 18, land: 'table' }, '0,2': { h: 0.5, land: 'table' } }))).toEqual([0, 2, 0.5]);
+  });
+
+  it('with only a summit in reach, steps out into the water as it does with no land near', () => {
+    expect(stepOut(seaWorld({ '1,0': SUMMIT }))).toEqual([0, 0, WATER_Y - 0.95]);
+    expect(stepOut(seaWorld({}))).toEqual([0, 0, WATER_Y - 0.95]);
+  });
+
+  it('steps out onto a high bank of ordinary ground, as it always has', () => {
+    expect(stepOut(seaWorld({ '1,0': { h: 2.5 }, '2,0': { h: 0 } }))).toEqual([1, 0, 2.5]);
+  });
+
+  it('leaves a fainting swimmer\'s pack on the beach, not on a summit beside them', () => {
+    expect(faintAt(seaWorld({ '1,0': SUMMIT, '2,0': BEACH }))).toEqual([2, 0, 'lostbag']);
+  });
+
+  it('with only a summit in reach, keeps the pack as it does with no land near', () => {
+    const g = seaWorld({ '1,0': SUMMIT });
+    expect(faintAt(g)).toBe(null);
+    expect(g.inv.slots[HOTBAR + 3]).toEqual({ id: 'stick', n: 5 });
+    expect(faintAt(seaWorld({}))).toBe(null);
+  });
+
+  it('leaves the pack on a high bank of ordinary ground, as it always has', () => {
+    expect(faintAt(seaWorld({ '1,0': { h: 2.5 }, '2,0': { h: 0 } }))).toEqual([1, 0, 'lostbag']);
   });
 });
 
