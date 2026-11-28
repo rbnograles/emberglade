@@ -72,3 +72,8 @@ export const ROCK_COLORS = {
   table: [0x8a6a4a, 0x7a5c40, 0x9a7854, 0x6b5038], // brown earth
   canyon: [0xd08f58, 0xb9743f, 0xe0a56a, 0xa5633a], // sandstone
 };
+
+// What to call the place a tile is in: its rugged country if it is in one, else its biome.
+export const placeName = (t) => LAND_NAMES[t.land] ?? BIOMES[t.biome].name;
+// The colour of a tile on a map when rock covers it (an arch, an overhang, a cave roof), else null.
+export const roofColour = (t) => (t.slabs ? ROCK_COLORS[t.land][0] : null);

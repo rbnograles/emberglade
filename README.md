@@ -11,6 +11,7 @@ Gather, craft, farm and build by day. When night falls it gets cold and gloomlin
 ## Features
 
 - **Infinite seeded world** of whole continents and open oceans thousands of tiles across, with deep trenches and broad inland mountain ranges that climb to snowy peaks, one Frozen Wastes region and one Volcanic Lands region per world, and five lowland biomes (Green Meadow, Autumn Woods, Blossom Grove, Pine Forest, Sandy Flats). Everything is generated as you walk and nature regrows over time.
+- **Rugged country:** three kinds of land rise out of the gentle lowlands, and their rock is truly three-dimensional: it overhangs, arches over and hollows into caves you can walk through. The Stack Coast has sheer limestone islands and sea stacks joined by arches a boat can pass under. The Tablelands are flat-topped plateaus in tiers, with forest on top. The Canyon Lands are sandstone mesas cut by winding canyons, with rock pillars and natural bridges. Every island, plateau and mesa has a trail to its top.
 - **Water:** wade through ponds and shallows and swim in deep water, which drains your energy. Dive under the surface on a limited breath of air. Sea water is too salty to drink.
 - **The sea floor:** kelp, clams with the odd pearl, coral, and iron ore in the deep. Fish to catch, and snappers that hunt swimmers. A diving mask doubles your air.
 - **Vehicles:** a boat to cross open water without tiring, and a submarine that dives, holds its depth, carries its own air and lamp, and keeps sea creatures off you.
@@ -103,7 +104,7 @@ Each browser then signs in as an anonymous guest and can only reach its own rows
 ## Project layout
 
 - `src/core` – noise functions
-- `src/world` – world generation, biomes, object definitions and the layer of player changes
+- `src/world` – world generation, landforms, biomes, object definitions and the layer of player changes
 - `src/game` – items, inventory, crafting, goals, survival and all game rules (no rendering, unit tested)
 - `src/render` – voxel model builder, models, chunk meshes, sky, characters and effects
 - `src/ui` – HUD, inventory and crafting panels, icons

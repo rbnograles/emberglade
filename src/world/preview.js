@@ -1,5 +1,5 @@
 import { Worldgen } from './worldgen.js';
-import { BIOMES, SHORE, ICE_COLORS, LAVA_COLORS } from './biomes.js';
+import { BIOMES, SHORE, ICE_COLORS, LAVA_COLORS, roofColour } from './biomes.js';
 
 const SPAN = 9000; // tiles across: enough to take in whole continents and both harsh regions
 
@@ -10,6 +10,7 @@ const mix = (a, b, k) => {
 
 // The colour of one spot on a small map of the world.
 function colour(t) {
+  if (t.slabs) return roofColour(t); // seen from above, an arch or an overhang is rock
   if (t.salt) {
     const depth = Math.min(1, (-0.3 - t.bed) / 12);
     const sea = mix(0x6fc0e8, 0x2c5a96, depth);

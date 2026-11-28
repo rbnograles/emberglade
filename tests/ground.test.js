@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { HEADROOM, PLAYER_HEIGHT, floorOf, surfaces, slabTopBelow, ceilingAbove, solidAt, solids } from '../src/world/columns.js';
 import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
 import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
-import { BIOMES, LAND_NAMES, ROCK_COLORS } from '../src/world/biomes.js';
+import { BIOMES, LAND_NAMES, ROCK_COLORS, placeName, roofColour } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
 import { Game, needsRelocation } from '../src/game/game.js';
 import { buildTerrain, gaps, CHUNK } from '../src/render/terrain.js';
@@ -590,5 +590,21 @@ describe('drawing the ground', () => {
     const e = lip(earth);
     expect(e[0]).toBeGreaterThan(r + 0.05); // the ordinary bank is lighter and warmer, not grey
     expect(e[0]).toBeGreaterThan(e[2] + 0.1);
+  });
+});
+
+describe('naming and mapping the rugged country', () => {
+  it('names a place by its country, or by its biome anywhere else', () => {
+    expect(placeName({ biome: 'meadow', land: 'table' })).toBe('Tablelands');
+    expect(placeName({ biome: 'ocean', land: 'stacks' })).toBe('Stack Coast');
+    expect(placeName({ biome: 'canyon', land: 'canyon' })).toBe('Canyon Lands');
+    expect(placeName({ biome: 'pine' })).toBe(BIOMES.pine.name);
+  });
+
+  it('maps a tile under rock as rock, whatever lies beneath', () => {
+    expect(roofColour({ biome: 'ocean', water: true, land: 'stacks', slabs: [[2, 9]] })).toBe(ROCK_COLORS.stacks[0]);
+    expect(roofColour({ biome: 'canyon', land: 'canyon', slabs: [[4, 20]] })).toBe(ROCK_COLORS.canyon[0]);
+    expect(roofColour({ biome: 'meadow', land: 'table' })).toBe(null);
+    expect(roofColour({ biome: 'meadow' })).toBe(null);
   });
 });

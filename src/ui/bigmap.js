@@ -1,4 +1,4 @@
-import { BIOMES, SHORE, WATER_COLORS } from '../world/biomes.js';
+import { BIOMES, SHORE, WATER_COLORS, roofColour } from '../world/biomes.js';
 import { KEEPER_BY_ID } from '../game/keepers.js';
 
 const CELLS = 300; // map cells across
@@ -66,6 +66,7 @@ export class BigMap {
   }
 
   colour(t) {
+    if (t.slabs) return roofColour(t); // seen from above, an arch or an overhang is rock
     if (t.boiling) return t.bed < -5 ? 0x8a3524 : 0xb0502e; // the boiling sea
     if (t.salt) return t.bed < -12 ? 0x24558f : t.bed < -7 ? 0x2f6aa8 : t.bed < -3 ? 0x3d7fbd : t.bed < -1.2 ? 0x4f9fd6 : 0x74bfe8;
     if (t.lava) return 0xff7a1a;
