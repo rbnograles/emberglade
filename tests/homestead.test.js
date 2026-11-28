@@ -875,7 +875,7 @@ describe('castle starts, guards and digging', () => {
       if (!castle) continue;
       atCastle++;
       expect({ x, z }).toEqual(castle.foot);
-      expect(g.gen.tile(x, z).h).toBe(castle.h - 15 - castle.court.innerFlights * STOREY);
+      expect(g.gen.tile(x, z).h).toBe(castle.h - 15 - castle.court.innerFlights * STOREY / 2);
     }
     expect(atCastle).toBeGreaterThan(0);
   });
@@ -969,7 +969,7 @@ describe('a castle worth the name', () => {
     expect(new Game(JSON.parse(JSON.stringify(loaded.serialize()))).player.y).toBe(loaded.player.y);
   });
 
-  it('walks from the foot of the cliff up all ten stone flights and through the outer gate', () => {
+  it('walks from the foot of the cliff up the twenty broad steps and through the outer gate', () => {
     const g = newGame();
     const c = g.gen.settlementsNear(0, 0, 3000).find(s => s.kind === 'castle');
     const cx = c.x + c.court.dx, cz = c.z + c.court.dz;
@@ -977,7 +977,7 @@ describe('a castle worth the name', () => {
     expect(g.world.get(cx + 45, cz - 20)?.placed).toBe(true);
     standAt(g, c.foot.x, c.foot.z);
     const low = g.player.y;
-    for (let i = 0; i < 220; i++) {
+    for (let i = 0; i < 420; i++) {
       g.move(-0.05, 0);
       g.physics(0.016, false);
     }
@@ -988,7 +988,7 @@ describe('a castle worth the name', () => {
       g.physics(0.016, false);
     }
     expect(g.player.z).toBeLessThan(cz + 45);
-    expect(g.player.y).toBe(c.h - c.court.innerFlights * STOREY);
+    expect(g.player.y).toBe(c.h - c.court.innerFlights * STOREY / 2);
     standAt(g, c.x, c.z + 15 + c.court.innerFlights);
     for (let i = 0; i < (1 + c.court.innerFlights) * 20; i++) {
       g.move(0, -0.05);

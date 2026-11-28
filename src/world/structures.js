@@ -308,8 +308,9 @@ function castle(rand, court) {
   return plan.cells;
 }
 
-const WALL = 45, CLIFF_EDGE = 50, FLIGHTS = 10;
-const FLIGHT_HEIGHT = 1.5;
+// The approach climbs in broad, easy steps: half a storey to the tile, twenty tiles up the cliff.
+const WALL = 45, CLIFF_EDGE = 50, FLIGHTS = 20;
+const FLIGHT_HEIGHT = 0.75;
 
 // The old keep stays at its seed coordinates. Offset the larger bailey just
 // enough to keep its cliff, steps and buildings inside their generation cell.
@@ -361,7 +362,7 @@ function outerWard(plan, court, wall) {
   }
   // A broad stone stair runs sideways along the cliff face to the gate.
   for (let dx = 1; dx <= FLIGHTS; dx++) for (let dz = 2; dz <= 4; dz++)
-    plan.obj(cx + dx, gateZ + dz, placed('stone_stairs', { rotation: 2 }));
+    plan.obj(cx + dx, gateZ + dz, placed('stone_steps', { rotation: 2 }));
 
   // A paved street skirts the old citadel and joins its southern gate.
   const streetZ = Math.min(22, gateZ - 2);
@@ -370,7 +371,7 @@ function outerWard(plan, court, wall) {
   for (let z = 14; z <= streetZ; z++) floor(0, z);
 
   for (let i = 1; i <= court.innerFlights; i++) for (let x = -1; x <= 1; x++)
-    plan.obj(x, 14 + i, placed('stone_stairs', { rotation: 3 }));
+    plan.obj(x, 14 + i, placed('stone_steps', { rotation: 3 }));
 
   // Workshops, granaries, dormitories and kitchen gardens fill the new wards.
   // Reserve the original citadel and the approach before laying out a plot.
@@ -426,7 +427,7 @@ export function castleGround(st, x, z, naturalHeight) {
     if (distance <= 0) return st.h;
     if (distance > st.court.innerFlights) return outer;
     if (Math.abs(localX) <= 1 && localZ > 14) return st.h - distance * FLIGHT_HEIGHT;
-    return Math.max(outer, st.h - Math.round((distance + grain) * 3) / 2);
+    return Math.max(outer, st.h - Math.round((distance + grain) * FLIGHT_HEIGHT * 2) / 2);
   }
   const fraction = Math.max(0, (CLIFF_EDGE - ring + grain - 0.5) / (CLIFF_EDGE - WALL));
   return Math.round((naturalHeight + (outer - naturalHeight) * fraction) * 2) / 2;

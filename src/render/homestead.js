@@ -28,6 +28,10 @@ export function homesteadModels(m) {
     add(roofId, roof);
     add(stairsId, stairs);
   }
+  // castle steps: half a storey in four deep treads, cut twice as fine as the rest so each tread is even
+  const steps = new Vox();
+  for (let t = 0; t < 4; t++) steps.box(t * 4, 0, 0, t * 4 + 3, t * 3 + 2, 15, t % 2 ? 0x8b9098 : 0x9a9fa6);
+  add('stone_steps', steps, 0.0625);
 // ---- castle pieces ----
   const stone = (x, y, z) => [0x9a9fa6, 0xa8adb4, 0x8b9098][Math.abs(x * 3 + y * 5 + z * 7) % 3];
   // battlement: a low parapet with one tooth, so a row of them reads as crenellations from any side

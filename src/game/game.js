@@ -439,14 +439,14 @@ export class Game {
   }
 
   // Height of the staircase on storey `level` at this exact spot, or null when there is none.
-  // Stairs climb one whole storey across their tile, in the direction they were placed facing:
+  // Stairs climb one whole storey across their tile (castle steps, half of one), in the direction they were placed facing:
   // rotation 0 rises toward +x, 1 toward +z, 2 toward -x, 3 toward -z.
   stairHeight(x, z, level) {
     const tx = Math.floor(x), tz = Math.floor(z), o = this.world.getAt(tx, tz, level);
     if (!o || !OBJECTS[o.t].stairs) return null;
     const fx = x - tx, fz = z - tz;
     const up = [fx, fz, 1 - fx, 1 - fz][o.rotation ?? 0];
-    return this.gen.tile(tx, tz).h + level * STOREY + Math.min(1, Math.max(0, up)) * STOREY;
+    return this.gen.tile(tx, tz).h + level * STOREY + Math.min(1, Math.max(0, up)) * (OBJECTS[o.t].rise ?? STOREY);
   }
 
   // Height of what is underfoot, that storeys are counted up from: the ground, or the top of the

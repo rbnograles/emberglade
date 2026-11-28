@@ -23,6 +23,8 @@ export const OBJECTS = {
   stairs: { ...placed('Timber stairs', 0), item: 'stairs', stairs: true },
   stone_stairs: { ...placed('Stone stairs', 0), item: 'stone_stairs', stairs: true, hp: 3 },
   brick_stairs: { ...placed('Brick stairs', 0), item: 'brick_stairs', stairs: true, hp: 3 },
+  // the broad, easy steps of a castle approach: half a storey across their tile (rise: how far they climb)
+  stone_steps: { ...placed('Stone steps', 0), item: 'stone_stairs', stairs: true, rise: 0.75, hp: 3 },
   window: { ...placed('Lattice window', 0.35), item: 'window', block: true },
   brick_wall: { ...placed('Brick wall', 0.35), item: 'brick_wall', block: true },
   stone_arch: { ...placed('Dressed stone arch', 0), item: 'stone_arch', hp: 3 },

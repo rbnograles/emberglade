@@ -9,6 +9,8 @@ import { STOREY, TOP_LEVEL } from '../world/worldstate.js';
 
 // Stairs are sculpted rising toward +x. Their saved rotation (0 +x, 1 +z, 2 -x, 3 -z) as quarter turns for the mesh builder.
 export const STAIR_TURN = [0, 3, 2, 1];
+// How far above the player's feet something must rise before the see-through circle thins it.
+export const PEEK_STEP = 0.3;
 // Everything else is sculpted with its front toward +z; the same saved rotation names where the front faces.
 export const FRONT_TURN = [1, 0, 3, 2];
 // Quarter turns for the mesh builder of a placed thing. Things saved before turning existed have no rotation and stay as they were.
@@ -18,11 +20,6 @@ export { CHUNK };
 // How living things move in the wind: sway is how freely, stem the height (above its foot) that stays put.
 const WIND_IN = { tree: { sway: 1, stem: 1.2 }, tallgrass: { sway: 1.8, stem: 0.08 }, flower: { sway: 1.5, stem: 0.08 }, bush: { sway: 0.45, stem: 0.25 }, bush_bare: { sway: 0.45, stem: 0.25 }, kelp: { sway: 1.6, stem: 0.1 } };
 const RADIUS = 3;
-// 4x4 ordered (Bayer) dither threshold for a pixel, in 0..1: the see-through circle around the
-// player thins objects and rock alike to this fine pattern.
-const PEEK_DITHER = `
-          float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-          float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`;
 
 export function toGeometry({ pos, norm, col, idx, sway, rock }) {
   const g = new THREE.BufferGeometry();
@@ -58,10 +55,22 @@ export class Chunks {
     // inside a circle around them, so the character is never lost behind a tree or a wall.
     // peek = (player's screen x, y in pixels, radius in pixels, player's distance from the camera)
     this.peek = { value: new THREE.Vector4(0, 0, 0, 0) };
-    // The same thinning for the ground itself: rock higher than the player's head (world height
-    // peekY) that stands between them and the camera, so they are never lost under an arch, in a
-    // cave or behind a stack. The ground underfoot is never above their head, so it stays whole.
-    this.peekY = { value: 1e9 };
+    // Height of the player's feet. Only what rises above it can hide them: the floor they stand on,
+    // and the ground and steps below, are never thinned, however far toward the camera they reach.
+    this.peekFeet = { value: 0 };
+    const PEEK_HEAD = `
+      uniform vec4 peek;
+      uniform float peekFeet;
+      // 4x4 ordered (Bayer) dither threshold for this pixel, in 0..1
+      float peekBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+      float peekDither(vec2 p) { return peekBayer2(0.5 * p) * 0.25 + peekBayer2(p) + 0.03; }`;
+    const peekCut = (worldY) => `#include <clipping_planes_fragment>
+      if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7 && ${worldY} > peekFeet + ${PEEK_STEP.toFixed(2)}) {
+        float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
+        // nearly clear at the centre, solid again at the rim
+        float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
+        if (keep < peekDither(gl_FragCoord.xy)) discard;
+      }`;
     // the layers of the cliffs: four colours each for limestone, earth and sandstone, in that order
     this.rockTints = { value: [ROCK_COLORS.stacks, ROCK_COLORS.table, ROCK_COLORS.canyon].flat().map((hex) => new THREE.Color(...rgb(hex))) };
     // Seconds, for everything that moves by itself: wind in the leaves, waves, the glow of lava.
@@ -85,16 +94,13 @@ export class Chunks {
     this.objectMat.onBeforeCompile = (shader) => {
       windy(shader);
       shader.uniforms.peek = this.peek;
+      shader.uniforms.peekFeet = this.peekFeet;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vPeekY;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvPeekY = (modelMatrix * vec4(transformed, 1.0)).y;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>
-          uniform vec4 peek;${PEEK_DITHER}`)
-        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-          if (peek.z > 0.0 && vViewPosition.z < peek.w - 0.7) {
-            float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
-            // nearly clear at the centre, solid again at the rim
-            float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
-            if (keep < peekDither(gl_FragCoord.xy)) discard;
-          }`);
+        .replace('#include <common>', '#include <common>\nvarying float vPeekY;' + PEEK_HEAD)
+        .replace('#include <clipping_planes_fragment>', peekCut('vPeekY'));
     };
     // Where in the world a pixel is, snapped to an eighth of a tile, so every effect below is drawn
     // in little squares that match the voxels. Kept within one 64-tile block so the numbers stay
@@ -118,22 +124,16 @@ export class Chunks {
     // the rugged country in layers of rock; and rock thinned away where it would hide the player.
     this.terrainMat.onBeforeCompile = (shader) => {
       placed(shader, '\nvRock = rock;');
+      // a bank or cliff between the camera and the player is thinned like a wall
       shader.uniforms.peek = this.peek;
-      shader.uniforms.peekY = this.peekY;
+      shader.uniforms.peekFeet = this.peekFeet;
       shader.uniforms.rockTints = this.rockTints;
       shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float rock;\nvarying float vRock;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
           varying float vRock;
-          uniform vec4 peek;
-          uniform float peekY;
-          uniform vec3 rockTints[12];${PEEK_DITHER}`)
-        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-          if (peek.z > 0.0 && vPlace.y > peekY && vViewPosition.z < peek.w - 0.7) {
-            float d = distance(gl_FragCoord.xy, peek.xy) / peek.z;
-            float keep = mix(0.14, 1.0, smoothstep(0.45, 1.0, d));
-            if (keep < peekDither(gl_FragCoord.xy)) discard;
-          }`)
+          uniform vec3 rockTints[12];${PEEK_HEAD}`)
+        .replace('#include <clipping_planes_fragment>', peekCut('vPlace.y'))
         .replace('#include <color_fragment>', `#include <color_fragment>
           if (vRock > 0.5) {
             // layers a tile and a half deep, lying a little higher or lower from one place to the next
