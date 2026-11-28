@@ -665,8 +665,9 @@ canvas#game { touch-action: none; }
   #rotate-hint::before { content: ''; width: 46px; height: 76px; margin-bottom: 14px; border: 4px solid var(--accent); border-radius: 10px; animation: turn-phone 2.4s ease-in-out infinite; }
 }
 @keyframes turn-phone { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(90deg); } }
-@media (pointer: coarse) {
-  /* the button row sits beside the minimap; the goal is one short line so the two never meet */
+/* Superseded by the consolidated phone layout below. */
+@media (pointer: coarse) and (max-width: 0px) {
+  /* legacy phone positioning */
   .touch-bar { left: auto; right: calc(max(8px, env(safe-area-inset-right)) + 96px); transform: none; gap: 4px; }
   #touch-controls .touch-bar button { min-width: 38px; padding: 4px 7px; }
   #topleft { max-width: min(26vw, 168px); }
@@ -690,13 +691,13 @@ canvas#game { touch-action: none; }
 #menu .brand { flex-direction: column; align-items: flex-start; gap: 2px; }
 #menu .brand img { width: 84px; height: 84px; margin: -10px 0 -4px -12px; }
 @media (max-width: 600px) { #menu .brand { flex-direction: row; align-items: center; } #menu .brand img { width: 40px; height: 40px; margin: 0; } }
-@media (pointer: coarse) {
-  /* the weather and shelter note sits in the middle, under the button row, clear of the minimap */
+@media (pointer: coarse) and (max-width: 0px) {
+  /* legacy phone positioning */
   #status { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); max-width: 46vw; font-size: 11px; padding: 3px 9px; text-align: center; }
   #touch-controls .touch-pad .tool { font-size: 14px; line-height: 1.05; }
   #touch-controls .touch-bar button { min-width: 36px; padding: 4px 6px; }
 }
-@media (pointer: coarse) { #toasts > div:nth-last-child(n+4) { display: none; } } /* three messages at most, so they never reach the stick */
+@media (pointer: coarse) and (max-width: 0px) { #toasts > div:nth-last-child(n+4) { display: none; } }
 
 /* ---------- phones: every piece of the HUD in its own lane, nothing on top of anything else ----------
    top row      portrait · place and goal | compass | clock and menu
@@ -704,7 +705,7 @@ canvas#game { touch-action: none; }
    left edge    view buttons, then the stick
    centre       notes and messages under the button row; needs, bars and hotbar at the bottom
    right edge   the action pad */
-@media (pointer: coarse) {
+@media (pointer: coarse) and (max-width: 0px) {
   #topleft { max-width: calc(50vw - 208px); min-width: 96px; }
   #biome { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #goal { padding: 3px 8px; }
@@ -724,8 +725,8 @@ canvas#game { touch-action: none; }
   #hungry { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .waypoint.far { display: none; } /* the compass already points the way; edge tags would land on the controls */
 }
-@media (pointer: coarse) { #touch-controls .touch-pad .use { right: 88px; bottom: 70px; } #touch-controls .touch-pad .place { right: 96px; } #touch-controls .touch-pad .run { right: 150px; bottom: 58px; } .touch-pad { width: 210px; } }
-@media (pointer: coarse) {
+@media (pointer: coarse) and (max-width: 0px) { #touch-controls .touch-pad .use { right: 88px; bottom: 70px; } #touch-controls .touch-pad .place { right: 96px; } #touch-controls .touch-pad .run { right: 150px; bottom: 58px; } .touch-pad { width: 210px; } }
+@media (pointer: coarse) and (max-width: 0px) {
   /* one line each, so the note never grows down into the messages */
   #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* the bottom strip fills the gap between the stick and the action pad instead of centring under them */
@@ -738,7 +739,7 @@ canvas#game { touch-action: none; }
   #hint { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* narrower phones: a tighter action pad, and the goal gives way to the buttons */
-@media (pointer: coarse) and (max-width: 720px) {
+@media (pointer: coarse) and (max-width: 0px) {
   .touch-pad { width: 140px; }
   #touch-controls .touch-pad button { width: 52px; height: 52px; font-size: 12px; }
   #touch-controls .touch-pad .tool { width: 76px; height: 76px; }
@@ -750,4 +751,75 @@ canvas#game { touch-action: none; }
   #walk-stick { width: 108px; height: 108px; }
   #topleft { min-width: 0; }
 }
-@media (pointer: coarse) and (max-width: 640px) { #goal { display: none; } #topleft { max-width: calc(50vw - 200px); } }
+@media (pointer: coarse) and (max-width: 0px) { #goal { display: none; } #topleft { max-width: calc(50vw - 200px); } }
+
+/* ---------- consolidated phone scaling: safe areas, short screens and compact maps ---------- */
+@media (pointer: coarse) {
+  :root {
+    --phone-left: max(10px, env(safe-area-inset-left));
+    --phone-right: max(10px, env(safe-area-inset-right));
+    --phone-bottom: max(10px, env(safe-area-inset-bottom));
+    --stick-size: clamp(92px, 30dvh, 118px);
+    --pad-width: clamp(164px, 26vw, 210px);
+    --pad-height: clamp(164px, 52dvh, 200px);
+    --action-size: clamp(48px, 15dvh, 58px);
+    --tool-size: clamp(70px, 22dvh, 84px);
+    --phone-map-size: clamp(64px, 20dvh, 84px);
+  }
+  html, body { height: 100dvh; font-size: 16px; }
+  #walk-stick { left: var(--phone-left); bottom: var(--phone-bottom); width: var(--stick-size); height: var(--stick-size); }
+  #walk-stick i { width: clamp(42px, 13dvh, 52px); height: clamp(42px, 13dvh, 52px); }
+  .touch-pad { right: var(--phone-right); bottom: var(--phone-bottom); width: var(--pad-width); height: var(--pad-height); }
+  #touch-controls .touch-pad button { width: var(--action-size); height: var(--action-size); font-size: clamp(11px, 3dvh, 13px); }
+  #touch-controls .touch-pad .tool { width: var(--tool-size); height: var(--tool-size); font-size: clamp(13px, 3.6dvh, 16px); line-height: 1.05; }
+  #touch-controls .touch-pad .place { right: calc(var(--tool-size) + 8px); bottom: 2px; }
+  #touch-controls .touch-pad .use { right: calc(var(--tool-size) - 6px); bottom: calc(var(--action-size) + 10px); }
+  #touch-controls .touch-pad .jump { right: 10px; bottom: calc(var(--tool-size) + 10px); }
+  #touch-controls .touch-pad .run { right: 48%; bottom: clamp(106px, 31dvh, 120px); }
+
+  .touch-bar { top: max(46px, calc(env(safe-area-inset-top) + 38px)); left: 50%; right: auto; transform: translateX(-50%); gap: 4px; max-width: calc(100vw - 220px); }
+  #touch-controls .touch-bar button { min-width: 0; min-height: 32px; padding: 3px clamp(6px, 1.1vw, 9px); font-size: clamp(11px, 3dvh, 12px); white-space: nowrap; }
+  .touch-view { left: var(--phone-left); bottom: calc(var(--phone-bottom) + var(--stick-size) + 8px); }
+  #topleft { min-width: 0; max-width: calc(50vw - 208px); }
+  #biome, #goal-text, #status, #hint, #hungry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #biome { max-width: 100%; }
+  #bottomright { top: max(42px, calc(env(safe-area-inset-top) + 36px)); }
+  #minimap { width: var(--phone-map-size); height: var(--phone-map-size); }
+  #home-label { max-width: var(--phone-map-size); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #status { top: clamp(78px, 23dvh, 92px); max-width: min(46vw, 330px); }
+  #toasts { top: clamp(102px, 29dvh, 112px); left: 50%; right: auto; bottom: auto; transform: translateX(-50%); align-items: center; max-width: 44vw; gap: 3px; }
+  #toasts > div { padding: 2px 10px; font-size: 11px; text-align: center; }
+  #toasts > div:nth-last-child(n+3) { display: none; }
+  .waypoint.far { display: none; }
+
+  #bottom { left: calc(var(--phone-left) + var(--stick-size) + 10px); right: calc(var(--phone-right) + var(--pad-width) + 8px); bottom: max(4px, env(safe-area-inset-bottom)); transform: none; max-width: none; }
+  #hotbar-row, #hotbar, #bars { width: 100%; max-width: 400px; }
+  #hotbar { display: flex; }
+  #hotbar .slot { flex: 1 1 0; width: auto; min-width: 0; max-width: 42px; height: auto; aspect-ratio: 1; }
+  #bars { grid-template-columns: 1fr 1fr; }
+  .bar i { flex: 1; width: auto; }
+  #hint, #hungry { max-width: 100%; }
+
+  #panel { width: calc(100vw - var(--phone-left) - var(--phone-right)); max-height: calc(100dvh - 12px); }
+  #panel .card, #panel .crafting { max-height: calc(100dvh - 20px); }
+  .sheet-card { max-height: calc(100dvh - 12px); }
+  #bigmap { padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+  #bigmap .frame { display: flex; flex-direction: column; align-items: center; width: fit-content; max-width: 100%; max-height: 100%; padding: clamp(6px, 2dvh, 10px); overflow: auto; }
+  #bigmap canvas { flex: 0 1 auto; width: min(70dvh, 86vw); height: min(70dvh, 86vw); max-width: 100%; max-height: calc(100dvh - 88px); aspect-ratio: 1; }
+  .map-actions { flex-wrap: wrap; margin-top: 5px; }
+  .map-actions button { min-height: 32px; padding: 4px 9px; }
+  #bigmap .info { max-width: 100%; margin-top: 4px; font-size: clamp(10px, 3dvh, 13px); line-height: 1.25; overflow-wrap: anywhere; }
+}
+
+@media (pointer: coarse) and (max-height: 560px) {
+  #menu .shell { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
+  #menu aside { width: clamp(172px, 28vw, 230px); padding: 10px 12px; gap: 3px; }
+  #menu .brand img { width: 44px; height: 44px; margin: 0; }
+  #menu .brand h1 { font-size: clamp(19px, 3.2vw, 25px); }
+  #menu aside > p, #menu aside .credit { display: none; }
+  #menu aside button.primary { margin: 0 0 5px; padding: 8px; font-size: 14px; }
+  #menu nav { gap: 2px; }
+  #menu nav button { padding: 5px 8px; font-size: 13px; }
+  #menu main { min-height: 0; padding: clamp(10px, 2.2vw, 18px); overflow-y: auto; }
+}
+@media (pointer: coarse) and (max-width: 640px) { #goal { display: none; } }
