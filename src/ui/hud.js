@@ -291,7 +291,7 @@ export class Hud {
   // Bottom line: what is under the cursor, and what each button would do right now. With a mouse
   // the buttons are drawn as little mice and keycaps; on touch the round buttons already say it.
   // target: name of the thing aimed at. primary: left button verb. use: F verb. extra: a plain note.
-  setHint({ target = '', primary = '', use = '', extra = '' }) {
+  setHint({ target = '', primary = '', use = '', extra = '', rotate = '' }) {
     const g = this.game, held = g.held, def = held ? ITEMS[held.id] : null;
     const parts = [];
     if (target) parts.push(`<span class="what">${target}</span>`);
@@ -300,6 +300,7 @@ export class Hud {
       const second = secondaryVerb(def);
       if (second) parts.push(`<span class="act">${MOUSE_RIGHT}${second}</span>`);
       if (use) parts.push(`<span class="act"><kbd>F</kbd>${use}</span>`);
+      if (rotate) parts.push(`<span class="act"><kbd>${rotate}</kbd>Turn</span>`);
     }
     if (def?.tool === 'can') parts.push(`<span class="more">Water ${g.player.water}/${CAN_CAPACITY}</span>`);
     if (def?.flask) parts.push(`<span class="more">Flask ${g.player.flask}/${FLASK_DRINKS}</span>`);

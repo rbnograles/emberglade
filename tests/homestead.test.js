@@ -514,7 +514,8 @@ describe('multi-storey building', () => {
     expect(g.buildLevel).toBe(0);
     expect(g.shiftBuildLevel(-1)).toBe(0); // nothing below the ground
     expect(g.shiftBuildLevel(1)).toBe(1);
-    expect(g.shiftBuildLevel(1)).toBe(1); // only one storey away from your own
+    expect(g.shiftBuildLevel(1)).toBe(2); // any storey can be aimed at from the ground
+    expect(g.shiftBuildLevel(-1)).toBe(1);
     expect(g.canPlace(B[0], B[1])).toBe(true); // over a ground floor
     expect(g.canPlace(S[0], S[1])).toBe(false); // the stairwell stays open
     expect(g.canPlace(B[0], B[1] - 1)).toBe(false); // over bare ground: nothing to rest on
@@ -525,7 +526,7 @@ describe('multi-storey building', () => {
     expect(g.world.getFloor(B[0], B[1], 1)).toBe('wood_floor');
     expect(g.world.getFloor(B[0], B[1])).toBe('wood_floor'); // the ground floor is its own layer
     expect(g.inv.count('wood_floor')).toBe(3);
-    // a wall upstairs needs the upstairs floor under it
+    // a wall upstairs needs the upstairs floor under it, or a wall below it
     hold(g, 'wood_wall', 2);
     expect(g.canPlace(C[0], C[1])).toBe(true);
     expect(g.canPlace(C[0], C[1] - 1)).toBe(false);
@@ -794,7 +795,7 @@ describe('settlements', () => {
     expect(again.world.get(dx, dz).open).toBe(true);
     expect(again.world.getFloor(...at(village, 1, 0))).toBe('stone_floor');
     // the castle's hoard pays out once
-    const [hx, hz] = at(castle, 0, -2);
+    const [hx, hz] = at(castle, 0, -8);
     expect(g.world.get(hx, hz).t).toBe('royal_hoard');
     standAt(g, hx, hz + 1);
     g.interact(hx, hz);
@@ -844,7 +845,7 @@ describe('building help', () => {
     expect(g.placeProblem(x + 2, z + 1)).toMatch(/in the way/);
     hold(g, 'wood_floor', 3);
     g.shiftBuildLevel(1);
-    expect(g.placeProblem(x + 3, z + 3)).toMatch(/Nothing below/);
+    expect(g.placeProblem(x + 3, z + 3)).toMatch(/Nothing to rest on/);
     expect(g.placeProblem(x + 2, z + 1)).toBe(null); // over the wall
     hold(g, 'berries');
     expect(g.placeProblem(x + 2, z + 2)).toBe(null); // not a building piece: nothing to say
@@ -931,5 +932,137 @@ describe('castle starts, guards and digging', () => {
     g.selected = 0;
     g.primary(Math.floor(p.x), Math.floor(p.z));
     expect(g.gen.tile(Math.floor(p.x), Math.floor(p.z)).dug).toBeUndefined();
+  });
+});
+
+describe('a castle worth the name', () => {
+  const castleOf = (g) => g.gen.settlementsNear(g.player.spawn.x, g.player.spawn.z, 2400).find((st) => st.kind === 'castle');
+
+  it('has towers, a wall-walk and a keep on the storeys above the ground', () => {
+    const g = new Game(null), c = castleOf(g), w = g.world;
+    // a corner tower stands three storeys under a spire
+    expect(w.getAt(c.x + 13, c.z + 13, 1)).toBeTruthy();
+    expect(w.getAt(c.x + 13, c.z + 13, 2)).toBeTruthy();
+    expect(w.getRoof(c.x + 13, c.z + 13, 2)).toMatch(/^spire/);
+    // the curtain wall is two storeys with teeth on top and a walk behind them
+    expect(w.getAt(c.x + 6, c.z - 13, 1)).toBeTruthy();
+    expect(w.getAt(c.x + 6, c.z - 13, 2).t).toBe('battlement');
+    expect(w.getFloor(c.x + 6, c.z - 12, 2)).toBe('stone_floor');
+    // the keep has floors upstairs and a pitched roof over the top one
+    expect(w.getFloor(c.x, c.z - 7, 1)).toBe('wood_floor');
+    expect(w.getFloor(c.x, c.z - 7, 2)).toBe('wood_floor');
+    expect(w.getRoof(c.x, c.z - 7, 2)).toBe('pitch_ridge');
+  });
+
+  it('can be climbed: the keep stairs lead up two floors, and the yard stairs to the wall-walk', () => {
+    const g = new Game(null), c = castleOf(g), p = g.player, h = c.h;
+    const walk = (x0, z0, x1, z1) => {
+      p.x = x0; p.z = z0;
+      for (let i = 0; i < 400 && Math.hypot(x1 - p.x, z1 - p.z) > 0.08; i++) {
+        const d = Math.hypot(x1 - p.x, z1 - p.z), s = Math.min(0.05, d);
+        g.move(((x1 - p.x) / d) * s, ((z1 - p.z) / d) * s);
+        g.physics(0.016, false);
+      }
+    };
+    // keep: up the east stair to the first floor
+    p.y = h;
+    walk(c.x + 3.5, c.z - 4.5, c.x + 3.5, c.z - 6.5);
+    expect(g.playerLevel).toBe(1);
+    // across the first floor and up the west stair to the second
+    walk(p.x, p.z, c.x - 1.5, c.z - 6.5);
+    walk(p.x, p.z, c.x - 1.5, c.z - 4.5);
+    walk(p.x, p.z, c.x - 2.5, c.z - 4.5);
+    walk(p.x, p.z, c.x - 2.5, c.z - 6.5);
+    expect(g.playerLevel).toBe(2);
+    // yard: two flights inside the west wall reach the wall-walk
+    p.y = h;
+    walk(c.x - 11.5, c.z + 8.5, c.x - 11.5, c.z + 3.5);
+    expect(g.playerLevel).toBe(2);
+    expect(g.world.getFloor(Math.floor(p.x), Math.floor(p.z), 2)).toBe('stone_floor');
+  });
+
+  it('keeps what the player changes upstairs, and leaves the rest of the castle standing', () => {
+    const g = new Game(null), c = castleOf(g), x = c.x + 6, z = c.z - 13;
+    g.world.setAt(x, z, 2, null); // knock a tooth off the wall
+    expect(g.world.getAt(x, z, 2)).toBeNull();
+    const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(copy.world.getAt(x, z, 2)).toBeNull();
+    expect(copy.world.getAt(x + 1, z, 2).t).toBe('battlement');
+    expect(Object.keys(copy.serialize().upper).length).toBe(1);
+  });
+});
+
+describe('turning things and building upward freely', () => {
+  const EAST = Math.PI / 2, SOUTH = 0; // facing +x, facing +z
+  const setup = () => {
+    const g = newGame();
+    g.spawnTimer = g.golemTimer = Infinity;
+    const [x, z] = clearing(g, 6);
+    standAt(g, x + 2, z + 4);
+    return { g, x, z };
+  };
+
+  it('turns a chest to face the builder, or wherever the rotate key says', () => {
+    const { g, x, z } = setup();
+    hold(g, 'chest', 3);
+    expect(g.placeRotation('chest', SOUTH)).toBe(3); // builder faces +z, so the front faces back at them
+    g.secondary(x + 2, z + 2, true, SOUTH);
+    expect(g.world.get(x + 2, z + 2).rotation).toBe(3);
+    expect(g.turnPlacing(SOUTH)).toBe(0); // a quarter turn on from there
+    expect(g.turnPlacing(SOUTH)).toBe(1);
+    g.secondary(x + 3, z + 2, true, EAST); // which way the builder faces no longer matters
+    expect(g.world.get(x + 3, z + 2).rotation).toBe(1);
+    // taking something else in hand forgets the turn; stairs still climb the way you face
+    hold(g, 'stairs');
+    expect(g.placeRotation('stairs', EAST)).toBe(0);
+    expect(g.turnPlacing(EAST)).toBe(1);
+    // walls look the same from every side, so they are not turned and keep no rotation
+    hold(g, 'wood_wall');
+    expect(g.turnPlacing(EAST)).toBeNull();
+    g.secondary(x + 1, z + 2, true, EAST);
+    expect(g.world.get(x + 1, z + 2).rotation).toBeUndefined();
+  });
+
+  it('stacks walls three high from the ground with no floors, and lets you stand on a wall', () => {
+    const { g, x, z } = setup();
+    const W = [x + 2, z + 2];
+    hold(g, 'stone_wall', 3);
+    g.secondary(W[0], W[1], true, EAST);
+    g.shiftBuildLevel(1);
+    expect(g.canPlace(W[0] + 1, W[1])).toBe(false); // not in thin air
+    g.secondary(W[0], W[1], true, EAST); // straight on top of the wall below
+    expect(g.world.getAt(W[0], W[1], 1).t).toBe('stone_wall');
+    g.shiftBuildLevel(1);
+    expect(g.buildLevel).toBe(2); // the third storey, still standing on the ground
+    g.secondary(W[0], W[1], true, EAST);
+    expect(g.world.getAt(W[0], W[1], 2).t).toBe('stone_wall');
+    expect(g.inv.count('stone_wall')).toBe(0);
+    // a floor may carry on sideways from what is built beside it
+    hold(g, 'wood_floor');
+    g.shiftBuildLevel(1);
+    expect(g.canPlace(W[0] + 1, W[1])).toBe(true);
+    // the top of a wall holds you up once you are that high, and not before
+    const ground = g.ground(W[0] + 0.5, W[1] + 0.5);
+    expect(g.standY(W[0] + 0.5, W[1] + 0.5, ground)).toBe(ground);
+    expect(g.standY(W[0] + 0.5, W[1] + 0.5, ground + STOREY)).toBe(ground + STOREY);
+  });
+});
+
+describe('MagicaVoxel files', () => {
+  it('writes a sculpture and reads the same one back, the right way up and round', async () => {
+    const { Vox } = await import('../src/render/voxel.js');
+    const { parseVox, writeVox } = await import('../src/render/voxfile.js');
+    // an L: a red post three tall, with a blue foot sticking out toward the front (+z)
+    const made = new Vox().box(5, 0, 2, 5, 2, 2, 0xd9432f).set(5, 0, 3, 0x3d7fbd).set(6, 0, 2, 0x8be06a);
+    const bytes = writeVox(made);
+    expect(String.fromCharCode(...bytes.slice(0, 4))).toBe('VOX ');
+    const read = parseVox(bytes);
+    const cells = [...read.m.values()].map((c) => c.join()).sort();
+    // the same shape, moved to start at the origin
+    expect(cells).toEqual(['0,0,0,14238511', '0,1,0,14238511', '0,2,0,14238511', '0,0,1,4030397', '1,0,0,9166954'].sort());
+    // in the file itself, height is z and the front is toward -y, as MagicaVoxel has it
+    const view = new DataView(bytes.buffer);
+    expect([view.getInt32(32, true), view.getInt32(36, true), view.getInt32(40, true)]).toEqual([2, 2, 3]);
+    expect(() => parseVox(new Uint8Array(40))).toThrow(/not a MagicaVoxel/);
   });
 });

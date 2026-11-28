@@ -42,6 +42,41 @@ export class Vox {
     return this;
   }
 
+  // The same sculpture at twice the resolution, given depth: every voxel becomes eight, the outer
+  // corners of anything bulky are shaved round, and the colours are lit from above (pale on top,
+  // shadowed underneath) with a fine grain. Thin details such as eyes and legs keep their shape.
+  // y0..y1: the height range the lighting runs over, so the parts of one creature shade as a whole.
+  refine(y0 = null, y1 = null) {
+    const has = (x, y, z) => this.m.has(`${x},${y},${z}`);
+    if (y0 === null) {
+      y0 = Infinity;
+      y1 = -Infinity;
+      for (const [, y] of this.m.values()) {
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y + 1);
+      }
+    }
+    const span = Math.max(1, y1 - y0), out = new Vox();
+    const lit = (hex, k) => {
+      const f = (s) => Math.max(0, Math.min(255, Math.round(((hex >> s) & 255) * k)));
+      return (f(16) << 16) | (f(8) << 8) | f(0);
+    };
+    for (const [x, y, z, hex] of this.m.values()) {
+      for (let sy = 0; sy < 2; sy++) for (let sz = 0; sz < 2; sz++) for (let sx = 0; sx < 2; sx++) {
+        const dx = sx ? 1 : -1, dy = sy ? 1 : -1, dz = sz ? 1 : -1;
+        // an outer corner of a solid mass: open on all three sides, backed on all three
+        const corner = !has(x + dx, y, z) && !has(x, y + dy, z) && !has(x, y, z + dz) && has(x - dx, y, z) && has(x, y - dy, z) && has(x, y, z - dz);
+        if (corner) continue;
+        const X = x * 2 + sx, Y = y * 2 + sy, Z = z * 2 + sz;
+        const height = (y + sy * 0.5 + 0.25 - y0) / span; // 0 at the feet, 1 at the top
+        const under = !has(x, y - 1, z) && !sy && y > y0 ? 0.9 : 1; // the underside of an overhang
+        const grain = 1 + (hash2(X * 3 + Y, Z * 5 - Y, 913) - 0.5) * 0.09;
+        out.set(X, Y, Z, lit(hex, (0.8 + 0.3 * height) * under * grain));
+      }
+    }
+    return out;
+  }
+
   // -> {pos, norm, col, idx, nv}: only faces not hidden by a neighbouring voxel.
   // center: put the x/z bounding-box centre on the origin.
   build(size, { ysize = size, center = true, jitter = 0.05 } = {}) {
@@ -91,10 +126,13 @@ export class Vox {
         else idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       }
     }
-    return {
+    const built = {
       pos: new Float32Array(pos), norm: new Float32Array(norm), col: new Float32Array(col),
       idx: new Uint32Array(idx), nv: pos.length / 3,
     };
+    // the export script asks for the sculpture to be kept beside its mesh, with how it was built
+    if (Vox.keep) built.src = { vox: this, size, center };
+    return built;
   }
 }
 

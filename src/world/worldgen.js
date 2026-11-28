@@ -138,6 +138,8 @@ export class Worldgen {
   }
 
   floorAt(x, z) { return this.settledCell(x, z)?.floor ?? null; }
+  // What a settlement built on a storey above the ground here ({ obj, floor, roof }), or null.
+  upperAt(x, z, level) { return this.settledCell(x, z)?.up?.[level] ?? null; }
   roofAt(x, z) { return this.settledCell(x, z)?.roof ?? null; }
 
   // Every settlement whose middle is within `radius` tiles.

@@ -37,6 +37,7 @@ export const RECIPES = [
   { out: 'copper_sword', n: 1, pattern: ['C', 'C', '|'], station: 'workbench' },
   { out: 'wood_wall', n: 4, pattern: ['WWW', 'WWW'], station: 'workbench' },
   { out: 'stone_wall', n: 4, pattern: ['###', '###'], station: 'workbench' },
+  { out: 'battlement', n: 4, pattern: ['#.#', '###'], station: 'workbench' },
   { out: 'wood_floor', n: 4, pattern: ['WWW'], station: 'workbench' },
   { out: 'stone_floor', n: 4, pattern: ['###'], station: 'workbench' },
   { out: 'door', n: 1, pattern: ['WW', 'WW', 'WW'], station: 'workbench' },

@@ -25,18 +25,25 @@ export class WorldState {
   }
 
   // One cell of an upper storey, made on demand when written to and dropped again once it is empty.
+  // A settlement's own upper storeys (a castle's towers and wall-walks) show through until the
+  // player changes that cell; from then on the player's copy is what counts, even once emptied.
   cell(x, z, level, make = false) {
     const key = x + ',' + z + ',' + level;
     let c = this.upper.get(key);
-    if (!c && make) this.upper.set(key, (c = { obj: null, floor: null, roof: null }));
-    return c ?? null;
+    if (c) return make || c.obj || c.floor || c.roof ? c : null;
+    const made = this.gen.upperAt?.(x, z, level) ?? null;
+    if (!make) return made;
+    this.upper.set(key, (c = made ? { obj: made.obj ? { ...made.obj } : null, floor: made.floor, roof: made.roof } : { obj: null, floor: null, roof: null }));
+    return c;
   }
 
   put(x, z, level, field, value) {
-    const c = this.cell(x, z, level, !!value);
+    const made = this.gen.upperAt?.(x, z, level) ?? null;
+    const c = this.cell(x, z, level, !!value || !!made);
     if (!c) return;
     c[field] = value ?? null;
-    if (!c.obj && !c.floor && !c.roof) this.upper.delete(x + ',' + z + ',' + level);
+    // an emptied cell is dropped, unless a settlement would grow back there
+    if (!c.obj && !c.floor && !c.roof && !made) this.upper.delete(x + ',' + z + ',' + level);
     this.changed(x, z);
   }
 

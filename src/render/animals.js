@@ -158,18 +158,31 @@ const RIGS = {
 
 // Sculpted rigs -> { gait, body: model, parts: [{ kind, phase, model, pivot: [x, y, z] in world units }] } by kind.
 // Models are built around the creature's own origin (not re-centred), so every part lines up.
-export const buildRigs = (rigs) => Object.fromEntries(Object.entries(rigs).map(([id, rig]) => [id, {
-  gait: rig.gait,
-  body: rig.body.build(rig.size, { center: false }),
-  parts: rig.parts.map((p) => ({ kind: p.kind, phase: p.phase, model: p.v.build(rig.size, { center: false }), pivot: p.pivot.map((n) => n * rig.size) })),
-}]));
+// Every sculpture is refined on the way (see Vox.refine): twice the detail, rounded, and lit from
+// above across the whole creature, so a body reads as a solid thing and not a flat-coloured block.
+const heights = (rig) => {
+  let y0 = Infinity, y1 = -Infinity;
+  for (const v of [rig.body, ...rig.parts.map((p) => p.v)]) for (const [, y] of v.m.values()) {
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y + 1);
+  }
+  return [y0, y1];
+};
+export const buildRigs = (rigs) => Object.fromEntries(Object.entries(rigs).map(([id, rig]) => {
+  const range = heights(rig), fine = (v) => v.refine(...range).build(rig.size / 2, { center: false, jitter: 0.03 });
+  return [id, {
+    gait: rig.gait,
+    body: fine(rig.body),
+    parts: rig.parts.map((p) => ({ kind: p.kind, phase: p.phase, model: fine(p.v), pivot: p.pivot.map((n) => n * rig.size) })),
+  }];
+}));
 
 // The whole creature in one piece, for anything that wants a still sculpture.
 export function addWholeModels(m, rigs) {
   for (const [id, rig] of Object.entries(rigs)) {
     const whole = new Vox();
     for (const v of [rig.body, ...rig.parts.map((p) => p.v)]) for (const [key, voxel] of v.m) whole.m.set(key, voxel);
-    m.set(id, whole.build(rig.size, { center: false }));
+    m.set(id, whole.refine().build(rig.size / 2, { center: false, jitter: 0.03 }));
   }
 }
 

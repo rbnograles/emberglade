@@ -8,7 +8,7 @@ import { Compass } from './ui/compass.js';
 import { confirmRelocation } from './ui/relocation.js';
 import { Game, needsRelocation } from './game/game.js';
 import { loadSave, writeSave, clearSave, currentSlot } from './game/save.js';
-import { settings } from './settings.js';
+import { settings, keyName } from './settings.js';
 import { sfx, unlockAudio, setNight, setRain } from './audio.js';
 import { Rain, Flurry } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
@@ -23,6 +23,7 @@ import { WATER_Y } from './world/worldgen.js';
 import { STOREY } from './world/worldstate.js';
 import { ITEMS } from './game/items.js';
 import { buildModels, buildItemModels } from './render/models.js';
+import { loadVoxModels } from './render/voxfile.js';
 import { renderItemIcons } from './render/itemicons.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
@@ -76,8 +77,17 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// Models sculpted in MagicaVoxel and listed in public/models/models.json stand in for the game's own.
+const custom = await loadVoxModels();
 const models = buildModels();
+for (const [id, model] of custom) {
+  if (models.has(id)) models.set(id, model);
+}
 const itemModels = buildItemModels(models);
+for (const [id, model] of custom) {
+  if (itemModels.has(id)) itemModels.set(id, model);
+  else if (!models.has(id)) console.warn(`Custom model "${id}" does not match any model in the game, so it is not used`);
+}
 setRenderedIcons(renderItemIcons(itemModels));
 // Icons are photographed the first time each is needed. Doing them a few at a time while the game is
 // idle means opening the inventory for the first time never stalls on a hundred of them at once.
@@ -388,6 +398,8 @@ addEventListener('keydown', (e) => {
   } else if (e.code === K.inventory) {
     panels.toggle();
     sfx('ui');
+  } else if (e.code === K.rotate) {
+    if (game.turnPlacing(playerModel.facing) !== null) sfx('ui');
   } else if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     // choose the storey to build on: one below or above your own
     game.shiftBuildLevel(e.code === 'BracketRight' ? 1 : -1);
@@ -608,6 +620,11 @@ function toggleFullscreen() {
 // What stands on the storey that building and tools are aimed at.
 const objAt = (x, z) => game.world.getAt(x, z, game.buildLevel);
 const STOREY_NAMES = ['Ground', 'Floor 2', 'Floor 3'];
+// Is the thing in hand one that the rotate key turns?
+const canTurn = () => {
+  const kind = ITEMS[game.held?.id]?.place;
+  return !!kind && (game.turns(kind) || kind === 'door');
+};
 const holdingBuildable = () => {
   const def = ITEMS[game.held?.id];
   return !!(def && (def.place || def.floor || def.roof));
@@ -731,11 +748,28 @@ for (let rot = 0; rot < 4; rot++) {
 }
 scene.add(ghost);
 
+// The mark on the ground beside the preview that shows which side is the front (for stairs, the top).
+const frontMark = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xf2c94c, side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthTest: false, fog: false }));
+frontMark.geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  0.36, 0, 0, 0.06, 0, -0.24, 0.06, 0, 0.24, // the arrow head, pointing +x
+  0.06, 0, -0.09, -0.16, 0, -0.09, -0.16, 0, 0.09, 0.06, 0, -0.09, -0.16, 0, 0.09, 0.06, 0, 0.09, // its stem
+], 3));
+frontMark.renderOrder = 11;
+frontMark.visible = false;
+scene.add(frontMark);
+function showFront(r, x = 0, y = 0, z = 0) {
+  frontMark.visible = r !== null;
+  if (r === null) return;
+  const [dx, dz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][r];
+  frontMark.position.set(x + dx * 0.72, y + 0.05, z + dz * 0.72);
+  frontMark.rotation.y = [0, -Math.PI / 2, Math.PI, Math.PI / 2][r];
+}
+
 function updateGhost() {
   const def = game.held ? ITEMS[game.held.id] : null;
   const what = (def?.floor || def?.roof) ? game.held.id : def?.place ?? def?.vehicle;
   ghost.visible = !!what && !!target && !panels.open;
-  if (!ghost.visible) return;
+  if (!ghost.visible) return void showFront(null);
   const key = GHOST_MODEL[what] ?? what;
   if (!ghostGeometry.has(key)) {
     const body = toGeometry(models.get(key));
@@ -755,9 +789,16 @@ function updateGhost() {
   const y = def.roof ? tile.h + lift + 1.55 : def.vehicle && !VEHICLES[what].land && tile.water ? WATER_Y + VEHICLES[what].float : tile.h + lift + 0.02;
   if (what !== 'door') {
     ghost.position.set(target.x + 0.5, y, target.z + 0.5);
-    // stairs show the way they will climb
-    ghost.rotation.y = OBJECTS[what]?.stairs ? [0, -Math.PI / 2, Math.PI, Math.PI / 2][stairRotation()] : 0;
-  } else if (game.doorRotation(target.x, target.z, playerModel.facing, level) === 1) {
+    // turned the way it will stand: stairs by the way they climb, the rest by where the front is
+    const r = OBJECTS[what] && game.turns(what) ? game.placeRotation(what, playerModel.facing) : null;
+    ghost.rotation.y = r === null ? 0 : (OBJECTS[what].stairs ? [0, -Math.PI / 2, Math.PI, Math.PI / 2] : [Math.PI / 2, 0, -Math.PI / 2, Math.PI])[r];
+    showFront(r, target.x + 0.5, y, target.z + 0.5);
+    return;
+  }
+  // a door has no front: it lies across the way it was turned, or fits the walls beside it
+  showFront(null);
+  const turned = game.turnedBy('door');
+  if ((turned === null ? game.doorRotation(target.x, target.z, playerModel.facing, level) : turned % 2 === 0 ? 1 : 0) === 1) {
     ghost.position.set(target.x + 1, y, target.z);
     ghost.rotation.y = -Math.PI / 2;
   } else {
@@ -797,6 +838,10 @@ const controllers = installControllers(canvas, {
     if (action === 'fullscreen') return void toggleFullscreen();
     if (action === 'layerUp' || action === 'layerDown') {
       if (!paused && holdingBuildable()) game.shiftBuildLevel(action === 'layerUp' ? 1 : -1);
+      return;
+    }
+    if (action === 'rotate') {
+      if (!paused && game.turnPlacing(playerModel.facing) !== null) sfx('ui');
       return;
     }
     if (action === 'sheet' && !paused) return void sheet.toggle();
@@ -1070,7 +1115,7 @@ function step(dt) {
   // while building, the hint names the storey being built on, and touch gets its layer buttons
   const building = holdingBuildable(), label = targetLabel();
   const quiet = touchMode || panels.open, hintTool = quiet ? '' : toolVerb(), hintUse = quiet ? '' : useVerb();
-  hud.setHint({ target: label, primary: hintTool === 'Tool' ? '' : hintTool, use: hintUse === 'Use' ? '' : hintUse, extra: building ? STOREY_NAMES[game.buildLevel] : '' });
+  hud.setHint({ target: label, primary: hintTool === 'Tool' ? '' : hintTool, use: hintUse === 'Use' ? '' : hintUse, extra: building ? STOREY_NAMES[game.buildLevel] : '', rotate: canTurn() ? keyName(K.rotate) : '' });
   for (const b of layerButtons) if (b.hidden === building) b.hidden = !building;
   if (touchMode) {
     const verb = toolVerb();

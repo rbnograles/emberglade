@@ -27,6 +27,44 @@ export function homesteadModels(m) {
     add(roofId, roof);
     add(stairsId, stairs);
   }
+// ---- castle pieces ----
+  const stone = (x, y, z) => [0x9a9fa6, 0xa8adb4, 0x8b9098][Math.abs(x * 3 + y * 5 + z * 7) % 3];
+  // battlement: a low parapet with one tooth, so a row of them reads as crenellations from any side
+  add('battlement', new Vox().box(0, 0, 0, 7, 3, 7, stone).box(1, 4, 1, 6, 8, 6, stone).box(0, 3, 0, 7, 3, 7, 0xb8bdc4));
+  // spire: a tall cone that caps a three by three tower, with a pennant at its tip
+  for (const [id, tiles, flag] of [['spire', [0x4f5f78, 0x5f7090, 0x44526a], 0xd9432f], ['spire_red', [0xb85436, 0xc9603f, 0xa54a30], 0x3d7fbd]]) {
+    const v = new Vox(), H = 22;
+    for (let y = 0; y < H; y++) {
+      const r = 7 * (1 - y / H) + 0.7;
+      for (let z = -8; z <= 7; z++) for (let x = -8; x <= 7; x++) {
+        const d = Math.hypot(x + 0.5, z + 0.5);
+        if (d <= r && (d > r - 2.2 || y === 0)) v.set(x, y, z, y === 0 ? 0x3a4456 : tiles[(y + ((x + z) >> 1) + 60) % 3]);
+      }
+    }
+    v.box(-1, H, -1, 0, H + 1, 0, 0x6b7481).box(0, H + 2, 0, 0, H + 6, 0, 0x6b7481).box(1, H + 4, 0, 3, H + 6, 0, flag).set(4, H + 5, 0, flag);
+    add(id, v, 0.25);
+  }
+  // a tall pitched roof, one tile deep per course: n rises toward +z, s falls away, the ridge joins them
+  const slate = (x, y, z) => [0x4f5f78, 0x5f7090, 0x44526a][Math.abs(x + (y >> 1) * 2 + (z >> 1)) % 3];
+  const RISE = 6;
+  for (let k = 0; k < 3; k++) {
+    for (const dir of ['n', 's']) {
+      const v = new Vox();
+      for (let z = 0; z < 8; z++) {
+        const top = k * RISE + Math.floor(((dir === 'n' ? z : 7 - z) * RISE) / 8);
+        v.box(0, 0, z, 7, top, z, 0x39424f).box(0, top, z, 7, top + 1, z, slate);
+      }
+      add('pitch_' + dir + k, v);
+    }
+  }
+  {
+    const v = new Vox();
+    for (let z = 0; z < 8; z++) {
+      const top = 3 * RISE + Math.min(z, 7 - z, 1);
+      v.box(0, 0, z, 7, top, z, 0x39424f).box(0, top, z, 7, top + 1, z, slate);
+    }
+    add('pitch_ridge', v.box(0, 3 * RISE + 2, 3, 7, 3 * RISE + 3, 4, 0x2f3846));
+  }
   add('brick_wall', new Vox().box(0, 0, 0, 3, 5, 3, brick), 0.25);
   add('brick_floor', new Vox().box(0, 0, 0, 7, 0, 7, brick));
   add('window', new Vox().box(0, 0, 0, 7, 3, 2, oak).box(0, 4, 1, 0, 11, 1, edge)

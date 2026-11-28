@@ -12,10 +12,17 @@ const limb = (kind, phase, pivot, v) => ({ kind, phase, pivot, v });
 
 // gloomling: a round night creature on two stubby feet, with little arms it throws up to strike
 function gloomling() {
-  const dusk = coat([0x3a2a5a, 0x46336b, 0x2f2249], 21), dark = 0x231a3a;
+  const dusk = coat([0x5a3f8a, 0x6b4da0, 0x4a3475], 21), dark = 0x2c2048;
   const body = new Vox().blob(0, 3.4, 0, 2.6, 2.3, 2.6, dusk, 0.25, 21);
+  body.box(1, 1, -2, 2, 2, 1, 0xa58fd0).box(2, 3, -1, 2, 3, 0, 0xa58fd0); // a paler belly and chin
+  body.box(-2, 5, -1, 0, 5, 0, dark).box(-3, 3, -1, -3, 4, 0, dark); // a dark stripe down the back
   pair(body, 2, 3, 1, 2, 4, 1, 0xfff27a); // bright eyes
-  pair(body, -1, 6, 1, -1, 6, 1, dark); // ear tufts
+  pair(body, 3, 4, 1, 3, 4, 1, 0xfff9c4); // their glint
+  body.box(3, 2, -1, 3, 2, 0, 0x1a1228); // a mouth
+  pair(body, 3, 1, 0, 3, 1, 0, BONE); // two fangs
+  pair(body, -1, 6, 1, -1, 7, 1, dark); // horns
+  pair(body, 0, 6, 2, 0, 6, 2, 0xc0a8ea); // their pale tips
+  for (const [x, z] of [[-2, 2], [-1, -3], [-3, 0]]) body.set(x, 4, z, 0xc0a8ea); // mottling
   const parts = [];
   for (const side of [0, 1]) {
     const z = side ? -2 : 1, az = side ? -4 : 3, sign = side ? -1 : 1;
@@ -69,6 +76,9 @@ function golem() {
 function spitter() {
   const leaf = coat([0x4f7a3a, 0x5c8a44, 0x436a30], 63), dark = 0x35552a;
   const body = new Vox().blob(0, 3.4, 0, 2.2, 2.2, 2.2, leaf, 0.25, 63);
+  body.box(0, 1, -1, 1, 1, 0, 0x8fbf5e); // a pale underside
+  for (const [x, y, z] of [[-1, 5, 1], [0, 5, -2], [-2, 4, -1], [1, 4, 1]]) body.set(x, y, z, 0xd6f27a); // spots
+  pair(body, -1, 2, 2, 0, 2, 2, dark); // darker ribs along the bulb
   const head = new Vox().box(1, 4, -1, 3, 6, 0, 0x6a9a4e).box(4, 4, -1, 4, 6, 0, 0xb8f25a); // stalk and lips
   pair(head, 3, 7, 0, 3, 7, 0, AMBER);
   const frond = new Vox().box(-3, 5, -1, -2, 7, 0, dark).box(-4, 7, -1, -4, 8, 0, dark);

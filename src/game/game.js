@@ -77,7 +77,7 @@ export class Game {
     for (const [key, steps] of Object.entries(save?.dug ?? {})) if (Number.isInteger(steps)) this.gen.dug.set(key, steps);
     this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs, save?.upper);
     this.lastLevel = 0;
-    this.buildShift = 0; // storeys above (+1) or below (-1) the player's own that building is aimed at
+    this.buildShift = 0; // storeys above (+) or below (-) the player's own that building is aimed at
     this.armor = new Inventory(ARMOR_SLOTS.length, save?.armor); // worn items: head, body, feet
     this.status = 'ok'; // 'ok' | 'cold' | 'warm' | 'sheltered'
     this.statusTimer = 0;
@@ -376,6 +376,9 @@ export class Game {
       if (l > 0 && base <= lip && this.world.getFloor(tx, tz, l)) best = Math.max(best, base);
       const h = this.stairHeight(x, z, l);
       if (h !== null && h <= lip) best = Math.max(best, h);
+      // the top of a wall can be stood on, by anyone who has climbed that high
+      const o = this.world.getAt(tx, tz, l), od = o && OBJECTS[o.t];
+      if (od?.block && base + (od.top ?? STOREY) <= lip) best = Math.max(best, base + (od.top ?? STOREY));
     }
     return best;
   }
@@ -407,7 +410,7 @@ export class Game {
 
   shiftBuildLevel(by) {
     const before = this.buildLevel;
-    this.buildShift = Math.max(-1, Math.min(1, this.buildShift + by));
+    this.buildShift = Math.max(-TOP_LEVEL, Math.min(TOP_LEVEL, this.buildShift + by));
     // a shift that the top or bottom storey swallowed is not kept, so the next press works at once
     if (this.buildLevel === before) this.buildShift = this.buildLevel - this.playerLevel;
     this.emit('inv');
@@ -1215,16 +1218,15 @@ export class Game {
     const t = this.gen.tile(tx, tz), w = this.world, level = this.buildLevel;
     if (t.water || t.lava) return 'It cannot stand on water';
     if (level > 0) {
-      if (Math.abs(level - this.playerLevel) > 1) return 'That storey is out of reach from here';
       if (def.floor) {
         if (w.getFloor(tx, tz, level)) return 'There is already a floor here';
         if (w.getRoof(tx, tz, level - 1)) return 'Take the roof below off first';
         if (OBJECTS[w.getAt(tx, tz, level - 1)?.t]?.stairs) return 'The stairwell has to stay open';
-        return 'Nothing below to rest on: build the storey under it first';
+        return 'Nothing to rest on: it needs a wall or floor below, or a floor beside it';
       }
       if (def.roof) return w.getRoof(tx, tz, level) ? 'Already roofed' : 'A roof goes over a floor or wall of the building';
       if (w.getAt(tx, tz, level)) return 'Something is already there';
-      if (!w.getFloor(tx, tz, level)) return 'Lay a floor here first';
+      if (!w.getFloor(tx, tz, level)) return 'Nothing to stand it on: it needs a wall below it or a floor here';
       return OBJECTS[def.place]?.stairs ? 'Stairs need open space above them' : 'You are standing there';
     }
     if (def.roof) return w.getRoof(tx, tz) ? 'Already roofed' : 'The storey above has a floor here';
@@ -1260,37 +1262,76 @@ export class Game {
   }
 
   // Building above the ground needs something to stand on:
-  //   a floor     rests on a floor or a built piece directly below (never over a staircase: the stairwell stays open)
-  //   anything standing (wall, door, window, stairs, furniture)   needs a floor under it on its own storey
+  //   a floor     rests on a floor or a built piece directly below, or carries on from a floor or
+  //               piece beside it (never over a staircase: the stairwell stays open)
+  //   anything standing (wall, door, window, stairs, furniture)   needs a floor under it on its own
+  //               storey, or a built piece directly below: a wall goes straight on top of a wall
   //   a roof      caps a tile that is part of the building, and cannot share it with the floor above
-  // and the storey must be the builder's own or the next one up or down.
+  // Any storey can be built on from any other, as long as the tile is within arm's reach.
   canPlaceUpper(tx, tz, level, def) {
     const w = this.world, t = this.gen.tile(tx, tz);
-    if (t.water || t.lava || Math.abs(level - this.playerLevel) > 1) return false;
+    if (t.water || t.lava) return false;
     const built = (o) => !!o?.placed && !OBJECTS[o.t].stairs;
     const here = w.getAt(tx, tz, level), under = w.getAt(tx, tz, level - 1);
     if (def.floor) {
       if (w.getFloor(tx, tz, level) || w.getRoof(tx, tz, level - 1) || OBJECTS[under?.t]?.stairs) return false;
-      return !!w.getFloor(tx, tz, level - 1) || built(under);
+      const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.getFloor(tx + dx, tz + dz, level) || built(w.getAt(tx + dx, tz + dz, level)));
+      return !!w.getFloor(tx, tz, level - 1) || built(under) || beside;
     }
     if (def.roof) {
       if (w.getRoof(tx, tz, level) || (level < TOP_LEVEL && w.getFloor(tx, tz, level + 1))) return false;
       return !!w.getFloor(tx, tz, level) || built(here);
     }
-    if (here || !w.getFloor(tx, tz, level)) return false;
+    if (here || !(w.getFloor(tx, tz, level) || built(under))) return false;
     if (OBJECTS[def.place].stairs && (level >= TOP_LEVEL || w.getFloor(tx, tz, level + 1) || w.getAt(tx, tz, level + 1))) return false;
     const p = this.player;
     return !(tx === Math.floor(p.x) && tz === Math.floor(p.z) && this.playerLevel === level);
   }
 
   // A newly placed thing, with whatever it needs to remember: a door's swing, stairs' direction, a chest's slots.
+  // ---- turning what is being placed ----
+  // A placed thing faces one of four ways: 0 toward +x, 1 +z, 2 -x, 3 -z. For stairs that is the way
+  // they climb; for everything else it is where the front is (a chest's lid, a chair's seat).
+  // Does turning this kind of thing change anything? Walls and fences look the same from every side.
+  turns(kind) {
+    const od = OBJECTS[kind];
+    return !!od && !od.block && kind !== 'fence' && kind !== 'door' && kind !== 'soil';
+  }
+
+  // The turn the builder has asked for with the rotate key, or null while it is left to the game.
+  // It is forgotten when something else is taken in hand.
+  turnedBy(kind) {
+    if (this.turnFor !== kind) this.turn = null;
+    return this.turn ?? null;
+  }
+
+  // The way a thing placed now would face. Left alone, stairs climb the way the builder faces and
+  // everything else turns its front to the builder.
+  placeRotation(kind, facing = 0) {
+    const turned = this.turnedBy(kind);
+    if (turned !== null) return turned;
+    const sx = Math.sin(facing), sz = Math.cos(facing);
+    const ahead = Math.abs(sx) > Math.abs(sz) ? (sx > 0 ? 0 : 2) : (sz > 0 ? 1 : 3);
+    return OBJECTS[kind]?.stairs ? ahead : (ahead + 2) % 4;
+  }
+
+  // The rotate key: a quarter turn of whatever is about to be placed.
+  turnPlacing(facing = 0) {
+    const kind = ITEMS[this.held?.id]?.place;
+    if (!kind || !(this.turns(kind) || kind === 'door')) return null;
+    const now = this.placeRotation(kind, facing);
+    this.turnFor = kind;
+    this.turn = (now + 1) % 4;
+    return this.turn;
+  }
+
   newPlaced(kind, tx, tz, facing, level) {
     const placed = { t: kind, placed: true };
-    if (kind === 'door') Object.assign(placed, { open: false, rotation: this.doorRotation(tx, tz, facing, level) });
-    if (OBJECTS[kind].stairs) {
-      const sx = Math.sin(facing), sz = Math.cos(facing);
-      placed.rotation = Math.abs(sx) > Math.abs(sz) ? (sx > 0 ? 0 : 2) : (sz > 0 ? 1 : 3); // climbs the way the builder faces
-    }
+    if (kind === 'door') {
+      // a door turned by hand lies across the way it was turned to face; otherwise it fits the walls beside it
+      const turned = this.turnedBy(kind);
+      Object.assign(placed, { open: false, rotation: turned === null ? this.doorRotation(tx, tz, facing, level) : turned % 2 === 0 ? 1 : 0 });
+    } else if (this.turns(kind)) placed.rotation = this.placeRotation(kind, facing);
     if (kind === 'chest' || kind === 'cabinet') placed.items = Array(CHEST_SLOTS).fill(null);
     if (kind === 'flower') placed.v = (Math.random() * 4) | 0;
     if (kind === 'bed') this.player.bed = level ? { x: tx, z: tz, l: level } : { x: tx, z: tz };

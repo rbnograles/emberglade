@@ -8,6 +8,10 @@ import { STOREY, TOP_LEVEL } from '../world/worldstate.js';
 
 // Stairs are sculpted rising toward +x. Their saved rotation (0 +x, 1 +z, 2 -x, 3 -z) as quarter turns for the mesh builder.
 export const STAIR_TURN = [0, 3, 2, 1];
+// Everything else is sculpted with its front toward +z; the same saved rotation names where the front faces.
+export const FRONT_TURN = [1, 0, 3, 2];
+// Quarter turns for the mesh builder of a placed thing. Things saved before turning existed have no rotation and stay as they were.
+export const turnOf = (obj) => (obj.rotation === undefined ? 0 : (OBJECTS[obj.t].stairs ? STAIR_TURN : FRONT_TURN)[obj.rotation]);
 
 export const CHUNK = 16;
 const RADIUS = 3;
@@ -250,7 +254,7 @@ export class Chunks {
         else out.push({ m: model, x, y, z });
       } else if (obj.t === 'fence') out.push({ m: M.get('fence_post'), x: px, y, z: pz });
       else if (M.has(obj.t)) {
-        out.push({ m: M.get(obj.t), x: px, y, z: pz, rot: OBJECTS[obj.t].stairs ? STAIR_TURN[obj.rotation ?? 0] : 0 });
+        out.push({ m: M.get(obj.t), x: px, y, z: pz, rot: OBJECTS[obj.t].stairs ? STAIR_TURN[obj.rotation ?? 0] : turnOf(obj) });
         if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
         if (obj.t === 'lantern' || obj.t === 'lamp') c.fires.push({ x: px, y, z: pz, lantern: true });
       }
@@ -294,7 +298,7 @@ export class Chunks {
           if (rotation === 1) list.push({ m: model, x: x + 1, y, z, rot: 3 });
           else list.push({ m: model, x, y, z });
         } else if (obj.placed && obj.t !== 'flower') {
-          add(obj.t, OBJECTS[obj.t].stairs ? { rot: STAIR_TURN[obj.rotation ?? 0] } : {});
+          add(obj.t, { rot: OBJECTS[obj.t].stairs ? STAIR_TURN[obj.rotation ?? 0] : turnOf(obj) });
           if (obj.t === 'campfire') c.fires.push({ x: px, y, z: pz });
           if (obj.t === 'lantern' || obj.t === 'lamp') c.fires.push({ x: px, y, z: pz, lantern: true });
         } else {
