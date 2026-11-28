@@ -1,22 +1,24 @@
 import { fbm, hash2 } from '../core/noise.js';
 import { BIOMES, SHORE, SEABED } from './biomes.js';
 import { CELL, planSettlement, castleGround } from './structures.js';
+import { WORLD_TYPES, worldType } from './worldtypes.js';
 
 export const WATER_Y = -0.3;
 export const DIG_STEP = 0.5; // how far one spadeful lowers or raises the ground
 export const DIG_LIMIT = 4; // steps the ground may be moved from where nature left it, either way
 export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swum, shallower is waded
-const OCEAN = -0.05; // continent noise below this is sea: a little under half the world
-const MOUNTAIN = 0.13; // range noise above this is mountain
+// Where the sea level, the mountain line and the size of the two harsh regions come from: see worldtypes.js.
 const SNOW_LINE = 18; // mountains this high are snow-capped (much lower inside the frozen region)
 const VOLCANO_CELL = 560; // one possible volcano per square of this many tiles, inside the volcanic region
 const REGION_DISTANCE = 4300; // how far from the centre of the world the two harsh regions lie
-const FROST_RADIUS = 2600, HEAT_RADIUS = 2200; // each swallows a whole stretch of land and the sea beside it
 
 // Deterministic description of every tile: height, water, biome and natural object.
 export class Worldgen {
-  constructor(seed) {
+  // type: an id from WORLD_TYPES, the broad shape of the world (how much sea, how mountainous, ...)
+  constructor(seed, type) {
     this.seed = seed | 0;
+    this.kind = worldType(type);
+    this.type = WORLD_TYPES[this.kind];
     this.cache = new Map();
     this.dug = new Map(); // "x,z" -> steps the player has dug down (negative) or built up
     this.settlements = new Map(); // settlement grid square -> village, castle or null
@@ -32,7 +34,7 @@ export class Worldgen {
         let land = 0;
         for (let k = 0; k < 14; k++) {
           const r = k === 0 ? 0 : k < 7 ? 800 : 1700, b = (k / 7) * Math.PI * 2;
-          if (this.continent(x + Math.cos(b) * r, z + Math.sin(b) * r) > OCEAN + 0.004) land++;
+          if (this.continent(x + Math.cos(b) * r, z + Math.sin(b) * r) > this.type.sea + 0.004) land++;
         }
         spots.push({ x, z, land });
       }
@@ -49,16 +51,17 @@ export class Worldgen {
     const s = this.seed;
     // one smooth, very broad wave for the continents (no inland seas), a little mid-scale shape for
     // bays and headlands, and fine noise for a ragged shoreline with the odd island
-    return fbm(x / 6000, z / 6000, s + 20, 1) + fbm(x / 1400, z / 1400, s + 22, 2) * 0.035
-      + fbm(x / 170, z / 170, s + 21, 3) * 0.02 + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
+    const { scale, mid, fine } = this.type;
+    return fbm(x / scale, z / scale, s + 20, 1) + fbm(x / 1400, z / 1400, s + 22, 2) * mid
+      + fbm(x / 170, z / 170, s + 21, 3) * fine + Math.max(0, 1 - Math.hypot(x, z) / 60) * 0.5;
   }
 
   // How deep into each harsh region a spot is: 0 outside, rising to 1 at the heart. The edge is ragged.
   climate(x, z) {
     const wobble = fbm(x / 260, z / 260, this.seed + 60, 2) * 0.14;
     const depth = (c, r) => Math.max(0, Math.min(1, 1 - Math.hypot(x - c.x, z - c.z) / r + wobble));
-    const frost = depth(this.frostCentre, FROST_RADIUS);
-    return { frost, heat: frost > 0 ? 0 : depth(this.heatCentre, HEAT_RADIUS) };
+    const frost = depth(this.frostCentre, this.type.frost);
+    return { frost, heat: frost > 0 ? 0 : depth(this.heatCentre, this.type.heat) };
   }
 
   // The volcano whose slopes cover (x, z), with the distance to its centre, or null.
@@ -75,7 +78,7 @@ export class Worldgen {
             const vx = Math.round((cx + 0.2 + hash2(cx, cz, s + 51) * 0.6) * VOLCANO_CELL);
             const vz = Math.round((cz + 0.2 + hash2(cx, cz, s + 52) * 0.6) * VOLCANO_CELL);
             // only on solid land, and only inside the volcanic region
-            if (this.continent(vx, vz) > OCEAN + 0.03 && this.climate(vx, vz).heat > 0.12) {
+            if (this.continent(vx, vz) > this.type.sea + 0.03 && this.climate(vx, vz).heat > 0.12) {
               v = { x: vx, z: vz, radius: 52 + hash2(cx, cz, s + 53) * 30, height: 28 + hash2(cx, cz, s + 54) * 16 };
             }
           }
@@ -163,6 +166,7 @@ export class Worldgen {
   // The land as it would be with nobody living on it. A fresh object each time; tile() is the cached, final answer.
   natural(x, z) {
     const s = this.seed;
+    const OCEAN = this.type.sea, MOUNTAIN = this.type.mountain;
     const d = Math.hypot(x, z);
     // Shapes at several scales: continents and vast oceans, mountain ranges, and local bumps with ponds.
     // The old start area at the origin is lifted so it is always dry, gentle land.
@@ -213,7 +217,7 @@ export class Worldgen {
       else if (d > 14) {
         const j = (hash2(x, z, s + 7) - 0.5) * 0.05;
         const temp = fbm(x / 64 + 300, z / 64, s + 1, 2) + j;
-        const wet = fbm(x / 64, z / 64 + 300, s + 2, 2) + j;
+        const wet = fbm(x / 64, z / 64 + 300, s + 2, 2) + j + this.type.wet;
         if (temp > 0.2) biome = 'sand';
         else if (wet > 0.18) biome = 'pine';
         else if (wet < -0.18) biome = 'blossom';
@@ -284,7 +288,9 @@ export class Worldgen {
       const depth = t.salt ? WATER_Y - t.bed : 0;
       const table = t.salt ? (depth < 2 ? SEABED.shallow : depth < 4 ? SEABED.mid : SEABED.deep) : t.shore ? SHORE.spawn : BIOMES[t.biome].spawn;
       let r = hash2(x, z, this.seed + 11);
-      for (const [id, p] of table) {
+      const trees = this.type.trees;
+      for (const [id, chance] of table) {
+        const p = trees !== 1 && id.startsWith('tree_') ? chance * trees : chance;
         if (r < p) {
           obj = { t: id, v: (hash2(x, z, this.seed + 12) * 4) | 0 };
           break;

@@ -45,11 +45,13 @@ export class Progress {
     this.xp = saved.xp ?? 0;
     this.stats = Object.fromEntries(Object.keys(STATS).map((id) => [id, Math.min(STAT_CAP, saved.stats?.[id] ?? 0)]));
     this.skills = new Set((saved.skills ?? []).filter((id) => SKILL_BY_ID[id]));
+    // stat points a class starts with, on top of the one earned at every level
+    this.bonus = Math.max(0, Math.min(10, Math.floor(saved.bonus ?? 0)));
   }
 
-  toJSON() { return { level: this.level, xp: this.xp, stats: this.stats, skills: [...this.skills] }; }
+  toJSON() { return { level: this.level, xp: this.xp, stats: this.stats, skills: [...this.skills], bonus: this.bonus }; }
 
-  get statPoints() { return this.level - 1 - Object.values(this.stats).reduce((a, b) => a + b, 0); }
+  get statPoints() { return this.level - 1 + this.bonus - Object.values(this.stats).reduce((a, b) => a + b, 0); }
   get skillPoints() { return Math.floor(this.level / SKILL_EVERY) - [...this.skills].reduce((sum, id) => sum + SKILL_BY_ID[id].cost, 0); }
 
   // Returns how many levels were gained.

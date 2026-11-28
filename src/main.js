@@ -8,8 +8,9 @@ import { Sheet } from './ui/sheet.js';
 import { Compass } from './ui/compass.js';
 import { confirmRelocation } from './ui/relocation.js';
 import { Game, needsRelocation } from './game/game.js';
-import { loadSave, writeSave, clearSave, currentSlot } from './game/save.js';
-import { settings, keyName } from './settings.js';
+import { loadSave, writeSave, clearSave, currentSlot, takeNewGame, takeAutoplay } from './game/save.js';
+import { settings, saveSettings, keyName } from './settings.js';
+import { normalizeLook } from './game/looks.js';
 import { sfx, unlockAudio, setNight, setRain } from './audio.js';
 import { Rain, Flurry } from './render/weather.js';
 import { Minimap } from './ui/minimap.js';
@@ -18,6 +19,8 @@ import { Waypoints } from './render/waypoints.js';
 import { RESTORATION } from './game/encounters.js';
 import { BigMap } from './ui/bigmap.js';
 import { buildMenu } from './ui/menu.js';
+import { FrontDoor } from './ui/frontdoor.js';
+import { Creator } from './ui/creator.js';
 import { cropFor } from './world/crops.js';
 import { OBJECTS } from './world/objects.js';
 import { WATER_Y } from './world/worldgen.js';
@@ -45,7 +48,21 @@ import { Panels } from './ui/panels.js';
 const $ = (id) => document.getElementById(id);
 const save = loadSave();
 if (needsRelocation(save)) await confirmRelocation(save);
-const game = new Game(save);
+// What the new-game screen chose, when the page has just reloaded into a world that does not exist yet.
+const stashed = takeNewGame();
+const setup = save ? null : stashed;
+const game = new Game(save, setup);
+// ?play in the address skips the title screen and plays whatever is here (handy for screenshots and quick testing).
+const quickPlay = new URLSearchParams(location.search).has('play');
+// With no save and no new game, this world is only a backdrop for the title screen: it is never stored.
+const hasWorld = !!(save || setup || quickPlay);
+const keep = () => {
+  if (hasWorld) writeSave(game);
+};
+// Worlds from before characters were made play as the look kept on this device.
+game.character ??= { name: 'Wanderer', cls: null, look: normalizeLook(settings.look) };
+const look = game.character.look;
+if (setup) keep(); // so the new world exists from its first moment
 const p = game.player;
 if (import.meta.env.DEV) window.__game = game; // a handle for poking at the game from the browser console while developing
 
@@ -110,7 +127,7 @@ const folk = new VillagerFigures(scene, game, itemModels);
 const enemies = new Enemies(scene, game, models);
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine') });
-const playerModel = new PlayerModel(settings.look, itemModels);
+const playerModel = new PlayerModel(look, itemModels);
 const rain = new Rain(scene);
 const snow = new Flurry(scene, 0xffffff, 0.075);
 const ash = new Flurry(scene, 0x4a4246, 0.06);
@@ -146,7 +163,8 @@ const useButton = document.querySelector('.touch-pad .use');
 const layerButtons = [...document.querySelectorAll('#touch-controls .layer')];
 const compass = new Compass(game);
 const sheet = new Sheet(game);
-drawFace(settings.look);
+drawFace(look);
+$('portrait').dataset.tip = `${game.character.name}: character sheet (K)`;
 $('gear').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   panels.show();
@@ -311,8 +329,7 @@ let goalSeen = game.goals.index; // to chime when a goal is completed
 let hitSound = 'pick';
 let paused = true;
 const menu = $('menu');
-$('btn-play').textContent = save ? `Continue (day ${game.day})` : 'Play';
-
+const creator = new Creator(); // the one character creator, shared by the new-game screen and the pause menu
 
 function setPaused(v) {
   paused = v;
@@ -320,28 +337,66 @@ function setPaused(v) {
   if (v) {
     $('btn-play').textContent = 'Resume';
     $('menu-sub').textContent = `Paused on day ${game.day}. Your world is saved.`;
-    writeSave(game);
+    creator.mount($('creator-host'), { character: game.character, onChange: applyLook });
+    keep();
   }
 }
-$('btn-play').addEventListener('click', () => setPaused(false));
-addEventListener('pointerdown', unlockAudio);
-addEventListener('keydown', unlockAudio);
-buildMenu(game, {
-  beforeLeave: (discard) => {
-    if (!discard) writeSave(game);
-    discardOnExit = true;
-  },
+// The settings can also be opened from the title screen, where there is no game to resume:
+// the same menu, with only its Settings and Controls tabs.
+let fromTitle = false;
+function showSettings(on) {
+  fromTitle = on;
+  menu.classList.toggle('from-title', on);
+  menu.classList.toggle('hidden', !on);
+  if (on) {
+    front.hide();
+    $('btn-play').textContent = 'Back';
+    $('menu-sub').textContent = 'A cozy voxel survival game';
+    menuTabs.show('settings');
+  } else {
+    menuTabs.show('worlds');
+    front.show('title');
+  }
+}
+// Esc, or B on a gamepad, with no panel open: one step back out of whatever menu is showing.
+function menuBack() {
+  if (front.open) front.back();
+  else if (fromTitle) showSettings(false);
+  else setPaused(!paused);
+}
+// The character's look was changed: wear it, and keep it as the look new characters start from.
+function applyLook() {
+  playerModel.applyLook(look);
+  drawFace(look);
+  settings.look = { ...look };
+  saveSettings();
+  keep();
+}
+const beforeLeave = (discard) => {
+  if (!discard) keep();
+  discardOnExit = true;
+};
+$('btn-play').addEventListener('click', () => (fromTitle ? showSettings(false) : setPaused(false)));
+$('btn-title').addEventListener('click', () => {
+  keep();
+  menu.classList.add('hidden');
+  front.show('title');
+});
+addEventListener('pointerdown', unlockAudio, true);
+addEventListener('keydown', unlockAudio, true);
+const menuTabs = buildMenu(game, {
+  beforeLeave,
+  save: keep,
   onGraphics: applyGraphics,
   onFullscreen: toggleFullscreen,
-  onLook: () => {
-    playerModel.applyLook(settings.look);
-    drawFace(settings.look);
-$('gear').addEventListener('mousedown', (e) => {
-  e.stopPropagation();
-  panels.show();
-  sfx('ui');
 });
+const front = new FrontDoor({
+  game, hasWorld, creator, beforeLeave,
+  onContinue: () => {
+    front.hide();
+    setPaused(false);
   },
+  onSettings: () => showSettings(true),
 });
 $('btn-pack').addEventListener('mousedown', (e) => {
   e.stopPropagation();
@@ -361,8 +416,9 @@ $('btn-pause').addEventListener('mousedown', (e) => {
   e.stopPropagation();
   setPaused(true);
 });
-// ?play in the address skips the title menu (handy for screenshots and quick testing)
-if (new URLSearchParams(location.search).has('play')) setPaused(false);
+// A world just made or just chosen starts playing at once; otherwise the game opens on its front door.
+if (hasWorld && (setup || quickPlay || takeAutoplay())) setPaused(false);
+else front.start();
 $('btn-new').addEventListener('click', async () => {
   if (!await ask({ title: 'Start this world over?', text: 'Everything in this world will be deleted: your base, items and progress. This cannot be undone.', yes: 'Delete and restart', no: 'Keep my world', danger: true })) return;
   clearSave();
@@ -371,7 +427,7 @@ $('btn-new').addEventListener('click', async () => {
 });
 let discardOnExit = false;
 addEventListener('beforeunload', () => {
-  if (!discardOnExit) writeSave(game);
+  if (!discardOnExit) keep();
 });
 
 // ---------- input ----------
@@ -389,7 +445,7 @@ addEventListener('keydown', (e) => {
     if (bigmap.open) bigmap.hide();
     else if (sheet.open) sheet.hide();
     else if (panels.open) panels.hide();
-    else setPaused(!paused);
+    else menuBack();
     return;
   }
   if (paused) return;
@@ -837,7 +893,7 @@ const controllers = installControllers(canvas, {
       if (bigmap.open) bigmap.hide();
       else if (sheet.open) sheet.hide();
       else if (panels.open) panels.hide();
-      else setPaused(!paused);
+      else menuBack();
       return;
     }
     if (action === 'fullscreen') return void toggleFullscreen();
@@ -891,7 +947,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  controllers.poll(dt, paused ? menu : bigmap.open ? bigmap.root : panels.open ? panels.root : null);
+  controllers.poll(dt, front.open ? front.root : paused ? menu : bigmap.open ? bigmap.root : panels.open ? panels.root : null);
   if (!paused) step(dt);
   renderer.render(scene, camera);
 }
@@ -1132,7 +1188,7 @@ function step(dt) {
   saveTimer += dt;
   if (saveTimer > 30) {
     saveTimer = 0;
-    writeSave(game);
+    keep();
     // the cloud copy follows every few minutes, and only while the game is being played
     if (++cloudTicks >= 6) {
       cloudTicks = 0;

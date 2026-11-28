@@ -40,9 +40,9 @@ export function writeSave(game) {
   }
 }
 
-export function clearSave() {
+export function clearSave(slot = currentSlot()) {
   try {
-    localStorage.removeItem(keyFor(currentSlot()));
+    localStorage.removeItem(keyFor(slot));
   } catch {
     // nothing to clear
   }
@@ -52,6 +52,62 @@ export function clearSave() {
 export function slotSummary(slot) {
   const save = loadSave(slot);
   return save ? `Day ${save.day ?? 1}` : null;
+}
+
+// What the menus show about a slot: { day, level, name, cls, worldType, difficulty }, or null when it is empty.
+export function slotInfo(slot) {
+  const save = loadSave(slot);
+  if (!save) return null;
+  return {
+    day: save.day ?? 1, level: save.progress?.level ?? 1, name: save.character?.name ?? null, cls: save.character?.cls ?? null,
+    worldType: save.worldType ?? 'continents', difficulty: save.rules ? save.difficulty ?? 'custom' : save.difficulty ?? 'standard',
+  };
+}
+
+// ---- starting a new world ----
+// The new-game screen cannot build a world in place: the page reloads into it. What was chosen
+// waits here across that reload, and is taken exactly once.
+const NEW_KEY = 'emberglade-newgame';
+
+// setup: { slot, seed, worldType, difficulty, rules, character }
+export function stashNewGame(setup) {
+  try {
+    localStorage.setItem(NEW_KEY, JSON.stringify(setup));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The waiting setup, if it is for the slot now being loaded; it is removed either way.
+export function takeNewGame() {
+  try {
+    const raw = localStorage.getItem(NEW_KEY);
+    localStorage.removeItem(NEW_KEY);
+    const setup = raw ? JSON.parse(raw) : null;
+    return setup && typeof setup === 'object' && setup.slot === currentSlot() ? setup : null;
+  } catch {
+    return null;
+  }
+}
+
+// Set before reloading into a world that should start playing at once, without the title screen.
+const PLAY_KEY = 'emberglade-autoplay';
+export function playAfterReload() {
+  try {
+    sessionStorage.setItem(PLAY_KEY, '1');
+  } catch {
+    // no session storage: the title screen shows, which is harmless
+  }
+}
+export function takeAutoplay() {
+  try {
+    const on = sessionStorage.getItem(PLAY_KEY) === '1';
+    sessionStorage.removeItem(PLAY_KEY);
+    return on;
+  } catch {
+    return false;
+  }
 }
 
 // Offer the current world as a .json file download.

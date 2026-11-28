@@ -4,7 +4,13 @@ import { ENEMY_KINDS } from '../game/game.js';
 import { ANIMAL_RIGS } from './animals.js';
 import { ENEMY_RIGS } from './creatures.js';
 import { WATER_Y } from '../world/worldgen.js';
+import { DEFAULT_LOOK } from '../game/looks.js';
 
+// Two 0xRRGGBB colours blended: k = 0 gives a, 1 gives b.
+const mix = (a, b, k) => {
+  const ch = (shift) => Math.round(((a >> shift) & 255) * (1 - k) + ((b >> shift) & 255) * k) << shift;
+  return ch(16) | ch(8) | ch(0);
+};
 const EAT_TIME = 1.1, EAT_BITES = 4;
 const HURT_RED = new THREE.Color(0xff2a2a), HURT_GLOW = new THREE.Color(0x8a0f0f);
 
@@ -25,27 +31,86 @@ const limb = (w, h, d, color, x, y) => {
 
 // Blocky character facing +z. update() animates walking and tool swings.
 export class PlayerModel {
-  // look: {skin, hair, shirt, pants, style} from the character screen
+  // look: the colours and features of the character, as the creator makes them (see game/looks.js).
+  // A look with parts missing (a villager's, or one saved before the creator grew) gets the defaults.
   constructor(look, itemModels) {
     this.itemModels = itemModels;
-    const g = (this.group = new THREE.Group());
-    g.rotation.order = 'YXZ'; // so leaning forward or back follows the way the character faces
-    const skin = 0xf2c7a0, shirt = 0x4fa56a, pants = 0x5a4634, hair = 0x6b3f24;
+    this.group = new THREE.Group();
+    this.group.rotation.order = 'YXZ'; // so leaning forward or back follows the way the character faces
+    // Everything is built inside a frame that carries the character's build and height, which leaves
+    // the group itself free for the turn, lean and flinch animations.
+    const g = (this.frame = new THREE.Group());
+    this.group.add(g);
+    const { skin, shirt, pants, hair, eyes, boots, accent } = DEFAULT_LOOK;
     // the parts whose colour the player can choose, by what they are
-    this.lookParts = { skin: [], hair: [], shirt: [], pants: [] };
-    const body = part(0.5, 0.5, 0.3, shirt, 0, 0.75, 0), head = part(0.46, 0.42, 0.42, skin, 0, 1.21, 0);
-    // hair pieces; which ones show depends on the style
-    this.hairPieces = {
-      top: part(0.5, 0.16, 0.46, hair, 0, 1.46, 0), back: part(0.5, 0.3, 0.12, hair, 0, 1.3, -0.19),
-      long: part(0.52, 0.5, 0.12, hair, 0, 1.02, -0.2), sides: part(0.54, 0.34, 0.2, hair, 0, 1.22, -0.08),
-      tuft: part(0.2, 0.2, 0.3, hair, 0, 1.55, 0.02),
+    this.lookParts = { skin: [], hair: [], shirt: [], pants: [], eyes: [], boots: [], accent: [] };
+    // parts that are only there for some looks: each knows whether it is `on`, and what hides it
+    this.optional = [];
+    const some = (mesh, under = '') => {
+      mesh.userData.on = false;
+      mesh.userData.under = under;
+      this.optional.push(mesh);
+      g.add(mesh);
+      return mesh;
     };
-    g.add(body, head, ...Object.values(this.hairPieces));
+    const body = part(0.5, 0.5, 0.3, shirt, 0, 0.75, 0), head = part(0.46, 0.42, 0.42, skin, 0, 1.21, 0);
+    g.add(body, head);
+    // hair pieces; which ones show depends on the style. Those that stand up hide under a hat or helmet.
+    this.hairPieces = {
+      top: some(part(0.5, 0.16, 0.46, hair, 0, 1.46, 0), 'helmet'), back: some(part(0.5, 0.3, 0.12, hair, 0, 1.3, -0.19)),
+      long: some(part(0.52, 0.5, 0.12, hair, 0, 1.02, -0.2)), sides: some(part(0.54, 0.34, 0.2, hair, 0, 1.22, -0.08)),
+      tuft: some(part(0.2, 0.2, 0.3, hair, 0, 1.55, 0.02), 'helmet hat'),
+      fringe: some(part(0.48, 0.1, 0.05, hair, 0, 1.385, 0.215), 'helmet'),
+      tail: some(part(0.14, 0.42, 0.12, hair, 0, 1.1, -0.31)),
+      bun: some(part(0.22, 0.2, 0.2, hair, 0, 1.52, -0.15), 'helmet hat'),
+      hawk: some(part(0.12, 0.24, 0.5, hair, 0, 1.5, -0.01), 'helmet hat'),
+      spikeA: some(part(0.13, 0.17, 0.13, hair, -0.14, 1.6, 0.06), 'helmet hat'),
+      spikeB: some(part(0.13, 0.2, 0.13, hair, 0.02, 1.62, -0.08), 'helmet hat'),
+      spikeC: some(part(0.13, 0.16, 0.13, hair, 0.15, 1.6, 0.05), 'helmet hat'),
+      braidL: some(part(0.1, 0.46, 0.1, hair, -0.27, 1.06, 0.1)), braidR: some(part(0.1, 0.46, 0.1, hair, 0.27, 1.06, 0.1)),
+    };
     this.lookParts.shirt.push(body);
     this.lookParts.skin.push(head);
     this.lookParts.hair.push(...Object.values(this.hairPieces));
-    g.add(part(0.07, 0.07, 0.02, 0x2b2b33, -0.11, 1.22, 0.215));
-    g.add(part(0.07, 0.07, 0.02, 0x2b2b33, 0.11, 1.22, 0.215));
+    // the face: eyes, brows, and whatever beard and marks the look has
+    const eyeL = part(0.07, 0.07, 0.02, eyes, -0.11, 1.22, 0.215), eyeR = part(0.07, 0.07, 0.02, eyes, 0.11, 1.22, 0.215);
+    g.add(eyeL, eyeR);
+    this.lookParts.eyes.push(eyeL, eyeR);
+    this.brows = [some(part(0.1, 0.03, 0.02, hair, -0.11, 1.285, 0.216)), some(part(0.1, 0.03, 0.02, hair, 0.11, 1.285, 0.216))];
+    this.beardPieces = {
+      stubble: some(part(0.4, 0.13, 0.012, hair, 0, 1.065, 0.212)),
+      moustache: some(part(0.2, 0.05, 0.04, hair, 0, 1.115, 0.225)),
+      goatee: some(part(0.14, 0.13, 0.05, hair, 0, 1.04, 0.225)),
+      full: some(part(0.48, 0.15, 0.08, hair, 0, 1.04, 0.2)),
+    };
+    this.lookParts.hair.push(...this.brows, this.beardPieces.moustache, this.beardPieces.goatee, this.beardPieces.full);
+    const scar = some(part(0.03, 0.2, 0.012, skin, 0.13, 1.2, 0.214));
+    scar.rotation.z = 0.35;
+    this.markPieces = {
+      freckles: [[-0.14, 1.16], [-0.08, 1.14], [0.08, 1.14], [0.14, 1.16]].map(([x, y]) => some(part(0.03, 0.03, 0.01, skin, x, y, 0.213))),
+      blush: [some(part(0.08, 0.05, 0.01, skin, -0.15, 1.14, 0.213)), some(part(0.08, 0.05, 0.01, skin, 0.15, 1.14, 0.213))],
+      scar: [scar],
+      paint: [some(part(0.12, 0.035, 0.012, accent, -0.12, 1.165, 0.214)), some(part(0.12, 0.035, 0.012, accent, 0.12, 1.165, 0.214))],
+    };
+    this.lookParts.accent.push(...this.markPieces.paint);
+    // something extra to wear
+    const lens = (x) => {
+      const mesh = part(0.13, 0.1, 0.012, 0xcfe8f5, x, 1.22, 0.236);
+      mesh.material.transparent = true;
+      mesh.material.opacity = 0.4;
+      mesh.castShadow = false;
+      return some(mesh);
+    };
+    this.accessoryPieces = {
+      scarf: [some(part(0.54, 0.1, 0.38, accent, 0, 1.0, 0)), some(part(0.12, 0.26, 0.05, accent, 0.14, 0.87, 0.17))],
+      cape: [some(part(0.5, 0.72, 0.04, accent, 0, 0.66, -0.2))],
+      headband: [some(part(0.5, 0.07, 0.5, accent, 0, 1.345, 0), 'helmet')],
+      glasses: [some(part(0.42, 0.025, 0.02, accent, 0, 1.268, 0.236)), lens(-0.11), lens(0.11)],
+      hat: [some(part(0.74, 0.05, 0.7, accent, 0, 1.47, 0), 'helmet'), some(part(0.52, 0.22, 0.48, accent, 0, 1.59, 0), 'helmet')],
+    };
+    for (const pieces of Object.values(this.accessoryPieces)) {
+      this.lookParts.accent.push(...pieces.filter((mesh) => !mesh.material.transparent));
+    }
     this.legL = limb(0.22, 0.5, 0.26, pants, -0.13, 0.5);
     this.legR = limb(0.22, 0.5, 0.26, pants, 0.13, 0.5);
     this.armL = limb(0.16, 0.48, 0.22, skin, -0.34, 0.98);
@@ -53,6 +118,11 @@ export class PlayerModel {
     g.add(this.legL, this.legR, this.armL, this.armR);
     this.lookParts.pants.push(this.legL.children[0], this.legR.children[0]);
     this.lookParts.skin.push(this.armL.children[0], this.armR.children[0]);
+    for (const leg of [this.legL, this.legR]) {
+      const boot = part(0.24, 0.15, 0.27, boots, 0, -0.425, 0.01);
+      leg.add(boot);
+      this.lookParts.boots.push(boot);
+    }
     // Armor pieces sit just outside the body parts and are shown when worn.
     this.armorParts = [
       [part(0.52, 0.24, 0.48, 0xffffff, 0, 1.44, 0)],
@@ -87,27 +157,53 @@ export class PlayerModel {
     this.phase = 0;
     this.swing = 0;
     this.facing = 0;
-    if (look) this.applyLook(look);
-    else this.applyLook({ skin, hair, shirt, pants, style: 'short' });
+    this.applyLook(look ?? DEFAULT_LOOK);
   }
 
-  // Recolour the body and switch hair pieces for the chosen style.
-  applyLook(look) {
-    for (const key of ['skin', 'hair', 'shirt', 'pants']) {
-      for (const mesh of this.lookParts[key]) {
-        mesh.material.color.setHex(look[key]);
-        mesh.userData.base?.setHex(look[key]); // so the damage flash fades back to the new colour
-      }
+  // Recolour the body, and show the hair, beard, marks and accessory this look has.
+  applyLook(raw) {
+    const look = { ...DEFAULT_LOOK, ...raw };
+    const paint = (mesh, colour) => {
+      mesh.material.color.setHex(colour);
+      mesh.userData.base?.setHex(colour); // so the damage flash fades back to the new colour
+    };
+    for (const [key, meshes] of Object.entries(this.lookParts)) {
+      for (const mesh of meshes) paint(mesh, look[key]);
     }
-    const shown = { short: ['top', 'back'], long: ['top', 'back', 'long', 'sides'], tuft: ['top', 'tuft'], bald: [] }[look.style] ?? ['top', 'back'];
-    for (const [name, mesh] of Object.entries(this.hairPieces)) mesh.userData.hairOn = shown.includes(name);
+    // colours worked out from the chosen ones
+    paint(this.beardPieces.stubble, mix(look.skin, look.hair, 0.4));
+    for (const mesh of this.markPieces.freckles) paint(mesh, mix(look.skin, 0x5a2f1a, 0.4));
+    for (const mesh of this.markPieces.blush) paint(mesh, mix(look.skin, 0xe8606e, 0.5));
+    paint(this.markPieces.scar[0], mix(look.skin, 0x9a3038, 0.55));
+    for (const mesh of this.optional) mesh.userData.on = false;
+    const on = (meshes) => {
+      for (const mesh of meshes ?? []) mesh.userData.on = true;
+    };
+    const HAIR = {
+      short: ['top', 'back'], long: ['top', 'back', 'long', 'sides'], bob: ['top', 'back', 'sides', 'fringe'],
+      ponytail: ['top', 'back', 'tail'], bun: ['top', 'back', 'bun'], braids: ['top', 'back', 'braidL', 'braidR'],
+      tuft: ['top', 'tuft'], spiky: ['top', 'spikeA', 'spikeB', 'spikeC'], mohawk: ['hawk'], bald: [],
+    };
+    on((HAIR[look.style] ?? HAIR.short).map((name) => this.hairPieces[name]));
+    const BEARD = { stubble: ['stubble'], moustache: ['moustache'], goatee: ['goatee', 'moustache'], full: ['full', 'moustache'] };
+    on((BEARD[look.beard] ?? []).map((name) => this.beardPieces[name]));
+    if (look.brows !== 'none') on(this.brows);
+    for (const brow of this.brows) brow.scale.y = look.brows === 'bold' ? 2 : 1;
+    on(this.markPieces[look.mark]);
+    on(this.accessoryPieces[look.accessory]);
+    this.hat = look.accessory === 'hat';
+    const wide = { slim: 0.9, stocky: 1.12 }[look.build] ?? 1, tall = { short: 0.93, tall: 1.07 }[look.height] ?? 1;
+    this.frame.scale.set(wide, tall, wide);
     this.showHair();
   }
 
-  // Hair hides under a helmet.
+  // Show the parts this look has. Hair that stands up hides under a helmet or a hat, and a hat under a helmet.
   showHair() {
-    const helmet = this.armorParts[0][0].visible;
-    for (const [name, mesh] of Object.entries(this.hairPieces)) mesh.visible = !!mesh.userData.hairOn && !(helmet && (name === 'top' || name === 'tuft'));
+    const helmet = this.armorParts[0][0].visible, hat = !!this.hat && !helmet;
+    for (const mesh of this.optional) {
+      const under = mesh.userData.under;
+      mesh.visible = mesh.userData.on && !(helmet && under.includes('helmet')) && !(hat && under.includes('hat'));
+    }
   }
 
   startSwing() { this.swing = 1; }

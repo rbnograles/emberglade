@@ -1,8 +1,4 @@
-export const DIFFICULTIES = {
-  relaxed: { name: 'Relaxed', drain: 0.5 },
-  standard: { name: 'Standard', drain: 1 },
-  challenging: { name: 'Challenging', drain: 1.5 },
-};
+export { DIFFICULTIES } from './rules.js'; // where the difficulties and their rules now live
 
 export const MAX_HEALTH = 10;
 export const MAX_HUNGER = 10;

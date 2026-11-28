@@ -2,7 +2,9 @@ import { turnedRoof, roofItem } from '../world/castle-roofs.js';
 import { Encounters } from './encounters.js';
 import { ENHANCEMENTS, LOOT, fits } from './enhance.js';
 import { Progress, xpFor } from './progress.js';
-import { DIFFICULTIES } from './survival.js';
+import { DIFFICULTIES, rulesFor } from './rules.js';
+import { CLASS_POINTS, classOf } from './classes.js';
+import { normalizeCharacter } from './looks.js';
 import { Wildlife } from './wildlife.js';
 import { Villagers } from './villagers.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH, DIG_STEP, DIG_LIMIT } from '../world/worldgen.js';
@@ -71,10 +73,19 @@ export function needsRelocation(save) {
 // All game rules and state. No rendering: the view listens to events.
 // Events: toast{text}, hit{x,z}, swing, inv, goal, newday, faint, open{what,x,z}
 export class Game {
-  constructor(save = null) {
-    this.seed = save?.seed ?? ((Math.random() * 2 ** 31) | 0);
-    this.difficulty = Object.hasOwn(DIFFICULTIES, save?.difficulty) ? save.difficulty : 'standard';
-    this.gen = new Worldgen(this.seed);
+  // setup: what the new-game screen chose for a world that does not exist yet:
+  // { seed, worldType, difficulty, rules, character: { name, cls, look } }. Ignored when there is a save.
+  constructor(save = null, setup = null) {
+    const made = save ?? setup;
+    this.seed = made?.seed ?? ((Math.random() * 2 ** 31) | 0);
+    const ruled = rulesFor(made);
+    this.difficulty = ruled.difficulty; // a preset's id, or 'custom'
+    this.rules = ruled.rules;
+    this.xpCarry = 0; // the fraction of a point left over when experience is scaled
+    this.gen = new Worldgen(this.seed, made?.worldType);
+    // who the player is in this world: null for a world from before characters were made
+    this.character = normalizeCharacter(made?.character);
+    const startClass = save ? null : classOf(this.character?.cls);
     for (const [key, steps] of Object.entries(save?.dug ?? {})) if (Number.isInteger(steps)) this.gen.dug.set(key, steps);
     this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs, save?.upper);
     this.lastLevel = 0;
@@ -96,7 +107,7 @@ export class Game {
     this.cursor = null; // stack being carried by the mouse in the inventory panel
     this.goals = new Goals(save?.goals);
     this.encounters = new Encounters(save?.encounters);
-    this.progress = new Progress(save?.progress);
+    this.progress = new Progress(save?.progress ?? (startClass ? { stats: startClass.stats, bonus: CLASS_POINTS } : undefined));
     // places the player has pinned on the map: [{x, z, color}], also shown as beacons in the world
     this.markers = (save?.markers ?? []).map((m) => ({ ...m }));
     this.day = save?.day ?? 1;
@@ -140,6 +151,12 @@ export class Game {
     this.player.flask ??= 0;
     this.player.breath ??= MAX_BREATH;
     this.updateCapacity();
+    // a new character starts with the kit of their class in the pack, and in full health for their stats
+    if (startClass) {
+      for (const [id, n] of startClass.kit) this.inv.add(id, n);
+      this.player.health = this.progress.maxHealth;
+      this.player.stamina = this.progress.maxStamina;
+    }
     // Saves from before bags existed may hold items in slots that now need a bag: pull them forward.
     this.inv.slots.forEach((s, i) => {
       if (!s || i < this.inv.limit) return;
@@ -164,7 +181,7 @@ export class Game {
       for (const st of castles) {
         const { x, z } = st.foot;
         if (!lowland.has(this.gen.tile(x, z).biome)) continue;
-        if (far(x, z, this.gen.frostCentre, 3400) && far(x, z, this.gen.heatCentre, 3000)) return { x, z };
+        if (far(x, z, this.gen.frostCentre, this.gen.type.frost + 800) && far(x, z, this.gen.heatCentre, this.gen.type.heat + 800)) return { x, z };
       }
     }
     return wild;
@@ -179,7 +196,7 @@ export class Game {
       if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
       // well clear of the two harsh regions: they are places to travel to, not to wake up beside
       const far = (c, r) => Math.hypot(x - c.x, z - c.z) > r;
-      if (!far(this.gen.frostCentre, 3400) || !far(this.gen.heatCentre, 3000)) continue;
+      if (!far(this.gen.frostCentre, this.gen.type.frost + 800) || !far(this.gen.heatCentre, this.gen.type.heat + 800)) continue;
       // and within a few minutes' walk of the sea, so both the land and the ocean are there to explore
       let sea = false;
       for (let k = 0; k < 16 && !sea; k++) {
@@ -200,6 +217,15 @@ export class Game {
     return { x: 0, z: 0 };
   }
 
+  // Switch this world to one of the named difficulties.
+  setDifficulty(id) {
+    if (!Object.hasOwn(DIFFICULTIES, id)) return false;
+    this.difficulty = id;
+    this.rules = { ...DIFFICULTIES[id].rules };
+    if (!this.rules.enemies) for (const e of [...this.enemies]) this.removeEnemy(e);
+    return true;
+  }
+
   on(fn) { this.listeners.push(fn); }
   emit(type, data = {}) { for (const fn of this.listeners) fn(type, data); }
   toast(text) { this.emit('toast', { text }); }
@@ -216,7 +242,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, cliffCastles: true, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
+      seed: this.seed, worldType: this.gen.kind, difficulty: this.difficulty, rules: this.rules, character: this.character, gen: GEN_VERSION, cliffCastles: true, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
       livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
@@ -594,7 +620,9 @@ export class Game {
 
   // Experience toward the next level; each level brings a stat point, every third a skill point.
   gainXp(n) {
-    const gained = this.progress.addXp(n);
+    const scaled = n * this.rules.xp + this.xpCarry, whole = Math.floor(scaled);
+    this.xpCarry = scaled - whole;
+    const gained = this.progress.addXp(whole);
     if (!gained) return;
     this.player.health = this.maxHealth; // a new level restores you
     this.toast('Level ' + this.progress.level + '! Press K to spend your points.');
@@ -1565,7 +1593,8 @@ export class Game {
     const p = this.player, night = this.isNight;
     const seaCount = this.enemies.filter((e) => ENEMY_KINDS[e.kind].sea).length;
     const inSea = this.swimming && this.gen.tile(Math.floor(p.x), Math.floor(p.z)).salt;
-    if (inSea && seaCount < (night ? 2 : 1)) {
+    const crowd = this.rules.enemies; // 0 = a world with no hostile creatures
+    if (inSea && crowd > 0 && seaCount < (night ? 2 : 1)) {
       this.seaTimer -= dt;
       if (this.seaTimer <= 0) {
         this.seaTimer = 14;
@@ -1574,7 +1603,7 @@ export class Game {
     }
     const golems = this.enemies.filter((e) => ENEMY_KINDS[e.kind].mountain).length;
     const here = this.gen.tile(Math.floor(p.x), Math.floor(p.z)).biome;
-    if (['mountain', 'snow', 'winter', 'ash', 'volcano'].includes(here) && golems < 2) {
+    if (['mountain', 'snow', 'winter', 'ash', 'volcano'].includes(here) && crowd > 0 && golems < Math.max(1, Math.round(2 * crowd))) {
       this.golemTimer -= dt;
       if (this.golemTimer <= 0) {
         this.golemTimer = 16;
@@ -1587,7 +1616,7 @@ export class Game {
       }
     }
     // the first night is quiet, to give a new player time to find their feet
-    if (night && this.day >= 2 && this.enemies.length - seaCount - golems < Math.min(8, 2 + Math.floor(this.day / 2))) {
+    if (night && this.day >= 2 && this.enemies.length - seaCount - golems < Math.round(Math.min(8, 2 + Math.floor(this.day / 2)) * crowd)) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 5;
@@ -1670,7 +1699,7 @@ export class Game {
       if (hunting && !spec.ranged && !level && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
         e.strike = 0.35;
-        this.hurt(ENEMY_KINDS[e.kind].damage, e);
+        this.hurt(ENEMY_KINDS[e.kind].damage * this.rules.enemyDamage, e);
       }
     }
   }
@@ -1684,7 +1713,7 @@ export class Game {
       s.life -= dt;
       const hit = Math.hypot(s.x - p.x, s.z - p.z) < 0.55 && Math.abs(s.y - p.y - 0.7) < 1.2;
       const wall = OBJECTS[this.world.get(Math.floor(s.x), Math.floor(s.z))?.t]?.block;
-      if (hit) this.hurt(s.damage, s);
+      if (hit) this.hurt(s.damage * this.rules.enemyDamage, s);
       if (hit || wall || s.life <= 0) this.projectiles.splice(this.projectiles.indexOf(s), 1);
     }
   }
@@ -1781,7 +1810,7 @@ export class Game {
 
   tick(dt, sprinting = false) {
     this.reachMarkers();
-    this.time += dt / DAY_SECONDS;
+    this.time += dt / (DAY_SECONDS * this.rules.dayLength);
     if (this.time >= 1) {
       this.startDay();
     }
@@ -1852,7 +1881,7 @@ export class Game {
     } else pl.breath = Math.min(MAX_BREATH, pl.breath + (dt * MAX_BREATH) / 3);
     if (under !== this.wasUnder) this.emit(under ? 'dive' : 'surface');
     this.wasUnder = under;
-    const drain = DIFFICULTIES[this.difficulty].drain;
+    const drain = this.rules.drain;
     if (this.swimming) {
       // swimming uses energy; with none left you start to drown
       const p = this.player;
@@ -1895,7 +1924,7 @@ export class Game {
   faint() {
     const p = this.player;
     p.riding = null;
-    const dropped = this.dropPack();
+    const dropped = this.rules.keepPack ? false : this.dropPack();
     const wake = p.bed ? 'your bed' : 'your original start';
     p.health = 6;
     p.hunger = 6;

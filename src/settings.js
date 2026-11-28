@@ -6,7 +6,8 @@ export const DEFAULT_KEYS = {
   inventory: 'Tab', eat: 'KeyC', drink: 'KeyX', use: 'KeyF', camLeft: 'KeyQ', camRight: 'KeyE', camReset: 'KeyR', map: 'KeyM', sheet: 'KeyK', rotate: 'KeyT',
 };
 
-export const DEFAULT_LOOK = { skin: 0xf2c7a0, hair: 0x6b3f24, shirt: 0x4fa56a, pants: 0x5a4634, style: 'short' };
+import { DEFAULT_LOOK, normalizeLook } from './game/looks.js';
+export { DEFAULT_LOOK };
 
 export const KEY_LABELS = {
   up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', sprint: 'Sprint', jump: 'Jump',
@@ -28,7 +29,7 @@ export const settings = {
   music: saved.music ?? 0.3,
   graphics: ['low', 'balanced', 'high'].includes(saved.graphics) ? saved.graphics : 'high',
   keys: { ...DEFAULT_KEYS, ...(saved.keys ?? {}) },
-  look: { ...DEFAULT_LOOK, ...(saved.look ?? {}) }, // the character's colours and hair
+  look: normalizeLook(saved.look), // the look a new character starts from: the last one made on this device
 };
 
 export function saveSettings() {

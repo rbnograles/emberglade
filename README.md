@@ -96,6 +96,7 @@ The game saves in the browser and needs nothing else. To also keep worlds, progr
 
 1. Create a project, open the SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql).
 2. Turn on Authentication → Sign In / Providers → Anonymous sign-ins.
+   - For player accounts (a name and a password, no email), also run [`supabase/accounts.sql`](supabase/accounts.sql). Without it everyone plays as a guest.
 3. Copy `.env.example` to `.env.local` and fill in the project URL and anon key (Project Settings → API). On Vercel, add the same two variables to the project and redeploy.
 
 Each browser then signs in as an anonymous guest and can only reach its own rows. The Worlds tab shows the connection and has buttons to save to, and load from, the cloud; the game also syncs every few minutes while you play.

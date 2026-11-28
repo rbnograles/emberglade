@@ -122,34 +122,78 @@ const setBar = (segs, value, max = 10) => segs.forEach((s, i) => (s.style.width 
 
 const RING = 2 * Math.PI * 45; // length of the portrait's experience ring, in its own units
 
-// The character's face as 16 x 16 pixel art in the colours chosen on the character screen.
-export function drawFace(look) {
-  const c = $('face').getContext('2d');
+// The character's face as 16 x 16 pixel art, in the look made on the character screen.
+// canvas: where to draw it; the portrait in the corner of the screen unless told otherwise.
+export function drawFace(look, canvas = $('face')) {
+  const c = canvas.getContext('2d');
   const css = (n) => '#' + n.toString(16).padStart(6, '0');
   const fill = (color, x, y, w, h) => {
     c.fillStyle = css(color);
     c.fillRect(x, y, w, h);
   };
   const shade = (n, k) => (((n >> 16) * k) << 16) | ((((n >> 8) & 255) * k) << 8) | ((n & 255) * k);
+  const mix = (a, b, k) => {
+    const ch = (shift) => Math.round(((a >> shift) & 255) * (1 - k) + ((b >> shift) & 255) * k) << shift;
+    return ch(16) | ch(8) | ch(0);
+  };
+  const { skin, hair, style } = look, accent = look.accent ?? 0xd9534f;
   c.clearRect(0, 0, 16, 16);
   fill(look.shirt, 3, 14, 10, 2); // shoulders
-  fill(shade(look.skin, 0.86), 6, 13, 4, 1); // neck
-  fill(look.skin, 3, 4, 10, 9); // face
-  if (look.style !== 'bald') {
-    fill(look.hair, 3, 2, 10, 3); // hair on top
-    fill(look.hair, 2, 3, 1, 4);
-    fill(look.hair, 13, 3, 1, 4);
-    if (look.style === 'long') {
-      fill(look.hair, 2, 5, 2, 9);
-      fill(look.hair, 12, 5, 2, 9);
-    } else if (look.style === 'tuft') fill(look.hair, 6, 0, 4, 2);
-    else fill(look.hair, 3, 5, 2, 1); // a short fringe
+  fill(shade(skin, 0.86), 6, 13, 4, 1); // neck
+  if (look.accessory === 'scarf') fill(accent, 4, 13, 8, 1);
+  fill(skin, 3, 4, 10, 9); // face
+  if (style === 'mohawk') fill(hair, 7, 0, 2, 5);
+  else if (style !== 'bald') {
+    fill(hair, 3, 2, 10, 3); // hair on top
+    fill(hair, 2, 3, 1, 4);
+    fill(hair, 13, 3, 1, 4);
+    if (style === 'long') {
+      fill(hair, 2, 5, 2, 9);
+      fill(hair, 12, 5, 2, 9);
+    } else if (style === 'bob') {
+      fill(hair, 2, 5, 2, 6);
+      fill(hair, 12, 5, 2, 6);
+      fill(hair, 3, 5, 10, 1);
+    } else if (style === 'braids') {
+      fill(hair, 2, 5, 1, 9);
+      fill(hair, 13, 5, 1, 9);
+    } else if (style === 'ponytail') fill(hair, 13, 6, 2, 5);
+    else if (style === 'tuft' || style === 'bun') fill(hair, 6, 0, 4, 2);
+    else if (style === 'spiky') {
+      fill(hair, 4, 1, 2, 1);
+      fill(hair, 7, 0, 2, 2);
+      fill(hair, 10, 1, 2, 1);
+    } else fill(hair, 3, 5, 2, 1); // a short fringe
   }
-  fill(0x2b2b33, 5, 8, 2, 2); // eyes
-  fill(0x2b2b33, 9, 8, 2, 2);
+  if (look.mark === 'blush') {
+    fill(mix(skin, 0xe8606e, 0.5), 4, 10, 2, 1);
+    fill(mix(skin, 0xe8606e, 0.5), 10, 10, 2, 1);
+  } else if (look.mark === 'freckles') {
+    for (const [x, y] of [[4, 10], [5, 11], [10, 11], [11, 10]]) fill(mix(skin, 0x5a2f1a, 0.4), x, y, 1, 1);
+  } else if (look.mark === 'scar') fill(mix(skin, 0x9a3038, 0.55), 11, 6, 1, 5);
+  else if (look.mark === 'paint') {
+    fill(accent, 4, 10, 3, 1);
+    fill(accent, 9, 10, 3, 1);
+  }
+  if (look.brows === 'bold') {
+    fill(shade(hair, 0.8), 5, 7, 2, 1);
+    fill(shade(hair, 0.8), 9, 7, 2, 1);
+  }
+  fill(look.eyes ?? 0x2b2b33, 5, 8, 2, 2); // eyes
+  fill(look.eyes ?? 0x2b2b33, 9, 8, 2, 2);
   fill(0xffffff, 5, 8, 1, 1);
   fill(0xffffff, 9, 8, 1, 1);
-  fill(shade(look.skin, 0.72), 7, 11, 2, 1); // mouth
+  if (look.beard === 'stubble') fill(mix(skin, hair, 0.4), 4, 11, 8, 2);
+  else if (look.beard === 'full') fill(hair, 3, 10, 10, 3);
+  else if (look.beard === 'goatee') fill(hair, 7, 12, 2, 1);
+  if (look.beard === 'moustache' || look.beard === 'goatee') fill(hair, 6, 10, 4, 1);
+  fill(shade(skin, 0.72), 7, 11, 2, 1); // mouth
+  if (look.accessory === 'headband') fill(accent, 3, 5, 10, 1);
+  else if (look.accessory === 'glasses') fill(accent, 4, 7, 8, 1);
+  else if (look.accessory === 'hat') {
+    fill(accent, 3, 0, 10, 3);
+    fill(shade(accent, 0.85), 1, 3, 14, 1);
+  }
 }
 
 // On a touch screen there are no keys or mouse buttons, so messages name the on-screen buttons instead.
