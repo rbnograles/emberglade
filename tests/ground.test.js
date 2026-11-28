@@ -5,6 +5,8 @@ import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS, placeName, roofColour } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
 import { Game, needsRelocation } from '../src/game/game.js';
+import { Encounters, suitsSite } from '../src/game/encounters.js';
+import { KEEPER_BY_ID } from '../src/game/keepers.js';
 import { buildTerrain, gaps, CHUNK } from '../src/render/terrain.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
@@ -554,6 +556,21 @@ describe('rules beside and beneath rock', () => {
       const s = g.wildSpawn();
       expect(g.gen.tile(s.x, s.z).land).toBeUndefined();
     }
+  });
+
+  it('never gives a keeper its home on the rugged country', () => {
+    const briarhart = KEEPER_BY_ID.briarhart, lampfin = KEEPER_BY_ID.lampfin;
+    const meadow = { h: 15.5, water: false, salt: false, lava: false, ice: false, shore: false, frost: 0, heat: 0, biome: 'meadow' };
+    const deep = { h: WATER_Y, water: true, salt: true, bed: -8, lava: false, ice: false, shore: false, boiling: false, frost: 0, heat: 0, biome: 'ocean' };
+    expect(suitsSite(briarhart, meadow)).toBe(true);
+    expect(suitsSite(briarhart, { ...meadow, land: 'stacks' })).toBe(false);
+    expect(suitsSite(lampfin, deep)).toBe(true);
+    expect(suitsSite(lampfin, { ...deep, land: 'stacks', slabs: [[2, 9]] })).toBe(false);
+    // a world whose meadow keeper was once found on top of a sea stack
+    const gen = new Worldgen(84), keepers = new Encounters();
+    while (!keepers.sites.has('briarhart')) keepers.locate(gen, 40);
+    const site = keepers.sites.get('briarhart');
+    expect(gen.tile(Math.floor(site.x), Math.floor(site.z)).land).toBeUndefined();
   });
 });
 
