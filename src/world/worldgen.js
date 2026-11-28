@@ -1,5 +1,6 @@
 import { fbm, hash2 } from '../core/noise.js';
 import { BIOMES, SHORE, SEABED } from './biomes.js';
+import { CELL, planSettlement } from './structures.js';
 
 export const WATER_Y = -0.3;
 export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swum, shallower is waded
@@ -15,6 +16,7 @@ export class Worldgen {
   constructor(seed) {
     this.seed = seed | 0;
     this.cache = new Map();
+    this.settlements = new Map(); // settlement grid square -> village, castle or null
     this.volcanoes = new Map(); // grid cell -> volcano or null
     // Each world has exactly one frozen region and one volcanic region, on roughly opposite sides.
     // They are put where there is the most land, so neither is lost at sea.
@@ -89,6 +91,53 @@ export class Worldgen {
     const k = (x + 33554432) * 67108864 + (z + 33554432);
     let t = this.cache.get(k);
     if (t) return t;
+    t = this.natural(x, z);
+    // a village or castle stands on level, dry ground at the height of its middle
+    if (this.settlementAt(x, z)) {
+      const st = this.settlementAt(x, z);
+      Object.assign(t, { h: st.h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true });
+    }
+    if (this.cache.size > 200000) this.cache.clear();
+    this.cache.set(k, t);
+    return t;
+  }
+
+  // The settlement planned for one square of the settlement grid, or null. Worked out once.
+  settlementFor(cellX, cellZ) {
+    const key = cellX + ',' + cellZ;
+    if (!this.settlements.has(key)) this.settlements.set(key, planSettlement(this.seed, cellX, cellZ, (x, z) => this.natural(x, z)));
+    return this.settlements.get(key);
+  }
+
+  // The settlement whose ground this tile is part of, or null.
+  settlementAt(x, z) {
+    const st = this.settlementFor(Math.floor(x / CELL), Math.floor(z / CELL));
+    return st && Math.abs(x - st.x) <= st.radius + 1 && Math.abs(z - st.z) <= st.radius + 1 ? st : null;
+  }
+
+  // One cell of a settlement's plan ({ obj, floor, roof }), or null.
+  settledCell(x, z) {
+    const st = this.settlementAt(x, z);
+    return st ? st.cells.get((x - st.x) + ',' + (z - st.z)) ?? null : null;
+  }
+
+  floorAt(x, z) { return this.settledCell(x, z)?.floor ?? null; }
+  roofAt(x, z) { return this.settledCell(x, z)?.roof ?? null; }
+
+  // Every settlement whose middle is within `radius` tiles.
+  settlementsNear(x, z, radius) {
+    const out = [];
+    for (let cz = Math.floor((z - radius) / CELL); cz <= Math.floor((z + radius) / CELL); cz++) {
+      for (let cx = Math.floor((x - radius) / CELL); cx <= Math.floor((x + radius) / CELL); cx++) {
+        const st = this.settlementFor(cx, cz);
+        if (st && Math.hypot(st.x - x, st.z - z) <= radius) out.push(st);
+      }
+    }
+    return out;
+  }
+
+  // The land as it would be with nobody living on it. A fresh object each time; tile() is the cached, final answer.
+  natural(x, z) {
     const s = this.seed;
     const d = Math.hypot(x, z);
     // Shapes at several scales: continents and vast oceans, mountain ranges, and local bumps with ponds.
@@ -193,15 +242,18 @@ export class Worldgen {
     // lava: burns whoever stands in it. ice: frozen water, solid to walk on.
     // frost / heat: how deep this spot is in the frozen or the volcanic region (0 = outside).
     // boiling: scalding sea in the volcanic region.
-    t = { h, bed, water, salt, biome, shore, lava, ice, boiling, frost, heat, obj: undefined };
-    if (this.cache.size > 200000) this.cache.clear();
-    this.cache.set(k, t);
-    return t;
+    return { h, bed, water, salt, biome, shore, lava, ice, boiling, frost, heat, obj: undefined };
   }
   // Natural object on a tile, or null. The returned object is shared: do not mutate it.
   object(x, z) {
     const t = this.tile(x, z);
     if (t.obj !== undefined) return t.obj;
+    if (t.settled) {
+      // inside a settlement only what was planned stands; nothing grows wild
+      const planned = this.settledCell(x, z)?.obj;
+      t.obj = planned ? { ...planned } : null;
+      return t.obj;
+    }
     let obj = null;
     if ((t.salt || !t.water) && !t.lava && !t.ice && !t.boiling && Math.hypot(x, z) > 2) {
       // the seabed has its own life, changing with depth

@@ -146,6 +146,14 @@ export class BigMap {
       else if (g.encounters.discovered.has(id)) this.marker(site.x, site.z, '#ff6a8a', k.name);
       else this.marker(site.x, site.z, '#9a92a6', '? ' + k.habitat);
     }
+    // villages and castles, when zoomed in enough for their names to be read
+    if (ZOOMS[this.zoom] <= 8) {
+      const reach = (CELLS * ZOOMS[this.zoom]) / 2;
+      for (const st of g.gen.settlementsNear(this.centre.x, this.centre.z, reach * 1.4)) {
+        if (Math.abs(st.x - this.centre.x) > reach || Math.abs(st.z - this.centre.z) > reach) continue;
+        this.marker(st.x, st.z, st.kind === 'village' ? '#f2c94c' : '#c9c9d6', st.name);
+      }
+    }
     g.markers.forEach((m, i) => this.marker(m.x, m.z, m.color, 'Marker ' + (i + 1), true));
     this.marker(p.x, p.z, '#ffffff', 'You');
   }

@@ -270,6 +270,36 @@ export class PlayerModel {
   }
 }
 
+// Villagers: one figure per entry in game.villagers.list, built like the player in that villager's own colours.
+export class VillagerFigures {
+  constructor(scene, game) {
+    this.scene = scene;
+    this.game = game;
+    this.shown = new Map(); // villager id -> PlayerModel
+  }
+
+  update(dt) {
+    const g = this.game, alive = new Set();
+    for (const v of g.villagers.list) {
+      alive.add(v.id);
+      let model = this.shown.get(v.id);
+      if (!model) {
+        model = new PlayerModel(v.look);
+        model.group.rotation.y = v.dir;
+        this.scene.add(model.group);
+        this.shown.set(v.id, model);
+      }
+      model.group.position.set(v.x, g.ground(v.x, v.z), v.z);
+      model.facing = v.dir;
+      model.update(dt, v.moving, 2);
+    }
+    for (const [id, model] of this.shown) {
+      if (alive.has(id)) continue;
+      this.scene.remove(model.group);
+      this.shown.delete(id);
+    }
+  }
+}
 // Animals: one jointed figure per entry in game.wildlife.list. Legs step in diagonal pairs, heads nod
 // down to graze or peck, tails wag, hares hop and newts wriggle. The young are smaller, tame ones
 // show a soft glow, and a struck animal flinches.

@@ -18,6 +18,8 @@ export const cloud = {
   enabled: !!(URL && KEY),
   status: URL && KEY ? 'Connecting…' : 'Not set up',
   userId: null,
+  email: null, // set when signed in to an account; null for a guest
+  hold: false, // true while a newly signed-in device has not yet chosen between its own world and the account's
   lastSync: null,
   onChange: () => {}, // called whenever status changes, so the menu can show it
 };
@@ -42,8 +44,7 @@ function connect() {
         if (error) throw error;
         session = data.session;
       }
-      cloud.userId = session.user.id;
-      say('Connected as a guest');
+      adopt(session);
       return client;
     } catch (error) {
       say('Could not connect: ' + (error.message ?? error));
@@ -68,9 +69,51 @@ async function attempt(what, fn) {
   }
 }
 
+// Take on whoever this session belongs to: a guest, or an account with an email address.
+function adopt(session) {
+  cloud.userId = session.user.id;
+  cloud.email = session.user.is_anonymous ? null : session.user.email ?? null;
+  say(cloud.email ? 'Signed in as ' + cloud.email : 'Playing as a guest on this device');
+}
+
+// ---- accounts: the same worlds on every device you sign in on ----
+// Each returns { ok, message }; the message is ready to show to the player.
+
+// Make an account. Supabase may send a confirmation email first, in which case there is no session yet.
+export async function createAccount(email, password) {
+  const client = await connect();
+  if (!client) return { ok: false, message: cloud.status };
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (error) return { ok: false, message: error.message };
+  if (!data.session) return { ok: true, pending: true, message: 'Check your email and open the confirmation link, then sign in here.' };
+  adopt(data.session);
+  return { ok: true, message: 'Account created. This device is signed in.' };
+}
+
+export async function signIn(email, password) {
+  const client = await connect();
+  if (!client) return { ok: false, message: cloud.status };
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  if (error) return { ok: false, message: error.message };
+  adopt(data.session);
+  return { ok: true, message: 'Signed in.' };
+}
+
+// Back to a guest: this device keeps its worlds, but stops sharing them with the account.
+export async function signOut() {
+  const client = await connect();
+  if (!client) return;
+  await client.auth.signOut();
+  ready = null;
+  cloud.userId = cloud.email = null;
+  cloud.hold = false;
+  await connect();
+}
+
 // Store the latest copy of this world and its progress row.
-export async function syncWorld(game, slot) {
-  if (!cloud.enabled) return false;
+// auto: one of the game's own periodic saves, which wait while a choice between worlds is pending.
+export async function syncWorld(game, slot, auto = false) {
+  if (!cloud.enabled || (auto && cloud.hold)) return false;
   const save = game.serialize(), stats = summarise(game), updated_at = new Date().toISOString();
   const saved = await attempt('Saving to the cloud', (c) =>
     c.from('saves').upsert({ user_id: cloud.userId, slot, data: save, day: stats.day, level: stats.level, updated_at }, { onConflict: 'user_id,slot' }));

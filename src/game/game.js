@@ -1,7 +1,9 @@
 import { Encounters } from './encounters.js';
+import { ENHANCEMENTS, LOOT, fits } from './enhance.js';
 import { Progress, xpFor } from './progress.js';
 import { DIFFICULTIES } from './survival.js';
 import { Wildlife } from './wildlife.js';
+import { Villagers } from './villagers.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
 import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
@@ -22,6 +24,7 @@ export const CHEST_SLOTS = 18;
 const STEP_LIP = 0.15; // height the player can walk up without jumping
 const JUMP_SPEED = 6.2; // about 0.95 units high: clears a 0.5 step comfortably
 const GRAVITY = 20;
+const FALL_SAFE = 11.5; // landing speed (about a two-storey drop) below which a fall does no harm
 const GLIDE_FALL = 1.2; // units per second a glider sinks
 const FLOAT_SINK = 0.95; // how far below the surface a swimmer's feet hang
 const BANK_LIP = 1.45; // bank height you can climb out of the water onto
@@ -127,6 +130,7 @@ export class Game {
     this.damage = new Map();
     this.listeners = [];
     this.wildlife = new Wildlife(this, this.relocated ? [] : save?.livestock);
+    this.villagers = new Villagers(this);
   }
 
   // A friendly place to begin: gentle lowland with trees close by and fresh water not far off.
@@ -475,6 +479,8 @@ export class Game {
     }
     const g = this.standY(p.x, p.z);
     if (p.y <= g + 1e-4 && p.vy <= 0) {
+      // a long drop hurts: two storeys is safe, more costs a heart or so, and a cliff can cost four
+      if (p.vy < -FALL_SAFE && !this.inWater) this.hurt(Math.min(4, (-p.vy - FALL_SAFE) * 0.5));
       p.y = g;
       p.vy = jump && !this.swimming ? JUMP_SPEED : 0;
     } else {
@@ -1111,12 +1117,40 @@ export class Game {
     const s = this.held, uses = s && ITEMS[s.id].uses;
     if (!uses) return;
     if (this.progress.has('tool_care') && Math.random() < 0.35) return;
+    if (s.e === 'lasting' && Math.random() < 0.5) return;
     s.d = (s.d ?? uses) - 1;
     if (s.d > 0) return;
     this.inv.slots[this.selected] = null;
     this.toast(`Your ${ITEMS[s.id].name} broke`);
     this.emit('break');
     this.emit('inv');
+  }
+
+  // Why the held piece cannot go on this tile, in words for the player; null when it can.
+  placeProblem(tx, tz) {
+    const def = this.held ? ITEMS[this.held.id] : null;
+    if (!def || (!def.place && !def.floor && !def.roof) || this.canPlace(tx, tz)) return null;
+    if (!this.inReach(tx, tz)) return 'Too far away: step closer';
+    const t = this.gen.tile(tx, tz), w = this.world, level = this.buildLevel;
+    if (t.water || t.lava) return 'It cannot stand on water';
+    if (level > 0) {
+      if (Math.abs(level - this.playerLevel) > 1) return 'That storey is out of reach from here';
+      if (def.floor) {
+        if (w.getFloor(tx, tz, level)) return 'There is already a floor here';
+        if (w.getRoof(tx, tz, level - 1)) return 'Take the roof below off first';
+        if (OBJECTS[w.getAt(tx, tz, level - 1)?.t]?.stairs) return 'The stairwell has to stay open';
+        return 'Nothing below to rest on: build the storey under it first';
+      }
+      if (def.roof) return w.getRoof(tx, tz, level) ? 'Already roofed' : 'A roof goes over a floor or wall of the building';
+      if (w.getAt(tx, tz, level)) return 'Something is already there';
+      if (!w.getFloor(tx, tz, level)) return 'Lay a floor here first';
+      return OBJECTS[def.place]?.stairs ? 'Stairs need open space above them' : 'You are standing there';
+    }
+    if (def.roof) return w.getRoof(tx, tz) ? 'Already roofed' : 'The storey above has a floor here';
+    if (def.floor) return w.getFloor(tx, tz) ? 'There is already a floor here' : 'Clear what is growing here first';
+    if (w.get(tx, tz)) return 'Something is in the way: clear it first';
+    if (OBJECTS[def.place]?.stairs) return 'Stairs need open space above them';
+    return 'You are standing there';
   }
 
   // Could the held item be placed on this tile? Shared by placing and by the placement preview.
@@ -1414,10 +1448,21 @@ export class Game {
       const hunting = sea ? this.swimming : spec.mountain ? true : night;
       const canStand = (x, z) => (sea ? this.deepAt(x, z) : this.enemyCanStand(x, z));
       if (!night && !sea && !spec.mountain) e.hp -= dt * 3; // daylight burns the night creatures away
+      if (e.poison > 0) {
+        // venom or fire from an enhanced weapon: a point of damage a second, and the kill still counts
+        e.poison -= dt;
+        e.hp -= dt;
+        if (e.hp <= 0) {
+          this.killEnemy(e);
+          continue;
+        }
+      }
       if (e.hp <= 0 || d > 48) {
         this.removeEnemy(e);
         continue;
       }
+      if (e.slow > 0) e.slow -= dt;
+      const pace = e.slow > 0 ? 0.5 : 1; // chilled creatures move at half speed
       e.cool -= dt;
       e.strike = Math.max(0, (e.strike ?? 0) - dt);
       let mx = 0, mz = 0;
@@ -1429,8 +1474,8 @@ export class Game {
       } else if (spec.ranged && hunting && d < 16) {
         // keep about six tiles away: close in when far, back off when near, and spit when in range
         const dir = d > 7 ? 1 : d < 4.5 ? -1 : 0;
-        mx = (dx / d) * spec.speed * dir * dt;
-        mz = (dz / d) * spec.speed * dir * dt;
+        mx = (dx / d) * spec.speed * pace * dir * dt;
+        mz = (dz / d) * spec.speed * pace * dir * dt;
         if (d < 9 && e.cool <= 0) {
           e.cool = 2.6;
           e.strike = 0.35;
@@ -1438,8 +1483,8 @@ export class Game {
           this.emit('spit', { x: e.x, z: e.z });
         }
       } else if (hunting && d < (sea ? 11 : spec.mountain ? 10 : 16) && d > 0.6) {
-        mx = (dx / d) * ENEMY_KINDS[e.kind].speed * dt;
-        mz = (dz / d) * ENEMY_KINDS[e.kind].speed * dt;
+        mx = (dx / d) * spec.speed * pace * dt;
+        mz = (dz / d) * spec.speed * pace * dt;
       } else if (d >= 16) {
         // idle wander
         if ((e.wait -= dt) <= 0) {
@@ -1466,7 +1511,9 @@ export class Game {
       } else e.y = this.ground(e.x, e.z);
       e.moving = mx !== 0 || mz !== 0;
       if (mx || mz) e.dir = Math.atan2(-mz, mx);
-      if (hunting && !spec.ranged && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
+      // a creature on the ground cannot reach someone on the storey above it
+      const level = sea ? 0 : Math.abs(p.y - e.y) > 1.1;
+      if (hunting && !spec.ranged && !level && reach < 0.95 && e.cool <= 0 && e.stun <= 0) {
         e.cool = 1.3;
         e.strike = 0.35;
         this.hurt(ENEMY_KINDS[e.kind].damage, e);
@@ -1504,36 +1551,62 @@ export class Game {
   // Strength of a swing with the held item.
   get attackPower() {
     const def = this.held ? ITEMS[this.held.id] : null;
-    return (def?.weapon ?? (def?.tool === 'axe' || def?.tool === 'pickaxe' ? 2 : 1)) * this.progress.damageScale;
+    const base = def?.weapon ?? (def?.tool === 'axe' || def?.tool === 'pickaxe' ? 2 : 1);
+    const edge = this.held?.e;
+    const bonus = edge === 'ember' ? 2 : edge === 'heavy' ? 1 : 0;
+    return (base + bonus) * (edge === 'keen' ? 1.25 : 1) * this.progress.damageScale;
+  }
+
+  // Seconds between swings: a feather-balanced tool is quicker.
+  get swingTime() { return this.held?.e === 'swift' ? 0.21 : 0.32; }
+
+  // Work an enhancement into the tool or weapon in hand. Returns true when it took.
+  enhance(id) {
+    const held = this.held, def = held ? ITEMS[held.id] : null, e = ENHANCEMENTS[id];
+    if (!e) return false;
+    if (!fits(id, def)) {
+      this.toast(e.on === 'any' ? 'Hold the tool or weapon to enhance' : 'Hold the weapon to enhance');
+      return false;
+    }
+    if (held.e === id) {
+      this.toast('It already has that');
+      return false;
+    }
+    if (!Object.entries(e.cost).every(([item, n]) => this.inv.has(item, n))) {
+      this.toast('You do not have what it takes yet');
+      return false;
+    }
+    for (const [item, n] of Object.entries(e.cost)) this.inv.remove(item, n);
+    held.e = id;
+    this.toast(`${def.name}: ${e.name}`);
+    this.record('enhance');
+    this.emit('inv');
+    return true;
+  }
+
+  // A creature falls: it is gone, and leaves what its kind carries.
+  killEnemy(e) {
+    this.removeEnemy(e);
+    this.record('kill');
+    this.giveDrops(LOOT[e.kind] ?? []);
   }
 
   attack(e) {
     const p = this.player, d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
     this.emit('swing', { x: e.x - 0.5, z: e.z - 0.5 });
     e.hp -= this.attackPower;
+    // what the weapon has been enhanced with leaves its mark
+    const edge = this.held?.e;
+    if (edge === 'venom') e.poison = 4;
+    else if (edge === 'ember') e.poison = Math.max(e.poison ?? 0, 2);
+    else if (edge === 'frost') e.slow = 3;
+    else if (edge === 'gloom') p.health = Math.min(this.maxHealth, p.health + 0.25);
     this.wearTool();
-    e.stun = 0.25;
+    e.stun = edge === 'heavy' ? 0.6 : 0.25;
     e.kx = ((e.x - p.x) / d) * 7;
     e.kz = ((e.z - p.z) / d) * 7;
     this.emit('hit', { x: Math.floor(e.x), z: Math.floor(e.z) });
-    if (e.hp <= 0) {
-      this.removeEnemy(e);
-      this.record('kill');
-      if (ENEMY_KINDS[e.kind].loot) this.give(ENEMY_KINDS[e.kind].loot, 1);
-      else if (e.kind === 'golem') {
-        this.give('stone', 3);
-        this.give('iron_ore', 2);
-        if (Math.random() < 0.5) this.give('crystal', 1);
-      } else if (e.kind === 'spitter') {
-        if (Math.random() < 0.6) this.give('coal', 1);
-      } else if (e.kind === 'snapper') {
-        this.give('raw_fish', 2);
-        if (Math.random() < 0.25) this.give('pearl', 1);
-      } else if (e.kind === 'brute') {
-        this.give('coal', 2);
-        if (Math.random() < 0.5) this.give('copper_ore', 1);
-      } else if (Math.random() < 0.4) this.give('coal', 1);
-    }
+    if (e.hp <= 0) this.killEnemy(e);
   }
 
   // ---- per-frame simulation ----
@@ -1594,6 +1667,7 @@ export class Game {
       }
     }
     this.wildlife.tick(dt);
+    this.villagers.tick(dt);
     this.encounters.step(this, dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);

@@ -33,7 +33,7 @@ export function navigatePanel(root, delta, adjust, accept) {
 }
 
 // buttons that act for as long as a finger rests on them
-const HELD = ['jump', 'sprint', 'strike', 'camLeft', 'camRight', 'zoomIn', 'zoomOut'];
+const HELD = ['jump', 'sprint', 'strike', 'secondary', 'camLeft', 'camRight', 'zoomIn', 'zoomOut'];
 
 export function installControllers(canvas, actions) {
   const controls = document.querySelector('#touch-controls');
@@ -41,7 +41,7 @@ export function installControllers(canvas, actions) {
   const touches = new Map();
   const held = new Set();
   let walkX = 0, walkY = 0, stickId = null, previous = [], previousPad = null;
-  const state = { x: 0, y: 0, jump: false, sprint: false, strike: false, turn: 0, zoom: 0 };
+  const state = { x: 0, y: 0, jump: false, sprint: false, strike: false, place: false, turn: 0, zoom: 0 };
   const resetStick = () => {
     stickId = null;
     walkX = walkY = 0;
@@ -68,7 +68,7 @@ export function installControllers(canvas, actions) {
       button.addEventListener('pointerdown', e => {
         try { button.setPointerCapture(e.pointerId); } catch { /* the finger is already gone: the release below still fires */ }
         held.add(name);
-        if (name === 'strike') actions.command('strike');
+        if (name === 'strike' || name === 'secondary') actions.command(name); // act at once, then keep going while held
       });
       for (const end of ['lostpointercapture', 'pointerup', 'pointercancel']) button.addEventListener(end, () => held.delete(name));
     } else button.addEventListener('click', () => actions.command(name));
@@ -124,6 +124,7 @@ export function installControllers(canvas, actions) {
       state.jump = !panel && (held.has('jump') || pressed[0]);
       state.sprint = !panel && (held.has('sprint') || pressed[6]);
       state.strike = !panel && (held.has('strike') || pressed[7]);
+      state.place = !panel && held.has('secondary');
       // held camera buttons: turn the view and zoom while a finger stays down
       state.turn = panel ? 0 : Number(held.has('camLeft')) - Number(held.has('camRight'));
       state.zoom = panel ? 0 : Number(held.has('zoomOut')) - Number(held.has('zoomIn'));

@@ -10,6 +10,9 @@ import { suitsSite, attackWarnings, inWarning, rewardFor } from '../src/game/enc
 import { Progress, SKILLS, STAT_CAP, MAX_LEVEL, xpToNext } from '../src/game/progress.js';
 import { tickSurvival, tickStamina } from '../src/game/survival.js';
 import { STOREY } from '../src/world/worldstate.js';
+import { ENHANCEMENTS, LOOT, fits } from '../src/game/enhance.js';
+import { ROLES, villagersOf } from '../src/game/villagers.js';
+import { Worldgen } from '../src/world/worldgen.js';
 import { summarise, eventFor } from '../src/game/summary.js';
 import { cloud, syncWorld, fetchWorld } from '../src/cloud.js';
 import { buildModels, buildItemModels } from '../src/render/models.js';
@@ -659,5 +662,204 @@ describe('multi-storey building', () => {
       expect(ITEMS[roof].roof, roof).toBe(true);
       for (const id of [wall, floor, stairs, roof]) expect(recipeFor(id), id).toBeTruthy();
     }
+  });
+});
+describe('animal goods and enhancing', () => {
+  it('names only real items in every drop, cost and trade', () => {
+    for (const [kind, drops] of Object.entries(LOOT)) {
+      expect(ENEMY_KINDS[kind], kind).toBeTruthy();
+      for (const [id] of drops) expect(ITEMS[id], id).toBeTruthy();
+    }
+    for (const kind of Object.keys(ENEMY_KINDS)) expect(LOOT[kind], kind).toBeTruthy();
+    for (const spec of Object.values(WILDLIFE)) for (const [id] of spec.drops) expect(ITEMS[id], id).toBeTruthy();
+    for (const e of Object.values(ENHANCEMENTS)) for (const id of Object.keys(e.cost)) expect(ITEMS[id], id).toBeTruthy();
+    for (const role of Object.values(ROLES)) for (const [id] of [...role.buys, ...role.sells]) expect(ITEMS[id], id).toBeTruthy();
+    // feathers, wool, bone and leather all come from somewhere
+    const fromAnimals = new Set(Object.values(WILDLIFE).flatMap((s) => s.drops.map(([id]) => id)));
+    for (const id of ['feather', 'fleece', 'bone', 'hide']) expect(fromAnimals.has(id), id).toBe(true);
+    expect(recipeFor('leather').shapeless).toEqual(['hide']);
+    for (const id of ['leather_cap', 'leather_tunic', 'leather_boots']) expect(recipeFor(id), id).toBeTruthy();
+  });
+
+  it('works an enhancement into the weapon in hand, once, for its cost', () => {
+    const g = newGame();
+    expect(fits('venom', ITEMS.iron_sword)).toBe(true);
+    expect(fits('venom', ITEMS.iron_pickaxe)).toBe(false); // weapons only
+    expect(fits('lasting', ITEMS.iron_pickaxe)).toBe(true);
+    expect(fits('lasting', ITEMS.berries)).toBe(false);
+    hold(g, 'iron_sword');
+    expect(g.enhance('keen')).toBe(false); // nothing to pay with
+    g.inv.add('snapper_fang', 2);
+    g.inv.add('leather', 1);
+    const plain = g.attackPower;
+    expect(g.enhance('keen')).toBe(true);
+    expect(g.held.e).toBe('keen');
+    expect(g.inv.count('snapper_fang')).toBe(0);
+    expect(g.attackPower).toBeCloseTo(plain * 1.25);
+    expect(g.enhance('keen')).toBe(false); // already there
+    // it travels with the weapon through a save, and a new one replaces it
+    const again = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(again.held.e).toBe('keen');
+    g.inv.add('feather', 4);
+    g.inv.add('fiber', 1);
+    expect(g.swingTime).toBeCloseTo(0.32);
+    expect(g.enhance('swift')).toBe(true);
+    expect(g.swingTime).toBeLessThan(0.25);
+    expect(g.attackPower).toBeCloseTo(plain);
+  });
+
+  it('poisons, chills and leaves loot', () => {
+    const g = newGame();
+    g.spawnTimer = g.golemTimer = Infinity;
+    g.time = 0.75; // night, so the creature does not burn away
+    hold(g, 'stone_sword');
+    g.held.e = 'venom';
+    const e = g.spawnEnemy(g.player.x + 1, g.player.z, 'brute');
+    const hp = e.hp;
+    g.attack(e);
+    expect(e.poison).toBeGreaterThan(0);
+    const after = e.hp;
+    for (let i = 0; i < 20; i++) g.updateEnemies(0.1);
+    expect(e.hp).toBeLessThan(after - 1.5); // two seconds of venom
+    expect(hp).toBeGreaterThan(after);
+    g.held.e = 'frost';
+    g.attack(e);
+    expect(e.slow).toBeGreaterThan(0);
+    // a creature under your floor cannot reach you
+    const far = g.spawnEnemy(g.player.x + 0.5, g.player.z, 'gloomling');
+    g.player.health = 10;
+    g.player.y = g.ground(g.player.x, g.player.z) + STOREY;
+    far.cool = 0;
+    g.updateEnemies(0.05);
+    expect(g.player.health).toBe(10);
+    // killing one hands over its kind's loot
+    let got = 0;
+    for (let i = 0; i < 40; i++) {
+      const s = g.spawnEnemy(g.player.x + 1, g.player.z, 'spitter');
+      s.hp = 0.1;
+      g.attack(s);
+    }
+    got = g.inv.count('venom_sac');
+    expect(got).toBeGreaterThan(10);
+  });
+});
+
+describe('settlements', () => {
+  it('puts the same villages and castles in the same places, on level dry ground, away from the start', () => {
+    const a = new Worldgen(7), b = new Worldgen(7);
+    const near = a.settlementsNear(0, 0, 2500);
+    expect(near.filter((s) => s.kind === 'village').length).toBeGreaterThan(5);
+    expect(near.filter((s) => s.kind === 'castle').length).toBeGreaterThan(1);
+    expect(b.settlementsNear(0, 0, 2500).map((s) => [s.kind, s.x, s.z, s.name])).toEqual(near.map((s) => [s.kind, s.x, s.z, s.name]));
+    for (const st of near.slice(0, 12)) {
+      expect(Math.hypot(st.x, st.z)).toBeGreaterThanOrEqual(90);
+      for (const [dx, dz] of [[0, 0], [st.radius, st.radius], [-st.radius, 0], [3, -st.radius]]) {
+        const t = a.tile(st.x + dx, st.z + dz);
+        expect(t.h).toBe(st.h);
+        expect(t.water || t.lava).toBe(false);
+      }
+      for (const cell of st.cells.values()) {
+        if (cell.obj) expect(OBJECTS[cell.obj.t], cell.obj.t).toBeTruthy();
+        if (cell.floor) expect(ITEMS[cell.floor].floor, cell.floor).toBe(true);
+        if (cell.roof) expect(ITEMS[cell.roof].roof, cell.roof).toBe(true);
+      }
+    }
+    // the start itself stays as it was
+    expect(a.settlementAt(0, 0)).toBe(null);
+  });
+
+  it('has houses you can enter, floors that can be lifted for good, and a hoard in each castle', () => {
+    const g = newGame();
+    const village = g.gen.settlementsNear(0, 0, 3000).find((s) => s.kind === 'village');
+    const castle = g.gen.settlementsNear(0, 0, 3000).find((s) => s.kind === 'castle');
+    const at = (st, dx, dz) => [st.x + dx, st.z + dz];
+    // the square is paved, with the hearth in the middle
+    expect(g.world.getFloor(...at(village, 1, 0))).toBe('stone_floor');
+    expect(g.world.get(...at(village, 0, 0)).t).toBe('campfire');
+    // a door somewhere, shut, that opens with Use and stays open after saving
+    const door = [...village.cells].find(([, c]) => c.obj?.t === 'door')[0].split(',').map(Number);
+    const [dx, dz] = at(village, door[0], door[1]);
+    standAt(g, dx, dz + (door[1] > 0 ? -1 : 1));
+    expect(g.blocked(dx + 0.5, dz + 0.5)).toBe(true);
+    g.interact(dx, dz);
+    expect(g.blocked(dx + 0.5, dz + 0.5)).toBe(false);
+    // lifting a paving stone removes it for good
+    const [fx, fz] = at(village, 5, 0);
+    g.selected = 8;
+    g.inv.slots.fill(null);
+    g.primary(fx, fz);
+    expect(g.world.getFloor(fx, fz)).toBe(null);
+    const again = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(again.world.getFloor(fx, fz)).toBe(null);
+    expect(again.world.get(dx, dz).open).toBe(true);
+    expect(again.world.getFloor(...at(village, 1, 0))).toBe('stone_floor');
+    // the castle's hoard pays out once
+    const [hx, hz] = at(castle, 0, -2);
+    expect(g.world.get(hx, hz).t).toBe('royal_hoard');
+    standAt(g, hx, hz + 1);
+    g.interact(hx, hz);
+    expect(g.inv.count('coin')).toBeGreaterThanOrEqual(12);
+    expect(g.world.get(hx, hz)).toBe(null);
+  });
+
+  it('is lived in: villagers who buy and sell for coins', () => {
+    const g = newGame();
+    const village = g.gen.settlementsNear(0, 0, 3000).find((s) => s.kind === 'village');
+    const people = villagersOf(village, g.seed);
+    expect(people.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(people.map((v) => v.role)).size).toBe(people.length); // each has their own trade
+    expect(villagersOf(village, g.seed).map((v) => [v.name, v.role])).toEqual(people.map((v) => [v.name, v.role]));
+    standAt(g, village.x + 1, village.z + 2);
+    g.villagers.tick(0.1);
+    expect(g.villagers.list.length).toBe(people.length);
+    const v = g.villagers.near(6);
+    expect(v).toBeTruthy();
+    const role = ROLES[v.role], [want, n, pay] = role.buys[0], [item, count, price] = role.sells[0];
+    expect(g.villagers.trade(v, 'buy', 0)).toBe(false); // nothing to sell yet
+    g.inv.add(want, n * 5);
+    for (let i = 0; i < 5; i++) expect(g.villagers.trade(v, 'buy', 0)).toBe(true);
+    expect(g.inv.count('coin')).toBe(pay * 5);
+    expect(g.inv.count(want)).toBe(0);
+    const before = g.inv.count(item);
+    expect(g.villagers.trade(v, 'sell', 0)).toBe(pay * 5 >= price);
+    if (pay * 5 >= price) expect(g.inv.count(item)).toBe(before + count);
+    // walking away, they are forgotten; they are not part of the save
+    standAt(g, 0, 0);
+    g.villagers.scan = 0;
+    g.villagers.tick(0.1);
+    expect(g.villagers.list.length).toBe(0);
+  });
+});
+
+describe('building help', () => {
+  it('says why a piece will not go where it is aimed', () => {
+    const g = newGame();
+    const [x, z] = clearing(g, 4);
+    standAt(g, x + 1, z + 1);
+    hold(g, 'wood_wall', 3);
+    expect(g.placeProblem(x + 2, z + 1)).toBe(null);
+    expect(g.placeProblem(x + 1, z + 1)).toMatch(/standing/);
+    expect(g.placeProblem(x + 40, z + 1)).toMatch(/Too far/);
+    g.secondary(x + 2, z + 1, true);
+    expect(g.placeProblem(x + 2, z + 1)).toMatch(/in the way/);
+    hold(g, 'wood_floor', 3);
+    g.shiftBuildLevel(1);
+    expect(g.placeProblem(x + 3, z + 3)).toMatch(/Nothing below/);
+    expect(g.placeProblem(x + 2, z + 1)).toBe(null); // over the wall
+    hold(g, 'berries');
+    expect(g.placeProblem(x + 2, z + 2)).toBe(null); // not a building piece: nothing to say
+  });
+
+  it('hurts after a long fall but not a short one', () => {
+    const g = newGame();
+    const land = (height) => {
+      g.player.health = 10;
+      Object.assign(g.player, { y: g.ground(g.player.x, g.player.z) + height, vy: 0 });
+      for (let i = 0; i < 400; i++) g.physics(0.01, false);
+      return g.player.health;
+    };
+    expect(land(STOREY * 2)).toBe(10);
+    expect(land(8)).toBeLessThan(10);
+    expect(land(60)).toBeGreaterThanOrEqual(6); // even a cliff is not a death sentence
   });
 });

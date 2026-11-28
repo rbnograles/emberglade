@@ -6,6 +6,7 @@ import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
 import { OBJECTS } from '../world/objects.js';
 import { cropFor } from '../world/crops.js';
 import { iconURL } from './icons.js';
+import { ENHANCEMENTS } from '../game/enhance.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,6 +32,7 @@ export function describe(slot) {
   if (def.def) parts.push(`armor ${def.def}`);
   if (def.bag) parts.push(`+${def.bag} slots`);
   if (def.uses) parts.push(`${slot.d ?? def.uses}/${def.uses} uses left`);
+  if (slot.e && ENHANCEMENTS[slot.e]) parts.push(ENHANCEMENTS[slot.e].name + ': ' + ENHANCEMENTS[slot.e].text);
   return parts.join(' \u00B7 ');
 }
 
@@ -52,6 +54,13 @@ export function renderSlot(el, slot) {
     bar.style.width = Math.round(left * 100) + '%';
     bar.style.background = left > 0.5 ? '#7ad04f' : left > 0.2 ? '#f2c94c' : '#e8505b';
     el.append(bar);
+  }
+  if (slot.e && ENHANCEMENTS[slot.e]) {
+    // a small gem in the corner marks an enhanced tool
+    const gem = document.createElement('i');
+    gem.className = 'gem';
+    gem.style.background = '#' + ENHANCEMENTS[slot.e].color.toString(16).padStart(6, '0');
+    el.append(gem);
   }
   if (slot.n > 1) {
     const n = document.createElement('span');

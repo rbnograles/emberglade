@@ -104,6 +104,15 @@
             <div id="cloud">
               <b>Cloud</b><span id="cloud-status"></span>
               <div class="row-buttons"><button id="btn-cloud-up">Save to cloud now</button><button id="btn-cloud-down">Load from cloud</button></div>
+              <form id="account" autocomplete="on">
+                <p class="lead">Sign in to play the same worlds on your phone, tablet and computer.</p>
+                <input id="acct-email" type="email" placeholder="Email" autocomplete="email" required />
+                <input id="acct-pass" type="password" placeholder="Password (8 or more)" autocomplete="current-password" minlength="8" required />
+                <button type="submit" id="btn-signin" class="main">Sign in</button>
+                <button type="button" id="btn-signup">Create account</button>
+                <span id="acct-note"></span>
+              </form>
+              <div id="signed-in" hidden><span id="acct-who"></span><button id="btn-signout">Sign out</button></div>
             </div>
             <div class="row-buttons">
               <button id="btn-new" class="danger">Start this world over</button>

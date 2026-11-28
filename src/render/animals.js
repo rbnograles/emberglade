@@ -178,5 +178,6 @@ export const ANIMAL_RIGS = buildRigs(RIGS);
 export function addAnimalModels(m) {
   addWholeModels(m, RIGS);
   m.set('frost_hoard', hoard(coat([0x8fc7e0, 0xa9d8ec, 0x7ab4d0], 15), 0x5f7f9a, 0xd8f3fb, WHITE));
+  m.set('royal_hoard', hoard(coat([0x6b5a3a, 0x7a6844, 0x5c4d32], 27), 0x8a7448, 0xf2c94c, 0xffe27a));
   m.set('ember_hoard', hoard(coat([0x33282e, 0x3d2f35, 0x2a2026], 16), 0x4a3238, 0xff8a3a, 0xffc864));
 }

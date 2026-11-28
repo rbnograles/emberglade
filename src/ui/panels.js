@@ -4,6 +4,7 @@ import { Inventory } from '../game/inventory.js';
 import { HOTBAR } from '../game/game.js';
 import { renderSlot } from './hud.js';
 import { iconURL } from './icons.js';
+import { ENHANCEMENTS, fits } from '../game/enhance.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -22,15 +23,17 @@ const icon = (id, cls = '') => {
 };
 
 // Which tab a recipe sits under.
+const VEHICLE_PARTS = ['hull', 'oar', 'pressure_hull', 'propeller', 'axle'];
 const categoryOf = (r) => {
   const def = ITEMS[r.out];
+  if (def.vehicle || def.glide || VEHICLE_PARTS.includes(r.out)) return 'vehicles';
   if (def.armor) return 'wear';
   if (def.place || def.floor || def.roof) return 'build';
   if (def.tool || def.weapon || def.flask || def.vehicle || def.glide || def.light) return 'tools';
   if (def.food) return 'food';
   return 'materials';
 };
-const TABS = [['all', 'All'], ['tools', 'Tools'], ['materials', 'Materials'], ['build', 'Building'], ['wear', 'Clothing'], ['food', 'Cooking']];
+const TABS = [['all', 'All'], ['tools', 'Tools'], ['materials', 'Materials'], ['build', 'Building'], ['vehicles', 'Vehicles'], ['wear', 'Clothing'], ['food', 'Cooking'], ['enhance', 'Enhance']];
 
 // Two cards side by side: the inventory on the left, crafting on the right.
 // Items are moved by picking a stack up onto the cursor and putting it down.
@@ -213,6 +216,38 @@ export class Panels {
     only.append(box, 'Only show what I can make');
     card.append(only);
 
+    if (this.tab === 'enhance') {
+      // enhancements go on whatever tool or weapon is in the hand
+      const held = game.held, def = held ? ITEMS[held.id] : null;
+      card.append(el('p', 'note', def?.uses
+        ? `In hand: ${def.name}${held.e ? ' (' + ENHANCEMENTS[held.e].name + ')' : ''}. A new enhancement replaces the old one.`
+        : 'Hold a tool or weapon, then choose what to work into it. Creatures and animals drop what these need.'));
+      const list = el('div', 'list');
+      for (const [id, e] of Object.entries(ENHANCEMENTS)) {
+        const can = fits(id, def) && held.e !== id && Object.entries(e.cost).every(([item, n]) => game.inv.has(item, n));
+        const row = el('div', 'recipe' + (can ? '' : ' dim'));
+        const gem = el('i', 'gem big');
+        gem.style.background = '#' + e.color.toString(16).padStart(6, '0');
+        const body = el('div', 'body');
+        body.append(el('b', '', e.name), el('small', '', e.text + (e.on === 'weapon' ? ' · weapons only' : '')));
+        const needs = el('div', 'needs');
+        for (const [item, n] of Object.entries(e.cost)) {
+          const have = game.inv.count(item);
+          const chip = el('span', have >= n ? '' : 'missing');
+          chip.title = ITEMS[item].name;
+          chip.append(icon(item), `${Math.min(have, 999)}/${n}`);
+          needs.append(chip);
+        }
+        body.append(needs);
+        const apply = el('button', 'craft-btn', held?.e === id ? 'Applied' : 'Apply');
+        apply.disabled = !can;
+        apply.addEventListener('click', () => game.enhance(id));
+        row.append(gem, body, apply);
+        list.append(row);
+      }
+      card.append(list);
+      return [card, list];
+    }
     const ready = new Map(RECIPES.map((r) => [r, game.canMake(r, stations)]));
     const shown = RECIPES.filter((r) => game.knowsRecipe(r) && (this.tab === 'all' || categoryOf(r) === this.tab) && (!this.onlyReady || ready.get(r)));
     shown.sort((a, b) => ready.get(b) - ready.get(a)); // what you can make comes first

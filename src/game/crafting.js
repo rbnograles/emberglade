@@ -9,6 +9,10 @@ const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fib
 export const RECIPES = [
   ...KEEPERS.map(k => ({ out: carvingId(k), n: 1, station: 'workbench', keeper: k.id, shapeless: ['stone', 'wood', 'wood', k.medium] })),
   { out: 'fiber', n: 4, shapeless: ['fleece'], station: null },
+  { out: 'leather', n: 1, shapeless: ['hide'], station: 'campfire' },
+  { out: 'leather_cap', n: 1, shapeless: ['leather', 'leather'], station: 'workbench' },
+  { out: 'leather_tunic', n: 1, shapeless: ['leather', 'leather', 'leather', 'fiber'], station: 'workbench' },
+  { out: 'leather_boots', n: 1, shapeless: ['leather', 'leather', 'fiber'], station: 'workbench' },
   { out: 'omelet', n: 1, shapeless: ['egg', 'egg'], station: 'campfire' },
   { out: 'rime_pack', n: 1, shapeless: ['trail_pack', 'fleece', 'rimeglass', 'rimeglass'], station: 'workbench' },
   { out: 'rime_pickaxe', n: 1, shapeless: ['iron_pickaxe', 'rimeglass', 'rimeglass', 'rimeglass'], station: 'workbench' },

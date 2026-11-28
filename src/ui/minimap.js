@@ -64,9 +64,27 @@ export class Minimap {
     c.stroke();
   }
 
+  square(wx, wz, color) {
+    const [x, y, off] = this.place(wx, wz), c = this.ctx, r = off ? 3.5 : 4.5;
+    c.fillStyle = color;
+    c.strokeStyle = '#2b2b33';
+    c.lineWidth = 1.5;
+    c.fillRect(x - r, y - r, r * 2, r * 2);
+    c.strokeRect(x - r, y - r, r * 2, r * 2);
+  }
+
   // camYaw: where the camera looks from. facing: the way the character is turned.
   draw(camYaw, facing) {
     const g = this.game, p = g.player, c = this.ctx;
+    // look for the nearest settlements now and then, not on every draw
+    if (!this.nearest || Math.hypot(p.x - this.lookedAt.x, p.z - this.lookedAt.z) > 24) {
+      this.lookedAt = { x: p.x, z: p.z };
+      this.nearest = {};
+      for (const st of g.gen.settlementsNear(p.x, p.z, 420)) {
+        const d = Math.hypot(st.x - p.x, st.z - p.z), best = this.nearest[st.kind];
+        if (!best || d < Math.hypot(best.x - p.x, best.z - p.z)) this.nearest[st.kind] = st;
+      }
+    }
     const cell = SIZE / CELLS;
     const ox = Math.floor(p.x) - (CELLS / 2) * STEP, oz = Math.floor(p.z) - (CELLS / 2) * STEP;
     for (let j = 0; j < CELLS; j++) {
@@ -83,6 +101,11 @@ export class Minimap {
     if (p.lost) this.marker(p.lost.x + 0.5, p.lost.z + 0.5, '#ff4a4a');
     for (const e of g.enemies) this.marker(e.x, e.z, '#7a4fd0');
     for (const v of g.vehicles) if (v.id !== p.riding) this.marker(v.x, v.z, '#ff9a3a'); // where you left your boat
+    // the nearest village and castle, as squares: gold for a village, grey for a castle
+    for (const kind of ['village', 'castle']) {
+      const st = this.nearest[kind];
+      if (st) this.square(st.x, st.z, kind === 'village' ? '#f2c94c' : '#c9c9d6');
+    }
     for (const m of g.markers) this.pin(m.x, m.z, m.color);
 
     const mid = SIZE / 2;

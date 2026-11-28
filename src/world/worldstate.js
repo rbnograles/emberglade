@@ -41,20 +41,32 @@ export class WorldState {
   }
 
   // level 0 is the ground storey; 1 and 2 are the storeys above it
-  getRoof(x, z, level = 0) { return level ? this.cell(x, z, level)?.roof ?? null : this.roofs.get(x + ',' + z) ?? null; }
+  // On the ground a settlement's own floors and roofs show through unless the player has changed
+  // them; 'none' marks one that was taken up, so it does not grow back.
+  getRoof(x, z, level = 0) {
+    if (level) return this.cell(x, z, level)?.roof ?? null;
+    const mine = this.roofs.get(x + ',' + z);
+    return mine === 'none' ? null : mine ?? this.gen.roofAt?.(x, z) ?? null;
+  }
 
   setRoof(x, z, id, level = 0) {
     if (level) return void this.put(x, z, level, 'roof', id);
     if (id) this.roofs.set(x + ',' + z, id);
+    else if (this.gen.roofAt?.(x, z)) this.roofs.set(x + ',' + z, 'none');
     else this.roofs.delete(x + ',' + z);
     this.changed(x, z);
   }
 
-  getFloor(x, z, level = 0) { return level ? this.cell(x, z, level)?.floor ?? null : this.floors.get(x + ',' + z) ?? null; }
+  getFloor(x, z, level = 0) {
+    if (level) return this.cell(x, z, level)?.floor ?? null;
+    const mine = this.floors.get(x + ',' + z);
+    return mine === 'none' ? null : mine ?? this.gen.floorAt?.(x, z) ?? null;
+  }
 
   setFloor(x, z, id, level = 0) {
     if (level) return void this.put(x, z, level, 'floor', id);
     if (id) this.floors.set(x + ',' + z, id);
+    else if (this.gen.floorAt?.(x, z)) this.floors.set(x + ',' + z, 'none');
     else this.floors.delete(x + ',' + z);
     this.changed(x, z);
   }

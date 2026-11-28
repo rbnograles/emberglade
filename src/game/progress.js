@@ -32,7 +32,7 @@ const SKILL_BY_ID = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
 // Experience for the things a player does, matched on the start of the recorded event key.
 const XP = [
   ['keeper:restore', 150], ['keeper:found', 30], ['hoard', 40], ['goal', 25], ['kill', 8], ['sleep', 10], ['hunt', 4],
-  ['craft:', 3], ['plant', 2], ['place:', 2], ['collect:', 1], ['water', 1],
+  ['craft:', 3], ['enhance', 10], ['trade', 2], ['plant', 2], ['place:', 2], ['collect:', 1], ['water', 1],
 ];
 export const xpFor = (key) => XP.find(([start]) => key.startsWith(start))?.[1] ?? 0;
 

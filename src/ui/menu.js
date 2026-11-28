@@ -3,7 +3,7 @@ import { settings, saveSettings, DEFAULT_KEYS, DEFAULT_LOOK, KEY_LABELS, keyName
 import { applyVolume, sfx, unlockAudio } from '../audio.js';
 import { DIFFICULTIES } from '../game/survival.js';
 import { writeSave, writeRaw, SLOTS, currentSlot, setSlot, slotSummary, exportSave, importSave } from '../game/save.js';
-import { cloud, syncWorld, fetchWorld } from '../cloud.js';
+import { cloud, syncWorld, fetchWorld, createAccount, signIn, signOut } from '../cloud.js';
 import { PlayerModel } from '../render/characters.js';
 import { ask } from './dialog.js';
 
@@ -89,6 +89,64 @@ export function buildMenu(game, hooks) {
   };
   cloud.onChange = paintCloud;
   paintCloud();
+
+  // ---- account: sign in so the same worlds follow you between devices ----
+  const form = $('account'), note = $('acct-note');
+  const paintAccount = () => {
+    form.hidden = !cloud.enabled || !!cloud.email;
+    $('signed-in').hidden = !cloud.email;
+    $('acct-who').textContent = cloud.email ? 'Signed in as ' + cloud.email : '';
+  };
+  const basePaint = cloud.onChange;
+  cloud.onChange = () => {
+    basePaint();
+    paintAccount();
+  };
+  paintAccount();
+  // typing in the form must never reach the game's own keys
+  for (const type of ['keydown', 'keyup']) form.addEventListener(type, (e) => e.stopPropagation());
+  // After signing in, this device and the account may each hold a different world in this slot.
+  // Nothing is uploaded on its own until the player has said which one to keep.
+  const reconcile = async () => {
+    cloud.hold = true;
+    const row = await fetchWorld(currentSlot());
+    if (!row || row.data?.seed === game.seed) {
+      cloud.hold = false;
+      return void syncWorld(game, currentSlot());
+    }
+    const when = new Date(row.updated_at).toLocaleString();
+    const load = await ask({
+      title: 'Which world do you want here?',
+      text: `Your account has World ${currentSlot()} from day ${row.day}, level ${row.level}, saved ${when}. Load it onto this device? Choosing "Keep this one" will replace the account's copy with the world on this device.`,
+      yes: 'Load my account\'s world', no: 'Keep this one',
+    });
+    if (load && writeRaw(row.data)) {
+      hooks.beforeLeave(true);
+      location.reload();
+      return;
+    }
+    cloud.hold = false;
+    syncWorld(game, currentSlot());
+  };
+  const submit = async (make) => {
+    if (!form.reportValidity()) return;
+    note.textContent = make ? 'Creating your account…' : 'Signing in…';
+    const email = $('acct-email').value.trim(), password = $('acct-pass').value;
+    const result = await (make ? createAccount(email, password) : signIn(email, password));
+    note.textContent = result.message;
+    if (!result.ok || result.pending) return;
+    $('acct-pass').value = '';
+    reconcile();
+  };
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submit(false);
+  });
+  $('btn-signup').addEventListener('click', () => submit(true));
+  $('btn-signout').addEventListener('click', async () => {
+    await signOut();
+    note.textContent = '';
+  });
   $('btn-cloud-up').addEventListener('click', () => syncWorld(game, currentSlot()));
   $('btn-cloud-down').addEventListener('click', async () => {
     const row = await fetchWorld(currentSlot());

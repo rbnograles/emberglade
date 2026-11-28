@@ -26,7 +26,8 @@ import { buildModels, buildItemModels } from './render/models.js';
 import { renderItemIcons } from './render/itemicons.js';
 import { Chunks, toGeometry } from './render/chunks.js';
 import { Sky } from './render/sky.js';
-import { PlayerModel, Animals, Enemies, Fish, Vehicles } from './render/characters.js';
+import { PlayerModel, Animals, Enemies, Fish, Vehicles, VillagerFigures } from './render/characters.js';
+import { openTrade } from './ui/trade.js';
 import { VEHICLES } from './game/game.js';
 import { Particles, Sparks, Fires, hitEffect } from './render/effects.js';
 import '@fontsource/nunito/latin-500.css';
@@ -91,6 +92,7 @@ const particles = new Particles(scene);
 const sparks = new Sparks(scene);
 const fires = new Fires(scene);
 const animals = new Animals(scene, game, models);
+const folk = new VillagerFigures(scene, game);
 const enemies = new Enemies(scene, game, models);
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine') });
@@ -431,9 +433,16 @@ addEventListener('mouseup', (e) => {
   if (!wasClick || paused || panels.open) return;
   secondaryAction();
 });
+let placeNote = 0; // seconds until the next "why it will not go there" message may show
 function secondaryAction() {
   camera.updateMatrixWorld();
   target = currentTarget();
+  // say why a piece will not go where it is aimed, instead of failing silently
+  const problem = target ? game.placeProblem(target.x, target.z) : null;
+  if (problem && placeNote <= 0) {
+    placeNote = 1.5;
+    game.toast(problem);
+  }
   if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach, playerModel.facing);
   hud.refresh();
 }
@@ -447,6 +456,9 @@ function interact() {
   // vehicles first: get off the one you are riding, or on the nearest one
   if (game.player.riding) return void game.dismount();
   if (game.board()) return;
+  // a villager at hand comes before the things around them: see what they trade
+  const villager = game.villagers.near();
+  if (villager) return void openTrade(game, villager);
   if (target?.reach && game.interact(target.x, target.z)) return;
   // an animal beside you: feed it, or gather eggs or fleece from a tame one
   if (game.wildlife.handle(game.wildlife.near(p.x, p.z, 1.6))) return;
@@ -475,6 +487,7 @@ function nearestUsable() {
 function useVerb() {
   if (game.player.riding) return 'Get off';
   if (game.vehicleNear()) return 'Board';
+  if (game.villagers.near()) return 'Trade';
   const aimed = target?.reach ? game.world.getAt(target.x, target.z, game.playerLevel) : null;
   const obj = aimed && usable(aimed.t) ? aimed : nearestUsable()?.obj;
   if (!obj) return game.wildlife.near(p.x, p.z, 1.6) ? 'Tend' : 'Use';
@@ -739,6 +752,11 @@ const controllers = installControllers(canvas, {
   tap: (x, y) => {
     if (paused || panels.open || bigmap.open || sheet.open) return;
     mouse.set(2 * x / innerWidth - 1, 1 - 2 * y / innerHeight);
+    // with something to build or launch in hand, a tap puts it right there
+    if (holdingBuildable() || ITEMS[game.held?.id]?.vehicle) {
+      tapHold = 4; // and that tile stays the aim for a while, for the Place button
+      return void secondaryAction();
+    }
     tapHold = 1.6;
     clicked = true;
   },
@@ -789,6 +807,7 @@ const camTarget = new THREE.Vector3(p.x, playerY, p.z);
 const lookAt = new THREE.Vector3();
 const peekPoint = new THREE.Vector3(), peekSize = new THREE.Vector2();
 let last = performance.now();
+let placeRepeat = 0;
 let swingCooldown = 0, saveTimer = 0, hudTimer = 0, clock = 0, cloudTicks = 0;
 let shake = 0; // seconds of camera shake left
 let steamTimer = 0;
@@ -929,6 +948,13 @@ function step(dt) {
   }
   updateGhost();
   swingCooldown -= dt;
+  // holding the Place button keeps building as you walk: floors and walls go down in a row
+  placeNote -= dt;
+  placeRepeat -= dt;
+  if (controllers.state.place && placeRepeat <= 0 && holdingBuildable() && !panels.open && !bigmap.open) {
+    placeRepeat = 0.22;
+    if (target && game.canPlace(target.x, target.z)) secondaryAction();
+  }
   const wantUse = (lmb || clicked || controllers.state.strike) && !panels.open && !bigmap.open;
   if (swingCooldown <= 0) clicked = false;
   // a vehicle under the cursor is picked back up with a click (not while riding it)
@@ -942,7 +968,7 @@ function step(dt) {
   }
   const foe = wantUse && swingCooldown <= 0 && !riding ? pickFoe() : null;
   if (foe) {
-    swingCooldown = 0.32;
+    swingCooldown = game.swingTime;
     hitColor = 0x6b4f9a;
     hitSound = 'hit';
     if (foe.fish) {
@@ -961,7 +987,7 @@ function step(dt) {
       sparks.burst(foe.x, foe.y + 0.6, foe.z, 0xfff6e3, 8);
     }
   } else if (wantUse && target?.reach && swingCooldown <= 0 && !riding) {
-    swingCooldown = 0.32;
+    swingCooldown = game.swingTime;
     const obj = game.world.get(target.x, target.z);
     hitColor = obj ? colorFor(obj.t) : 0xffffff;
     hitSound = !obj ? 'pick' : obj.t.startsWith('tree_') ? 'chop' : OBJECTS[obj.t].tool === 'pickaxe' ? 'mine' : OBJECTS[obj.t].hp ? 'hit' : 'pick';
@@ -988,6 +1014,7 @@ function step(dt) {
     sparks.mote(stirring.x, stirring.y + 0.4 + Math.random() * 1.6, stirring.z, stirring.spec.accent, 1.3);
   }
   animals.update(dt, clock);
+  folk.update(dt);
   enemies.update(dt, clock);
   keeperView.update(clock);
   fish.update(dt, p.x, p.y, p.z);
@@ -1037,7 +1064,7 @@ function step(dt) {
     // the cloud copy follows every few minutes, and only while the game is being played
     if (++cloudTicks >= 6) {
       cloudTicks = 0;
-      syncWorld(game, currentSlot());
+      syncWorld(game, currentSlot(), true);
     }
   }
 }

@@ -793,3 +793,39 @@ canvas#game { touch-action: none; }
   .touch-view { display: none; }
 }
 @media (pointer: coarse) { body:has(#touch-controls .layer:not([hidden])) #goal { display: none; } } /* while building, the layer buttons take the goal's room */
+
+/* ---------- enhancements: a gem on the slot, and the Enhance list ---------- */
+.slot .gem { position: absolute; right: 3px; top: 3px; width: 9px; height: 9px; border: 1.5px solid #1e1815; border-radius: 2px; transform: rotate(45deg); }
+#panel .recipe .gem.big { flex: none; width: 26px; height: 26px; margin: 0 10px; border: 2px solid #1e1815; border-radius: 5px; transform: rotate(45deg); }
+#panel .recipe small { display: block; font-size: 12px; opacity: 0.8; margin-bottom: 3px; }
+
+/* ---------- account form in the Cloud box ---------- */
+#account, #signed-in { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 2px dashed rgba(255, 246, 227, 0.14); }
+#account[hidden], #signed-in[hidden] { display: none; }
+#account .lead { flex-basis: 100%; margin: 0; }
+#account input { flex: 1 1 150px; min-width: 0; padding: 8px 10px; font: inherit; font-size: 14px; color: var(--cream); background: rgba(0, 0, 0, 0.3); border: 2px solid rgba(255, 246, 227, 0.2); border-radius: 9px; user-select: text; }
+#account input:focus { outline: none; border-color: var(--accent); }
+#menu #account button, #menu #signed-in button { display: inline-block; width: auto; margin: 0; padding: 8px 14px; font-size: 14px; color: var(--cream); background: rgba(255, 246, 227, 0.1); border: 2px solid rgba(255, 246, 227, 0.16); border-radius: 9px; box-shadow: none; }
+#menu #account button.main { color: #2b2420; background: var(--accent); border-color: #ffdf82; }
+#acct-note { flex-basis: 100%; font-size: 13px; opacity: 0.85; min-height: 1em; }
+#acct-who { font-size: 14px; }
+
+/* ---------- trading with a villager ---------- */
+.relocation.trade { width: min(640px, 94vw); max-height: 92dvh; overflow-y: auto; box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3); }
+.relocation.trade::backdrop { background: rgba(12, 10, 9, 0.6); backdrop-filter: blur(3px); }
+.relocation.trade header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.relocation.trade h1 { font-size: 24px; }
+.relocation.trade .where { font-size: 13px; opacity: 0.7; }
+.relocation.trade .purse { display: flex; align-items: center; gap: 6px; margin: 8px 0 12px; font-weight: 700; color: var(--accent); }
+.relocation.trade .purse img { width: 24px; height: 24px; }
+.relocation.trade .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.relocation.trade h2 { margin: 0 0 6px; font-size: 15px; }
+.relocation.trade .offer { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 5px; background: rgba(255, 246, 227, 0.07); border-radius: 9px; }
+.relocation.trade .offer img { width: 30px; height: 30px; flex: none; }
+.relocation.trade .offer b { font-size: 14px; }
+.relocation.trade .offer span { flex: 1; font-size: 11px; opacity: 0.65; }
+.relocation.trade button { width: auto; margin: 0; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 700; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.relocation.trade button.main { color: #2b2420; background: var(--accent); border-color: #ffdf82; }
+.relocation.trade button:disabled { opacity: 0.45; cursor: default; }
+.relocation.trade .row-buttons { display: flex; justify-content: flex-end; margin-top: 12px; }
+@media (max-width: 560px) { .relocation.trade .lists { grid-template-columns: 1fr; } }

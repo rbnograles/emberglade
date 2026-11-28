@@ -334,6 +334,19 @@ export function buildItemModels(world) {
   m.set('trail_pack', bag(0x8a5a34));
   addFieldItemModels(m);
   m.set('rime_pickaxe', pickaxe(0x90d7e8));
+  m.set('coin', new Vox().blob(0, 0.9, 0, 2.4, 0.9, 2.4, mix([0xf2c94c, 0xe0b53a, 0xffdf82], 93), 0.05, 93).set(0, 1, 0, 0xffefb0).build(0.1));
+  // animal goods and what creatures drop
+  m.set('feather', new Vox().box(0, 0, 0, 0, 2, 0, 0xd9c9a8).box(-1, 3, 0, 1, 8, 0, 0xfff6e3).box(0, 9, 0, 0, 10, 0, 0xfff6e3).set(-2, 5, 0, 0xe9dcc4).set(2, 6, 0, 0xe9dcc4).build(0.1));
+  m.set('bone', new Vox().box(0, 1, 0, 6, 1, 0, 0xf3e6cc).box(-1, 0, 0, -1, 2, 0, 0xf3e6cc).box(7, 0, 0, 7, 2, 0, 0xf3e6cc).set(-2, 0, 0, 0xe4d4b4).set(-2, 2, 0, 0xe4d4b4).set(8, 0, 0, 0xe4d4b4).set(8, 2, 0, 0xe4d4b4).build(0.1));
+  m.set('leather', new Vox().box(0, 0, 0, 6, 0, 5, mix([0x8a5a34, 0x7a4b2c, 0x9a6a40], 90)).box(1, 1, 1, 5, 1, 4, 0x9a6a40).build(0.1));
+  m.set('leather_cap', hat(0x8a5a34));
+  m.set('leather_tunic', tunic(0x8a5a34));
+  m.set('leather_boots', boots(0x8a5a34));
+  m.set('gloom_shard', new Vox().box(0, 0, 0, 1, 2, 1, 0x46336b).box(0, 3, 0, 0, 6, 0, 0x9a6fd6).box(1, 3, 1, 1, 4, 1, 0x6a4fa0).set(0, 7, 0, 0xd9c2ff).build(0.1));
+  m.set('brute_tusk', new Vox().box(0, 0, 0, 1, 1, 1, 0x634857).box(0, 2, 0, 1, 4, 0, 0xf3e6cc).box(1, 5, 0, 1, 7, 0, 0xf3e6cc).set(2, 8, 0, 0xfff6e3).build(0.1));
+  m.set('venom_sac', new Vox().blob(0, 2, 0, 2.3, 2.4, 2.1, mix([0x6aa84f, 0x8be06a, 0x5a9440], 91), 0.1, 91).box(0, 4, 0, 0, 5, 0, 0x436a30).set(-1, 1, 2, 0xd8ffb0).build(0.1));
+  m.set('golem_core', new Vox().blob(0, 2.2, 0, 2.4, 2.2, 2.4, mix([0x8b9098, 0x9a9fa6], 92), 0.1, 92).box(-1, 2, 2, 0, 3, 2, 0x7ff0ff).set(0, 4, 0, 0x7ff0ff).build(0.1));
+  m.set('snapper_fang', new Vox().box(0, 0, 0, 2, 1, 1, 0x2f5f6a).box(0, 2, 0, 1, 4, 0, 0xe6ecef).box(0, 5, 0, 0, 7, 0, 0xffffff).build(0.1));
   m.set('ember_axe', axe(0xff9845));
   m.set('diving_mask', new Vox().box(0, 0, 0, 6, 3, 0, 0x2b2b33).box(1, 1, 0, 2, 2, 0, 0x6fc3e8).box(4, 1, 0, 5, 2, 0, 0x6fc3e8).box(-1, 1, 1, -1, 2, 3, 0x2b2b33).box(7, 1, 1, 7, 2, 3, 0x2b2b33).build(0.1));
   return m;

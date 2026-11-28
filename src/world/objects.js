@@ -16,6 +16,7 @@ export const OBJECTS = {
   weather_cairn: { name: 'Wayfarer cairn (use for rimeglass)', solid: 0.48, pickR: 0.75, cache: 'rimeglass' },
   kiln_ruin: { name: 'Abandoned kiln (use for emberglass)', solid: 0.5, pickR: 0.75, cache: 'emberglass' },
   // one-time treasures deep in the harsh regions (F to open)
+  royal_hoard: { name: 'Castle hoard', solid: 0.45, pickR: 0.7, hoard: [['coin', 12, 20], ['iron_bar', 4, 6], ['crystal', 2, 3], ['pearl', 1, 2], ['golem_core', 1, 1, 0.5]] },
   frost_hoard: { name: 'Frozen hoard', solid: 0.45, pickR: 0.7, hoard: [['rimeglass', 5, 7], ['iron_bar', 2, 4], ['crystal', 1, 2], ['pearl', 1, 1, 0.5]] },
   ember_hoard: { name: 'Ember hoard', solid: 0.45, pickR: 0.7, hoard: [['emberglass', 5, 7], ['iron_bar', 2, 4], ['crystal', 2, 3], ['coal', 3, 6]] },
   // stairs: climbed, not walked round. They rise one whole storey across their tile.
