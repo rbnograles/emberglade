@@ -31,6 +31,8 @@ export const ITEMS = {
   gate: { name: 'Pasture gate', place: 'gate', hint: 'Interact to open or close' },
   irrigator: { name: 'Irrigation cistern', place: 'irrigator', hint: 'Waters the four adjoining crop tiles each morning' },
 
+  shovel: { name: 'Shovel', tool: 'shovel', uses: 150, stack: 1, hint: 'LMB: dig the ground down half a step. Gives dirt' },
+  dirt: { name: 'Dirt', fill: true, hint: 'RMB: build the ground up half a step' },
   stick: { name: 'Stick' },
   stone: { name: 'Stone' },
   wood: { name: 'Wood' },

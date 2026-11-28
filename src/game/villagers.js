@@ -25,11 +25,21 @@ export const ROLES = {
     sells: [['flask', 1, 6], ['roof', 8, 3], ['diving_mask', 1, 20], ['glider', 1, 25]],
   },
 };
+// Castle guards are not one of the village trades: they hold the walls, and their quartermaster's
+// stores are open to anyone who brings what the garrison needs.
+export const GUARD = {
+  title: 'Guard',
+  buys: [['bone', 3, 2], ['brute_tusk', 1, 5], ['snapper_fang', 1, 5], ['gloom_shard', 2, 4], ['venom_sac', 1, 4]],
+  sells: [['iron_sword', 1, 28], ['copper_helmet', 1, 12], ['copper_chestplate', 1, 16], ['torch', 4, 2]],
+};
 const ROLE_IDS = Object.keys(ROLES);
+ROLES.guard = GUARD;
+const GUARD_SIGHT = 9; // tiles: a guard goes for any creature this close to their post
+const GUARD_HIT = 4; // damage of one blow
 const NAMES = ['Ada', 'Bram', 'Cora', 'Dov', 'Esme', 'Finn', 'Greta', 'Hale', 'Ines', 'Joss', 'Kit', 'Lune', 'Mira', 'Nell', 'Odo', 'Pia', 'Quill', 'Rosa', 'Sten', 'Tess'];
 const SKIN = [0xf9dcc4, 0xf2c7a0, 0xd9a47a, 0xb9794f, 0x8a5a3c, 0x5c3a26];
 const HAIR = [0x2b2b33, 0x6b3f24, 0xa8743c, 0xe9c545, 0xd9432f, 0xf2efe6];
-const SHIRT = { farmer: 0x6a9a4e, hunter: 0x8a5a34, smith: 0x5a6b7a, trader: 0xb0558a };
+const SHIRT = { farmer: 0x6a9a4e, hunter: 0x8a5a34, smith: 0x5a6b7a, trader: 0xb0558a, guard: 0x7a2f3a };
 const STYLES = ['short', 'long', 'tuft', 'bald'];
 const RANGE = 70; // villagers are only kept in mind this close to the player
 
@@ -37,10 +47,11 @@ const RANGE = 70; // villagers are only kept in mind this close to the player
 export function villagersOf(st, seed) {
   return st.spots.map(([dx, dz], i) => {
     const pick = (list, salt) => list[(hash2(st.x + i * 17, st.z - i * 31, seed + salt) * list.length) | 0];
-    const role = ROLE_IDS[(i + ((hash2(st.x, st.z, seed + 320) * ROLE_IDS.length) | 0)) % ROLE_IDS.length]; // no two alike
+    const guard = st.kind === 'castle';
+    const role = guard ? 'guard' : ROLE_IDS[(i + ((hash2(st.x, st.z, seed + 320) * ROLE_IDS.length) | 0)) % ROLE_IDS.length]; // no two alike
     const home = { x: st.x + dx + 0.5, z: st.z + dz + 0.5 };
     return {
-      id: st.key + ':' + i, name: pick(NAMES, 321), role, village: st.name, home, x: home.x, z: home.z, dir: 0, moving: false, wait: i,
+      id: st.key + ':' + i, name: pick(NAMES, 321), role, guard, cool: 0, swing: 0, village: st.name, home, x: home.x, z: home.z, dir: 0, moving: false, wait: i,
       look: { skin: pick(SKIN, 322), hair: pick(HAIR, 323), shirt: SHIRT[role], pants: 0x4a3a2c, style: pick(STYLES, 324) },
     };
   });
@@ -85,13 +96,48 @@ export class Villagers {
     return true;
   }
 
+  // A guard's duty: run down the nearest creature that has come near the post, and strike it.
+  // Returns true while there is one to deal with. What a guard kills leaves nothing for the player.
+  defend(v, dt) {
+    const g = this.game;
+    v.cool = Math.max(0, v.cool - dt);
+    let foe = null, best = GUARD_SIGHT;
+    for (const e of g.enemies) {
+      const d = Math.hypot(e.x - v.home.x, e.z - v.home.z);
+      if (d < best) {
+        foe = e;
+        best = d;
+      }
+    }
+    if (!foe) return false;
+    const dx = foe.x - v.x, dz = foe.z - v.z, d = Math.hypot(dx, dz) || 0.001;
+    v.dir = Math.atan2(dx, dz);
+    v.goal = null;
+    if (d > 1.3) {
+      const step = Math.min(d - 1.1, dt * 2.6), nx = v.x + (dx / d) * step, nz = v.z + (dz / d) * step;
+      if (!g.blocked(nx, nz, 0.25, true)) {
+        v.x = nx;
+        v.z = nz;
+        v.moving = true;
+      }
+    } else if (v.cool <= 0) {
+      v.cool = 0.8;
+      v.swing = 0.3;
+      foe.hp -= GUARD_HIT;
+      foe.stun = Math.max(foe.stun ?? 0, 0.25);
+      g.emit('hit', { x: Math.floor(foe.x), z: Math.floor(foe.z), object: 'guard', destroyed: foe.hp <= 0 });
+      if (foe.hp <= 0) g.removeEnemy(foe);
+    }
+    return true;
+  }
+
   tick(dt) {
     const g = this.game, p = g.player;
     this.scan -= dt;
     if (this.scan <= 0) {
       // every second or so: welcome the people of villages coming into range, forget those left behind
       this.scan = 1;
-      const here = g.gen.settlementsNear(p.x, p.z, RANGE).filter((st) => st.kind === 'village');
+      const here = g.gen.settlementsNear(p.x, p.z, RANGE); // villages and castles alike
       const keys = new Set(here.map((st) => st.key));
       for (const st of here) {
         if (this.known.has(st.key)) continue;
@@ -107,6 +153,8 @@ export class Villagers {
     for (const v of this.list) {
       const toPlayer = Math.hypot(p.x - v.x, p.z - v.z);
       v.moving = false;
+      v.swing = Math.max(0, v.swing - dt);
+      if (v.guard && this.defend(v, dt)) continue;
       if (toPlayer < 3) {
         // someone is here: stop and face them
         v.dir = Math.atan2(p.x - v.x, p.z - v.z);

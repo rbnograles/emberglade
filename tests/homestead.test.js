@@ -863,3 +863,73 @@ describe('building help', () => {
     expect(land(60)).toBeGreaterThanOrEqual(6); // even a cliff is not a death sentence
   });
 });
+describe('castle starts, guards and digging', () => {
+  it('starts a new world before a castle gate when one is in reach', () => {
+    let atCastle = 0;
+    for (let i = 0; i < 4; i++) {
+      const g = new Game(null), { x, z } = g.player.spawn;
+      const castle = g.gen.settlementsNear(x, z, 30).find((st) => st.kind === 'castle');
+      if (!castle) continue;
+      atCastle++;
+      expect(z).toBeGreaterThan(castle.z + castle.radius); // outside the wall, south of the gate
+      expect(Math.abs(x - castle.x)).toBeLessThanOrEqual(2);
+    }
+    expect(atCastle).toBeGreaterThan(0);
+  });
+
+  it('posts guards in a castle, who trade and strike down creatures', () => {
+    const g = new Game(null), { x, z } = g.player.spawn;
+    const castle = g.gen.settlementsNear(x, z, 2400).find((st) => st.kind === 'castle');
+    g.player.x = castle.x + 0.5;
+    g.player.z = castle.z + 5.5;
+    g.villagers.tick(0.1);
+    const guards = g.villagers.list.filter((v) => v.guard);
+    expect(guards.length).toBe(3);
+    expect(guards.every((v) => v.role === 'guard' && v.village === castle.name)).toBe(true);
+    g.inv.add('coin', 40);
+    expect(g.villagers.trade(guards[0], 'sell', 0)).toBe(true);
+    expect(g.inv.count('iron_sword')).toBe(1);
+    const foe = g.spawnEnemy(guards[0].x + 1, guards[0].z);
+    const kills = g.goals.toJSON(), xp = g.progress.xp;
+    for (let i = 0; i < 200 && g.enemies.includes(foe); i++) g.villagers.tick(0.1);
+    expect(g.enemies.includes(foe)).toBe(false);
+    expect(g.progress.xp).toBe(xp); // a guard's kill is not the player's
+    expect(g.goals.toJSON()).toEqual(kills);
+  });
+
+  it('digs the ground down with a shovel and builds it back up with dirt', () => {
+    const g = new Game({ seed: 1 }), p = g.player;
+    let tx = 0, tz = 0;
+    // a bare, dry tile beside the player
+    search: for (tz = -3; tz <= 3; tz++) for (tx = -3; tx <= 3; tx++) {
+      const t = g.gen.tile(tx, tz);
+      if (!t.water && !g.world.get(tx, tz) && t.h > 1 && (tx || tz)) break search;
+    }
+    p.x = tx + 1.5;
+    p.z = tz + 0.5;
+    const before = g.gen.tile(tx, tz).h;
+    g.inv.slots[0] = { id: 'shovel', n: 1 };
+    g.selected = 0;
+    let ground = 0;
+    g.world.onChange((x, z, isGround) => { if (isGround) ground++; });
+    g.primary(tx, tz);
+    expect(g.gen.tile(tx, tz).h).toBe(before - 0.5);
+    expect(g.ground(tx + 0.5, tz + 0.5)).toBe(before - 0.5);
+    expect(g.inv.count('dirt')).toBe(1);
+    expect(g.inv.slots[0].d).toBe(149);
+    expect(ground).toBe(1);
+    // it survives a save
+    const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(copy.gen.tile(tx, tz).h).toBe(before - 0.5);
+    // dirt puts it back
+    g.selected = g.inv.slots.findIndex((s) => s?.id === 'dirt');
+    g.secondary(tx, tz, true);
+    expect(g.gen.tile(tx, tz).h).toBe(before);
+    expect(g.inv.count('dirt')).toBe(0);
+    expect(g.serialize().dug).toEqual({});
+    // not the tile you stand on
+    g.selected = 0;
+    g.primary(Math.floor(p.x), Math.floor(p.z));
+    expect(g.gen.tile(Math.floor(p.x), Math.floor(p.z)).dug).toBeUndefined();
+  });
+});

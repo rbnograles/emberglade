@@ -87,7 +87,8 @@ export class WorldState {
   upperJSON() { return Object.fromEntries(this.upper); }
 
   onChange(fn) { this.listeners.push(fn); }
-  changed(x, z) { for (const fn of this.listeners) fn(x, z); }
+  // ground: the height of the land itself changed there, not just what stands on it
+  changed(x, z, ground = false) { for (const fn of this.listeners) fn(x, z, ground); }
 
   get(x, z) {
     const o = this.over.get(x + ',' + z);

@@ -1,6 +1,7 @@
 // One themed tooltip for the whole game, in place of the browser's own. It follows the mouse and
 // fades in. An element shows a tip when it has `el.tip` (an item card: see tipFor in hud.js) or a
-// `data-tip` attribute (plain text). Touch has no hover, so it never shows there.
+// `data-tip` attribute (plain text). Touch has no hover: there, resting a finger on the thing for a
+// moment shows its card above the finger until the finger lifts.
 const MOUSE = (side) => `<svg class="mouse ${side}" viewBox="0 0 14 20" aria-hidden="true"><rect x="1" y="1" width="12" height="18" rx="6"/><path class="btn" d="M7 1.7A5.3 5.3 0 0 0 1.7 7v2H7z"/><path d="M7 1v8M1 9h12"/></svg>`;
 export const MOUSE_LEFT = MOUSE('l'), MOUSE_RIGHT = MOUSE('r');
 
@@ -8,7 +9,7 @@ const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': 
 // Text with LMB and RMB drawn as little mice.
 export const keyed = (text) => escape(text).replace(/\bLMB\b/g, MOUSE_LEFT).replace(/\bRMB\b/g, MOUSE_RIGHT);
 
-let box = null, anchor = null, shown = '', x = 0, y = 0, down = false;
+let box = null, anchor = null, shown = '', x = 0, y = 0, down = false, hold = 0;
 
 function html(tip) {
   if (typeof tip === 'string') return `<p>${keyed(tip)}</p>`;
@@ -26,9 +27,17 @@ function hide() {
   if (box) box.classList.remove('on');
 }
 
-function place() {
+function place(finger = false) {
   const w = box.offsetWidth, h = box.offsetHeight;
   let left = x + 16, top = y + 18;
+  if (finger) {
+    // above the finger, so the hand does not cover it
+    left = Math.min(innerWidth - w - 8, x - w / 2);
+    top = y - h - 34;
+    if (top < 8) top = y + 40;
+    box.style.transform = `translate(${Math.max(8, left)}px, ${Math.max(8, top)}px)`;
+    return;
+  }
   if (left + w > innerWidth - 8) left = x - w - 12; // flip to the other side of the cursor at an edge
   if (top + h > innerHeight - 8) top = y - h - 12;
   box.style.transform = `translate(${Math.max(8, left)}px, ${Math.max(8, top)}px)`;
@@ -60,8 +69,39 @@ export function startTooltips() {
     refreshTip();
   }, true);
   // while a button is held something is being dragged or clicked: the tip gets out of the way
-  addEventListener('pointerdown', () => { down = true; hide(); }, true);
-  addEventListener('pointerup', (e) => { down = false; if (e.pointerType === 'mouse') refreshTip(); }, true);
+  addEventListener('pointerdown', (e) => {
+    down = true;
+    hide();
+    clearTimeout(hold);
+    if (e.pointerType !== 'touch') return;
+    // a finger resting on something with a tip: show it after a moment, unless the finger moves off (a drag)
+    const el = e.target.closest?.('.slot, [data-tip], .has-tip'), tip = el && (el.tip ?? el.dataset.tip);
+    if (!tip) return;
+    const sx = e.clientX, sy = e.clientY;
+    const moved = (m) => { if (Math.hypot(m.clientX - sx, m.clientY - sy) > 10) cancel(); };
+    const cancel = () => {
+      clearTimeout(hold);
+      hide();
+      removeEventListener('pointermove', moved, true);
+    };
+    addEventListener('pointermove', moved, true);
+    addEventListener('pointerup', cancel, { capture: true, once: true });
+    addEventListener('pointercancel', cancel, { capture: true, once: true });
+    hold = setTimeout(() => {
+      x = sx;
+      y = sy;
+      const text = html(tip);
+      if (text !== shown) box.innerHTML = shown = text;
+      box.classList.add('on');
+      place(true);
+    }, 420);
+  }, true);
+  addEventListener('pointerup', (e) => {
+    down = false;
+    if (e.pointerType === 'mouse') refreshTip();
+    else hide();
+  }, true);
+  addEventListener('pointercancel', () => { down = false; hide(); }, true);
   addEventListener('keydown', hide, true);
   addEventListener('wheel', hide, true);
   addEventListener('blur', hide);

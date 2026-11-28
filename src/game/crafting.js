@@ -22,6 +22,7 @@ export const RECIPES = [
   { out: 'stone_axe', n: 1, pattern: ['##', '#|'], station: null },
   { out: 'stone_pickaxe', n: 1, pattern: ['##', '||'], station: null },
   { out: 'hoe', n: 1, pattern: ['#', '|'], station: null },
+  { out: 'shovel', n: 1, pattern: ['#', '|', '|'], station: 'workbench' },
   { out: 'campfire', n: 1, pattern: ['WW', '##'], station: null },
   { out: 'flask', n: 1, pattern: ['F', 'W'], station: null },
   { out: 'torch', n: 2, pattern: ['K', '|'], station: null },

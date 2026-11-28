@@ -55,20 +55,40 @@ export class Vox {
       oz = -(z0 + z1) / 2;
     }
     const pos = [], norm = [], col = [], idx = [];
+    // which cells are filled, as numbers: much quicker to ask than the string keys
+    const key = (x, y, z) => (x + 512) * 1048576 + (y + 512) * 1024 + (z + 512);
+    const solid = new Set();
+    for (const [x, y, z] of this.m.values()) solid.add(key(x, y, z));
+    const has = (x, y, z) => solid.has(key(x, y, z));
+    const light = [0, 0, 0, 0];
     for (const [x, y, z, hex] of this.m.values()) {
       const c = rgb(hex);
       const shade = 1 + (hash2(x * 5 + y * 3, z * 7 - y, 77) - 0.5) * 2 * jitter;
       for (let d = 0; d < 6; d++) {
         const [dx, dy, dz] = DIRS[d];
-        if (this.m.has(`${x + dx},${y + dy},${z + dz}`)) continue;
+        if (has(x + dx, y + dy, z + dz)) continue;
         if (d === 3 && y === 0) continue; // sits on the ground
         const base = pos.length / 3;
-        for (const [fx, fy, fz] of FACES[d]) {
+        FACES[d].forEach(([fx, fy, fz], i) => {
           pos.push((x + fx + ox) * size, (y + fy) * ysize, (z + fz + oz) * size);
           norm.push(dx, dy, dz);
-          col.push(c[0] * shade, c[1] * shade, c[2] * shade);
-        }
-        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          // Soft shadow in the creases: a corner is darker for each voxel crowding it from the
+          // layer this face looks out on. It is what makes a blocky shape read as solid.
+          const ax = dx ? 0 : fx ? 1 : -1, ay = dy ? 0 : fy ? 1 : -1, az = dz ? 0 : fz ? 1 : -1;
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          let s1, s2;
+          if (dx) { s1 = has(nx, ny + ay, nz); s2 = has(nx, ny, nz + az); }
+          else if (dy) { s1 = has(nx + ax, ny, nz); s2 = has(nx, ny, nz + az); }
+          else { s1 = has(nx + ax, ny, nz); s2 = has(nx, ny + ay, nz); }
+          const crowd = s1 && s2 ? 3 : s1 + s2 + has(nx + ax, ny + ay, nz + az);
+          // and where a side meets the ground it stands on
+          const foot = d !== 2 && y === 0 && fy === 0 ? 0.86 : 1;
+          const k = (light[i] = (1 - crowd * 0.15) * foot) * shade;
+          col.push(c[0] * k, c[1] * k, c[2] * k);
+        });
+        // split the square along its evener diagonal, so the shading does not show a seam
+        if (light[0] + light[2] >= light[1] + light[3]) idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        else idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       }
     }
     return {

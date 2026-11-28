@@ -3,6 +3,8 @@ import { BIOMES, SHORE, SEABED } from './biomes.js';
 import { CELL, planSettlement } from './structures.js';
 
 export const WATER_Y = -0.3;
+export const DIG_STEP = 0.5; // how far one spadeful lowers or raises the ground
+export const DIG_LIMIT = 4; // steps the ground may be moved from where nature left it, either way
 export const SWIM_DEPTH = 0.8; // water deeper than this (surface to bed) is swum, shallower is waded
 const OCEAN = -0.05; // continent noise below this is sea: a little under half the world
 const MOUNTAIN = 0.13; // range noise above this is mountain
@@ -16,6 +18,7 @@ export class Worldgen {
   constructor(seed) {
     this.seed = seed | 0;
     this.cache = new Map();
+    this.dug = new Map(); // "x,z" -> steps the player has dug down (negative) or built up
     this.settlements = new Map(); // settlement grid square -> village, castle or null
     this.volcanoes = new Map(); // grid cell -> volcano or null
     // Each world has exactly one frozen region and one volcanic region, on roughly opposite sides.
@@ -97,9 +100,22 @@ export class Worldgen {
       const st = this.settlementAt(x, z);
       Object.assign(t, { h: st.h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true });
     }
+    // ground the player has dug out or built up, in half-tile steps
+    const steps = this.dug.size ? this.dug.get(x + ',' + z) : 0;
+    if (steps) {
+      t.h += steps * DIG_STEP;
+      t.dug = steps;
+    }
     if (this.cache.size > 200000) this.cache.clear();
     this.cache.set(k, t);
     return t;
+  }
+
+  // Lower (negative) or raise the ground of one tile by whole steps from how nature left it.
+  setDug(x, z, steps) {
+    if (steps) this.dug.set(x + ',' + z, steps);
+    else this.dug.delete(x + ',' + z);
+    this.cache.delete((x + 33554432) * 67108864 + (z + 33554432));
   }
 
   // The settlement planned for one square of the settlement grid, or null. Worked out once.

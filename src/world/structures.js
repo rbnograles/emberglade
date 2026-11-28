@@ -117,7 +117,8 @@ function castle(rand) {
   plan.obj(-1, -3, placed('lantern'));
   plan.obj(1, -3, placed('lantern'));
   for (const [x, z] of [[-4, 4], [4, 4]]) plan.obj(x, z, placed('lantern'));
-  return { cells: plan.cells, radius: R, spots: [] };
+  // its guards: two at the gate inside the wall, one before the keep
+  return { cells: plan.cells, radius: R, spots: [[-2, 6], [2, 6], [0, 2]] };
 }
 
 // The settlement planned for one square of the grid, or null. `natural(x, z)` gives the untouched

@@ -4,7 +4,7 @@ import { Progress, xpFor } from './progress.js';
 import { DIFFICULTIES } from './survival.js';
 import { Wildlife } from './wildlife.js';
 import { Villagers } from './villagers.js';
-import { Worldgen, WATER_Y, SWIM_DEPTH } from '../world/worldgen.js';
+import { Worldgen, WATER_Y, SWIM_DEPTH, DIG_STEP, DIG_LIMIT } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
 import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
 import { cropFor } from '../world/crops.js';
@@ -74,6 +74,7 @@ export class Game {
     this.seed = save?.seed ?? ((Math.random() * 2 ** 31) | 0);
     this.difficulty = Object.hasOwn(DIFFICULTIES, save?.difficulty) ? save.difficulty : 'standard';
     this.gen = new Worldgen(this.seed);
+    for (const [key, steps] of Object.entries(save?.dug ?? {})) if (Number.isInteger(steps)) this.gen.dug.set(key, steps);
     this.world = new WorldState(this.gen, save?.world, save?.floors, save?.roofs, save?.upper);
     this.lastLevel = 0;
     this.buildShift = 0; // storeys above (+1) or below (-1) the player's own that building is aimed at
@@ -135,8 +136,29 @@ export class Game {
     this.villagers = new Villagers(this);
   }
 
-  // A friendly place to begin: gentle lowland with trees close by and fresh water not far off.
+  // Where a new world begins: on the road before the gate of the castle nearest a friendly stretch
+  // of lowland, so there are walls, guards and a keep to explore from the first morning. If no
+  // castle stands within a long walk, it is the lowland spot itself.
   pickSpawn() {
+    const wild = this.wildSpawn(), lowland = new Set(['meadow', 'autumn', 'blossom', 'pine']);
+    const far = (x, z, c, r) => Math.hypot(x - c.x, z - c.z) > r;
+    for (const reach of [500, 1100, 2200]) {
+      const castles = this.gen.settlementsNear(wild.x, wild.z, reach).filter((st) => st.kind === 'castle')
+        .sort((a, b) => Math.hypot(a.x - wild.x, a.z - wild.z) - Math.hypot(b.x - wild.x, b.z - wild.z));
+      for (const st of castles) {
+        // a few steps south of the gate, on open ground
+        for (const [dx, dz] of [[0, 4], [1, 4], [-1, 4], [0, 5], [2, 5], [-2, 5], [0, 6]]) {
+          const x = st.x + dx, z = st.z + st.radius + dz, t = this.gen.tile(x, z);
+          if (t.water || t.shore || !lowland.has(t.biome) || Math.abs(t.h - st.h) > 1 || this.gen.object(x, z)) continue;
+          if (far(x, z, this.gen.frostCentre, 3400) && far(x, z, this.gen.heatCentre, 3000)) return { x, z };
+        }
+      }
+    }
+    return wild;
+  }
+
+  // A friendly place in the wild: gentle lowland with trees close by and fresh water not far off.
+  wildSpawn() {
     const lowland = new Set(['meadow', 'autumn', 'blossom', 'pine']);
     for (let attempt = 0; attempt < 1500; attempt++) {
       const x = Math.round((Math.random() - 0.5) * 9000), z = Math.round((Math.random() - 0.5) * 9000);
@@ -181,7 +203,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(),
+      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
       livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
@@ -1001,6 +1023,44 @@ export class Game {
     return this.status === 'cold' ? 1 + COLD_HUNGER * (1 - Math.min(1, this.defense / MAX_DEFENSE)) : 1;
   }
 
+  // Why the ground of this tile cannot be dug or built up, or null when it can.
+  groundProblem(tx, tz) {
+    const t = this.gen.tile(tx, tz);
+    if (!this.inReach(tx, tz)) return 'Too far away: step closer';
+    if (t.water || t.lava || t.ice) return 'The ground here cannot be worked';
+    if (t.settled) return 'This ground belongs to the settlement';
+    if (this.world.get(tx, tz) || this.world.getFloor(tx, tz)) return 'Clear the tile first';
+    for (let l = 1; l <= TOP_LEVEL; l++) if (this.world.cell(tx, tz, l)) return 'Something is built above this tile';
+    return null;
+  }
+
+  // Shovel: take half a step off the ground of a tile. Each spadeful gives one dirt.
+  dig(tx, tz) {
+    const t = this.gen.tile(tx, tz), steps = t.dug ?? 0, p = this.player;
+    const under = Math.floor(p.x) === tx && Math.floor(p.z) === tz;
+    const problem = this.groundProblem(tx, tz) ?? (under ? 'Stand beside the tile to dig it' : steps <= -DIG_LIMIT ? 'That is as deep as a shovel goes' : null);
+    if (problem) return void this.toast(problem);
+    this.gen.setDug(tx, tz, steps - 1);
+    this.world.changed(tx, tz, true);
+    this.emit('hit', { x: tx, z: tz, object: 'dirt', destroyed: true });
+    this.give('dirt', 1);
+    this.wearTool();
+    this.record('dig');
+  }
+
+  // Dirt: build the ground of a tile up by half a step.
+  fill(tx, tz) {
+    const t = this.gen.tile(tx, tz), steps = t.dug ?? 0, p = this.player;
+    const under = Math.floor(p.x) === tx && Math.floor(p.z) === tz;
+    const problem = this.groundProblem(tx, tz) ?? (steps >= DIG_LIMIT ? 'That is as high as dirt will pile' : under ? 'Step off the tile first' : null);
+    if (problem) return void this.toast(problem);
+    this.inv.removeAt(this.selected, 1);
+    this.gen.setDug(tx, tz, steps + 1);
+    this.world.changed(tx, tz, true);
+    this.emit('hit', { x: tx, z: tz, object: 'dirt', destroyed: false });
+    this.emit('inv');
+  }
+
   // ---- left click: use tool / harvest ----
   primary(tx, tz) {
     if (this.buildLevel > 0) return void this.primaryUpper(tx, tz, this.buildLevel);
@@ -1023,6 +1083,7 @@ export class Game {
         this.give(floor, 1);
         return;
       }
+      if (def?.tool === 'shovel') return void this.dig(tx, tz);
       if (def?.tool === 'hoe') {
         if (tile.water || tile.shore || tile.biome === 'sand') this.toast("Can't till here");
         else {
@@ -1248,6 +1309,7 @@ export class Game {
     if (def?.flask) return void this.drinkWater();
     if (def?.vehicle) return void this.launch(tx, tz);
     if (!hasTarget) return;
+    if (def?.fill) return void this.fill(tx, tz);
     const level = this.buildLevel;
     if (level > 0) {
       // upstairs: build on that storey, or use what stands there

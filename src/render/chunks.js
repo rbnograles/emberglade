@@ -17,6 +17,7 @@ const GROUND = Object.fromEntries(Object.entries(BIOMES).map(([k, b]) => [k, lin
 const SHORE_GROUND = linearPair(SHORE.ground);
 const WATER = linearPair(WATER_COLORS);
 const SIDE_TINT = rgb(0x9a7a5a);
+const DIRT = linearPair([0x8f633f, 0x7a5233]); // ground the player has dug shows bare earth
 const SEABED = [rgb(SEABED_COLORS.shallow), rgb(SEABED_COLORS.deep)];
 const LAVA = linearPair(LAVA_COLORS), ICE = linearPair(ICE_COLORS), BOIL = linearPair([0xd9703a, 0xc25a2e]);
 
@@ -69,7 +70,9 @@ export class Chunks {
           }`);
     };    this.lavaMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     this.waterMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.68, depthWrite: false });
-    this.world.onChange((x, z) => {
+    this.groundDirty = new Set();
+    this.world.onChange((x, z, ground = false) => {
+      if (ground) for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) this.groundDirty.add(Math.floor((x + dx) / CHUNK) + ',' + Math.floor((z + dz) / CHUNK));
       // Neighbours too, so fences across a chunk border reconnect.
       for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
         this.dirty.add(Math.floor((x + dx) / CHUNK) + ',' + Math.floor((z + dz) / CHUNK));
@@ -114,6 +117,17 @@ export class Chunks {
         this.map.delete(key);
       }
     }
+    // dug or filled ground: the land itself is drawn again
+    for (const key of this.groundDirty) {
+      const c = this.map.get(key);
+      if (!c) continue;
+      const built = this.buildTerrain(c.cx, c.cz);
+      for (const part of ['terrain', 'water', 'lava']) c[part].geometry.dispose();
+      c.terrain.geometry = built.land;
+      c.water.geometry = built.water;
+      c.lava.geometry = built.lava;
+    }
+    this.groundDirty.clear();
     for (const key of this.dirty) {
       const c = this.map.get(key);
       if (c) this.buildObjects(c);
@@ -151,14 +165,17 @@ export class Chunks {
   buildTerrain(cx, cz) {
     const maker = () => {
       const pos = [], norm = [], col = [], idx = [];
-      const quad = (corners, n, c) => {
+      // light: how bright each of the four corners is (1 = full), for shading that fades across the square
+      const quad = (corners, n, c, light = null) => {
         const base = pos.length / 3;
-        for (const p of corners) {
+        corners.forEach((p, i) => {
+          const k = light ? light[i] : 1;
           pos.push(p[0], p[1], p[2]);
           norm.push(n[0], n[1], n[2]);
-          col.push(c[0], c[1], c[2]);
-        }
-        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          col.push(c[0] * k, c[1] * k, c[2] * k);
+        });
+        if (!light || light[0] + light[2] >= light[1] + light[3]) idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        else idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       };
       const done = () => toGeometry({
         pos: new Float32Array(pos), norm: new Float32Array(norm), col: new Float32Array(col), idx: new Uint32Array(idx),
@@ -186,7 +203,7 @@ export class Chunks {
             : [0, 1, 2].map((i) => (WATER[0][i] + (WATER[1][i] - WATER[0][i]) * k) * (1 - depth * 0.35));
           water.quad([[x, WATER_Y, z], [x, WATER_Y, z + 1], [x + 1, WATER_Y, z + 1], [x + 1, WATER_Y, z]], [0, 1, 0], w);
         } else {
-          const pair = t.ice ? ICE : t.shore ? SHORE_GROUND : GROUND[t.biome];
+          const pair = t.dug < 0 ? DIRT : t.ice ? ICE : t.shore ? SHORE_GROUND : GROUND[t.biome];
           c = [0, 1, 2].map((i) => (pair[0][i] + (pair[1][i] - pair[0][i]) * k) * shade);
           // lava glows: it gets its own unlit layer just above the rock
           if (t.lava) {
@@ -195,17 +212,24 @@ export class Chunks {
           }
         }
         const h = t.water ? t.bed : t.h;
-        land.quad([[x, h, z], [x, h, z + 1], [x + 1, h, z + 1], [x + 1, h, z]], [0, 1, 0], c);
+        // the ground darkens a little at the foot of anything taller beside it: a bank, a cliff, a shore
+        const nook = (gx, gz) => {
+          let n = 0;
+          for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) if (floor(gx + ox, gz + oz) > h + 0.2) n++;
+          return 1 - n * 0.13;
+        };
+        land.quad([[x, h, z], [x, h, z + 1], [x + 1, h, z + 1], [x + 1, h, z]], [0, 1, 0], c, [nook(x, z), nook(x, z + 1), nook(x + 1, z + 1), nook(x + 1, z)]);
         const side = c.map((v, i) => v * 0.45 + SIDE_TINT[i] * 0.3);
+        const DEEP = 0.62; // a bank is darker at its foot than at its lip
         // Walls down to lower neighbours, wound to face outward.
         let nh = floor(x + 1, z);
-        if (nh < h) land.quad([[x + 1, nh, z], [x + 1, h, z], [x + 1, h, z + 1], [x + 1, nh, z + 1]], [1, 0, 0], side);
+        if (nh < h) land.quad([[x + 1, nh, z], [x + 1, h, z], [x + 1, h, z + 1], [x + 1, nh, z + 1]], [1, 0, 0], side, [DEEP, 1, 1, DEEP]);
         nh = floor(x - 1, z);
-        if (nh < h) land.quad([[x, nh, z], [x, nh, z + 1], [x, h, z + 1], [x, h, z]], [-1, 0, 0], side);
+        if (nh < h) land.quad([[x, nh, z], [x, nh, z + 1], [x, h, z + 1], [x, h, z]], [-1, 0, 0], side, [DEEP, DEEP, 1, 1]);
         nh = floor(x, z + 1);
-        if (nh < h) land.quad([[x, nh, z + 1], [x + 1, nh, z + 1], [x + 1, h, z + 1], [x, h, z + 1]], [0, 0, 1], side);
+        if (nh < h) land.quad([[x, nh, z + 1], [x + 1, nh, z + 1], [x + 1, h, z + 1], [x, h, z + 1]], [0, 0, 1], side, [DEEP, DEEP, 1, 1]);
         nh = floor(x, z - 1);
-        if (nh < h) land.quad([[x, nh, z], [x, h, z], [x + 1, h, z], [x + 1, nh, z]], [0, 0, -1], side);
+        if (nh < h) land.quad([[x, nh, z], [x, h, z], [x + 1, h, z], [x + 1, nh, z]], [0, 0, -1], side, [DEEP, 1, 1, DEEP]);
       }
     }
     return { land: land.done(), water: water.done(), lava: lava.done() };

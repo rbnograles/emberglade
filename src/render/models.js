@@ -251,10 +251,35 @@ export function buildModels() {
 const STONE = 0x9aa0a8, COPPER = 0xd9803a, IRON = 0xdfe6ee, STRAW = 0xd9c27a, FUR = 0xb08a5a, CRYSTAL = 0x9fdcf5;
 const HANDLE = 0x8a5a34;
 
-const handle = (v, top = 8) => v.box(0, 0, 0, 0, top, 0, HANDLE);
-const axe = (c) => handle(new Vox()).box(1, 6, 0, 3, 8, 0, c).box(1, 5, 0, 2, 5, 0, c).set(4, 6, 0, c).set(4, 7, 0, c).build(0.1);
-const pickaxe = (c) => handle(new Vox()).box(-3, 8, 0, 3, 8, 0, c).set(-4, 7, 0, c).set(4, 7, 0, c).set(-3, 9, 0, c).set(3, 9, 0, c).box(-1, 9, 0, 1, 9, 0, c).build(0.1);
-const sword = (c) => new Vox().box(0, 0, 0, 0, 1, 0, HANDLE).box(-2, 2, 0, 2, 2, 0, 0x6b7078).box(0, 3, 0, 0, 10, 0, c).box(-1, 3, 0, -1, 8, 0, c).set(0, 11, 0, c).build(0.1);
+// A lighter or darker shade of a colour, for edges that catch the light and the shadowed side of a head.
+const tone = (hex, k) => {
+  const f = (s) => Math.min(255, Math.round(((hex >> s) & 255) * k));
+  return (f(16) << 16) | (f(8) << 8) | f(0);
+};
+const WRAP = 0x5c3a20, GOLD = 0xf2c94c;
+// The shaft every tool shares: a capped end, a bound grip, and pale wood toward the head.
+// The grip is the lowest part, which is where the hand closes round a held tool.
+const handle = (v, top = 11) => v.box(0, 0, 0, 0, top, 0, HANDLE).set(0, 0, 0, WRAP).box(0, 2, 0, 0, 3, 0, WRAP).box(0, top - 4, 0, 0, top, 0, tone(HANDLE, 1.14));
+// axe: a bearded head with a bright cutting edge, a dark socket and a poll behind the shaft
+const axe = (c) => handle(new Vox())
+  .box(1, 7, 0, 3, 10, 0, c).box(1, 7, 0, 1, 10, 0, tone(c, 0.72)).box(2, 5, 0, 3, 6, 0, c).set(3, 11, 0, c)
+  .box(4, 5, 0, 4, 11, 0, tone(c, 1.22)).set(4, 4, 0, tone(c, 1.22))
+  .box(-1, 8, 0, -1, 9, 0, tone(c, 0.72)).set(0, 9, 0, WRAP)
+  .build(0.1);
+// pickaxe: a curved head, thick at the eye and drawn out to two bright points
+const pickaxe = (c) => handle(new Vox())
+  .box(-3, 11, 0, 3, 11, 0, c).box(-1, 12, 0, 1, 12, 0, tone(c, 1.15)).box(-1, 10, 0, 1, 10, 0, tone(c, 0.72)).set(0, 11, 0, tone(c, 0.72))
+  .box(-5, 10, 0, -4, 10, 0, c).box(4, 10, 0, 5, 10, 0, c).set(-6, 9, 0, tone(c, 1.25)).set(6, 9, 0, tone(c, 1.25)).set(-6, 8, 0, tone(c, 1.25)).set(6, 8, 0, tone(c, 1.25))
+  .build(0.1);
+// sword: a gold pommel, a bound grip, a cross-guard, and a blade with a pale fuller down the middle
+const sword = (c) => new Vox()
+  .set(0, 0, 0, GOLD).box(0, 1, 0, 0, 2, 0, WRAP).box(-2, 3, 0, 2, 3, 0, 0x6b7078).set(-2, 3, 0, GOLD).set(2, 3, 0, GOLD)
+  .box(-1, 4, 0, 1, 10, 0, tone(c, 0.86)).box(0, 4, 0, 0, 11, 0, tone(c, 1.2)).set(-1, 11, 0, tone(c, 0.86)).set(0, 12, 0, tone(c, 1.2))
+  .build(0.1);
+const hoe = (c) => handle(new Vox()).box(1, 11, 0, 3, 11, 0, tone(c, 0.72)).box(3, 9, 0, 3, 10, 0, c).box(2, 8, 0, 4, 8, 0, tone(c, 1.2)).set(0, 10, 0, WRAP).build(0.1);
+const shovel = (c) => handle(new Vox(), 8)
+  .box(-1, 9, 0, 1, 9, 0, tone(c, 0.72)).box(-2, 10, 0, 2, 13, 0, c).box(0, 10, 0, 0, 13, 0, tone(c, 1.2)).box(-1, 14, 0, 1, 14, 0, c).set(0, 15, 0, tone(c, 1.2))
+  .build(0.1);
 const hat = (c) => new Vox().box(0, 0, 0, 5, 0, 5, c).box(1, 1, 1, 4, 3, 4, c).box(1, 1, 1, 4, 1, 4, 0x5c3a20).build(0.1);
 const tunic = (c) => new Vox().box(1, 0, 0, 4, 5, 2, c).box(-1, 3, 0, 0, 5, 2, c).box(5, 3, 0, 6, 5, 2, c).box(2, 5, 0, 3, 5, 0, 0x2b2b33).build(0.1);
 const boots = (c) => new Vox().box(0, 0, 0, 1, 3, 1, c).box(0, 0, 2, 1, 1, 3, c).box(3, 0, 0, 4, 3, 1, c).box(3, 0, 2, 4, 1, 3, c).build(0.1);
@@ -311,7 +336,9 @@ export function buildItemModels(world) {
     m.set(tier + '_pickaxe', pickaxe(c));
     m.set(tier + '_sword', sword(c));
   }
-  m.set('hoe', handle(new Vox()).box(1, 8, 0, 3, 8, 0, STONE).set(3, 7, 0, STONE).build(0.1));
+  m.set('hoe', hoe(STONE));
+  m.set('shovel', shovel(STONE));
+  m.set('dirt', lump([0x8f633f, 0x7a5233, 0x9a6f48], 96));
   m.set('torch', new Vox().box(0, 0, 0, 0, 5, 0, HANDLE).box(-1, 6, -1, 1, 7, 1, 0xff8a2a).box(0, 8, 0, 0, 9, 0, 0xffe27a).build(0.1));
   m.set('flask', new Vox().box(0, 0, 0, 3, 4, 2, 0x6fc3e8).box(0, 3, 0, 3, 4, 2, 0xa9dcf5).box(1, 5, 0, 2, 6, 2, 0x6fc3e8).box(1, 7, 1, 2, 7, 1, 0x8a5a34).build(0.1));
   m.set('watering_can', new Vox().box(0, 0, 0, 4, 4, 3, mix([COPPER, 0xc9722f], 85)).box(5, 2, 1, 7, 2, 2, COPPER).box(8, 3, 1, 8, 4, 2, COPPER).box(-2, 1, 1, -1, 1, 2, 0x8a5a34)

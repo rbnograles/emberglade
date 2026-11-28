@@ -13,7 +13,7 @@ import { MOUSE_LEFT, MOUSE_RIGHT, keyed } from './tooltip.js';
 const $ = (id) => document.getElementById(id);
 
 export function objectToolVerb(tool, obj) {
-  if (!obj) return tool === 'hoe' ? 'Till' : 'Tool';
+  if (!obj) return tool === 'hoe' ? 'Till' : tool === 'shovel' ? 'Dig' : 'Tool';
   if (obj.t === 'soil') {
     if (obj.crop >= cropFor(obj).days) return 'Harvest';
     return obj.crop < 0 && tool === 'hoe' ? 'Restore ground' : 'Tool';
@@ -61,6 +61,7 @@ export function secondaryVerb(def) {
   if (def.roof) return 'Roof over';
   if (def.floor) return 'Lay floor';
   if (def.place) return 'Place';
+  if (def.fill) return 'Fill';
   if (def.plant) return 'Plant';
   if (def.tool === 'can') return 'Water';
   return '';

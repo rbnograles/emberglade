@@ -272,9 +272,10 @@ export class PlayerModel {
 
 // Villagers: one figure per entry in game.villagers.list, built like the player in that villager's own colours.
 export class VillagerFigures {
-  constructor(scene, game) {
+  constructor(scene, game, itemModels = null) {
     this.scene = scene;
     this.game = game;
+    this.itemModels = itemModels;
     this.shown = new Map(); // villager id -> PlayerModel
   }
 
@@ -284,14 +285,20 @@ export class VillagerFigures {
       alive.add(v.id);
       let model = this.shown.get(v.id);
       if (!model) {
-        model = new PlayerModel(v.look);
+        model = new PlayerModel(v.look, this.itemModels);
+        if (v.guard) {
+          // a guard wears iron and carries a sword
+          model.setArmor([0xb8c0c8, 0x8f98a3, 0x5a626c, null]);
+          if (this.itemModels) model.setHeld('iron_sword', true);
+        }
         model.group.rotation.y = v.dir;
         this.scene.add(model.group);
         this.shown.set(v.id, model);
       }
       model.group.position.set(v.x, g.ground(v.x, v.z), v.z);
       model.facing = v.dir;
-      model.update(dt, v.moving, 2);
+      if (v.swing > 0.25 && model.swing <= 0) model.startSwing();
+      model.update(dt, v.moving, v.guard && v.moving ? 3.2 : 2);
     }
     for (const [id, model] of this.shown) {
       if (alive.has(id)) continue;

@@ -45,6 +45,7 @@ const save = loadSave();
 if (needsRelocation(save)) await confirmRelocation(save);
 const game = new Game(save);
 const p = game.player;
+if (import.meta.env.DEV) window.__game = game; // a handle for poking at the game from the browser console while developing
 
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true });
@@ -94,7 +95,7 @@ const particles = new Particles(scene);
 const sparks = new Sparks(scene);
 const fires = new Fires(scene);
 const animals = new Animals(scene, game, models);
-const folk = new VillagerFigures(scene, game);
+const folk = new VillagerFigures(scene, game, itemModels);
 const enemies = new Enemies(scene, game, models);
 const fish = new Fish(scene, game, models.get('fish'));
 const vehicles = new Vehicles(scene, game, { trail_cart: models.get('trail_cart'), boat: models.get('boat'), submarine: models.get('submarine') });
@@ -535,6 +536,7 @@ function autoTarget() {
   const fx = Math.sin(playerModel.facing), fz = Math.cos(playerModel.facing);
   const at = (x, z) => ({ x, z, reach: game.inReach(x, z), px: x + 0.5, pz: z + 0.5 });
   const wantsSoil = def?.plant || game.held?.id === 'watering_can';
+  if (def?.fill) return at(Math.floor(p.x + fx * 1.3), Math.floor(p.z + fz * 1.3));
   if (def?.place || def?.floor || def?.roof || def?.vehicle) {
     // the first tile ahead the thing could go on, out to arm's length
     for (const d of [1.3, 2.1, 2.9]) {
@@ -561,7 +563,7 @@ function autoTarget() {
   }
   if (best) return best;
   // nothing nearby: a hoe tills the ground just ahead
-  return def?.tool === 'hoe' ? at(Math.floor(p.x + fx * 1.3), Math.floor(p.z + fz * 1.3)) : null;
+  return def?.tool === 'hoe' || def?.tool === 'shovel' ? at(Math.floor(p.x + fx * 1.3), Math.floor(p.z + fz * 1.3)) : null;
 }
 const currentTarget = () => (touchMode && tapHold <= 0 ? autoTarget() : pickTarget());
 
@@ -575,7 +577,7 @@ function touchNeed() {
   if (held?.food) return 'eat';
   if (held?.flask) return 'drink';
   if (target?.reach && objAt(target.x, target.z)) return null;
-  if (ITEMS[game.held?.id]?.tool === 'hoe') return null;
+  if (['hoe', 'shovel'].includes(ITEMS[game.held?.id]?.tool)) return null;
   return needAction(game);
 }
 
