@@ -4,6 +4,7 @@ import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
 import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
+import { Game } from '../src/game/game.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
 const sea = (bed, slabs) => ({ h: -0.3, water: true, bed, slabs });
@@ -357,5 +358,99 @@ describe('the new country in a world', () => {
       }
     }
     expect(peaks).toBeGreaterThan(20);
+  });
+});
+
+// A game on hand-made ground: flat at height 0 except where `tiles` says otherwise.
+// tiles: { 'x,z': { h, slabs, water, bed, ... } }
+function rockWorld(tiles = {}) {
+  const g = new Game({ seed: 1 });
+  const made = new Map();
+  g.gen.tile = (x, z) => {
+    const key = x + ',' + z;
+    let t = made.get(key);
+    if (!t) made.set(key, (t = { h: 0, bed: null, water: false, salt: false, biome: 'meadow', shore: false, lava: false, ice: false, boiling: false, frost: 0, heat: 0, obj: null, ...tiles[key] }));
+    return t;
+  };
+  g.gen.object = () => null;
+  g.gen.settlementAt = () => null;
+  g.gen.floorAt = g.gen.roofAt = g.gen.upperAt = () => null;
+  Object.assign(g.player, { x: 0.5, z: 0.5, y: 0, vy: 0 });
+  return g;
+}
+const stand = (g, x, z, y) => Object.assign(g.player, { x: x + 0.5, z: z + 0.5, y, vy: 0 });
+const settleDown = (g, jump = false) => { for (let i = 0; i < 240; i++) g.physics(1 / 60, jump); };
+
+describe('walking over and under rock', () => {
+  const ARCH = { '1,0': { slabs: [[2, 4]] }, '2,0': { h: 4 } };
+
+  it('walks under an arch and stays on the ground', () => {
+    const g = rockWorld(ARCH);
+    expect(g.canEnter(1.5, 0.5)).toBe(true);
+    stand(g, 1, 0, 0);
+    expect(g.standY(1.5, 0.5)).toBe(0);
+    settleDown(g);
+    expect(g.player.y).toBe(0);
+    expect(g.aloft(g.gen.tile(1, 0))).toBe(false);
+  });
+
+  it('walks onto the top of an arch from ground of the same height, and stays up', () => {
+    const g = rockWorld(ARCH);
+    stand(g, 2, 0, 4);
+    expect(g.canEnter(1.5, 0.5)).toBe(true);
+    stand(g, 1, 0, 4);
+    expect(g.standY(1.5, 0.5)).toBe(4);
+    settleDown(g);
+    expect(g.player.y).toBe(4);
+    expect(g.aloft(g.gen.tile(1, 0))).toBe(true);
+    expect(g.playerLevel).toBe(0);
+  });
+
+  it('is stopped by the side of a slab at body height', () => {
+    const g = rockWorld({ ...ARCH, '0,0': { h: 2.5 } });
+    stand(g, 0, 0, 2.5);
+    expect(g.canEnter(1.5, 0.5)).toBe(false);
+  });
+
+  it('bumps its head on the rock when it jumps beneath it', () => {
+    const g = rockWorld(ARCH);
+    stand(g, 1, 0, 0);
+    let highest = 0;
+    for (let i = 0; i < 120; i++) {
+      g.physics(1 / 60, true);
+      highest = Math.max(highest, g.player.y);
+    }
+    expect(highest).toBeGreaterThan(0.2);
+    expect(highest).toBeLessThanOrEqual(2 - 1.5 + 1e-6);
+  });
+
+  it('falls to the ground on stepping off the top', () => {
+    const g = rockWorld(ARCH);
+    stand(g, 1, 0, 4);
+    g.player.x = 0.5; // off the arch, over open ground
+    settleDown(g);
+    expect(g.player.y).toBe(0);
+  });
+
+  it('stands on an arch over the sea without being in the water', () => {
+    const g = rockWorld({ '1,0': { h: -0.3, water: true, salt: true, bed: -4, slabs: [[2, 6]] } });
+    stand(g, 1, 0, 6);
+    expect(g.swimming).toBe(false);
+    expect(g.inWater).toBe(false);
+    settleDown(g);
+    expect(g.player.y).toBe(6);
+    // and swims beneath it as in any deep water
+    stand(g, 1, 0, -1.25);
+    expect(g.swimming).toBe(true);
+    expect(g.canEnter(1.5, 0.5)).toBe(true);
+  });
+
+  it('is not blocked from above by what stands under the rock', () => {
+    const g = rockWorld(ARCH);
+    g.world.set(1, 0, { t: 'wood_wall', placed: true });
+    stand(g, 0, 0, 0);
+    expect(g.blocked(1.5, 0.5)).toBe(true);
+    stand(g, 2, 0, 4);
+    expect(g.blocked(1.5, 0.5)).toBe(false);
   });
 });

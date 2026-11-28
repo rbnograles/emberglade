@@ -9,6 +9,7 @@ import { Wildlife } from './wildlife.js';
 import { Villagers } from './villagers.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH, DIG_STEP, DIG_LIMIT } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
+import { PLAYER_HEIGHT, slabTopBelow, ceilingAbove, solidAt } from '../world/columns.js';
 import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
 import { cropFor } from '../world/crops.js';
 import { OBJECTS } from '../world/objects.js';
@@ -363,6 +364,9 @@ export class Game {
     const cx = Math.floor(x), cz = Math.floor(z);
     for (let tz = cz - 1; tz <= cz + 1; tz++) {
       for (let tx = cx - 1; tx <= cx + 1; tx++) {
+        // whoever walks on rock above a tile is clear of everything standing under it
+        const here = this.gen.tile(tx, tz);
+        if (!animal && here.slabs && this.aloft(here)) continue;
         if (level > 0) {
           const up = this.world.getAt(tx, tz, level), ud = up && OBJECTS[up.t];
           if (!ud || ud.stairs) continue;
@@ -405,11 +409,17 @@ export class Game {
   // On land this is the highest surface at or just below `y`: the ground, a built floor on an upper
   // storey, or the slope of a staircase. So someone upstairs stays upstairs, and someone walking
   // underneath stays on the ground.
+  // Is this height on or above rock that reaches over the tile? Then the ground and the water
+  // beneath are another place: out of reach, and nothing to do with whoever is up here.
+  aloft(t, y = this.player.y) { return slabTopBelow(t, y + STEP_LIP + 0.02) > -Infinity; }
+
   standY(x, z, y = this.player.y) {
     const tx = Math.floor(x), tz = Math.floor(z), t = this.gen.tile(tx, tz);
-    if (t.water) return WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed;
     const lip = y + STEP_LIP + 0.02;
-    let best = t.h;
+    // rock above the tile (an arch, a cave roof, an overhang) can be stood on like any other surface
+    const rock = slabTopBelow(t, lip);
+    if (t.water) return Math.max(rock, WATER_Y - t.bed > SWIM_DEPTH ? WATER_Y - FLOAT_SINK : t.bed);
+    let best = Math.max(t.h, rock);
     for (let l = 0; l <= TOP_LEVEL; l++) {
       const base = t.h + l * STOREY;
       if (base > lip) break;
@@ -436,8 +446,10 @@ export class Game {
 
   // Which storey the player's feet are on: 0 on the ground, 1 or 2 on the floors above.
   get playerLevel() {
-    const p = this.player;
-    return Math.max(0, Math.min(TOP_LEVEL, Math.round((p.y - this.ground(p.x, p.z)) / STOREY)));
+    const p = this.player, t = this.gen.tile(Math.floor(p.x), Math.floor(p.z));
+    // storeys are counted from what is underfoot: the ground, or the rock of an arch or a ledge
+    const foot = Math.max(t.h, slabTopBelow(t, p.y + STEP_LIP + 0.02));
+    return Math.max(0, Math.min(TOP_LEVEL, Math.round((p.y - foot) / STOREY)));
   }
 
   // The storey that building and dismantling act on: the player's own, or one above or below it
@@ -463,14 +475,22 @@ export class Game {
     return false;
   }
 
-  // riding a vehicle keeps you out of the water
-  get inWater() { return !this.player.riding && this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)).water; }
-  get swimming() { return !this.player.riding && this.deepAt(this.player.x, this.player.z); }
+  // riding a vehicle keeps you out of the water, and so does standing on rock that spans it
+  get inWater() {
+    const t = this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z));
+    return !this.player.riding && t.water && !this.aloft(t);
+  }
+  get swimming() {
+    return !this.player.riding && this.deepAt(this.player.x, this.player.z) && !this.aloft(this.gen.tile(Math.floor(this.player.x), Math.floor(this.player.z)));
+  }
   // head under the surface
   get submerged() { return this.swimming && this.player.y < WATER_Y - FLOAT_SINK - 0.35; }
 
   // Ledges higher than a small lip stop the player unless they have jumped high enough.
   canEnter(x, z) {
+    // rock at body height is a wall, whatever lies under it
+    const rockAt = this.gen.tile(Math.floor(x), Math.floor(z)), feet = this.player.y;
+    if (rockAt.slabs && solidAt(rockAt, feet + STEP_LIP + 0.02, feet + PLAYER_HEIGHT)) return false;
     // deep water is open at any depth; the bed pushes a diver up where it rises
     if (this.deepAt(x, z)) return !this.blocked(x, z);
     // from the water you can haul yourself out onto a low bank
@@ -558,6 +578,12 @@ export class Game {
     }
     if (p.y <= g + 1e-4) this.gliding = false;
     p.y = Math.max(g, p.y + p.vy * dt);
+    // rock overhead stops a jump short
+    const roof = ceilingAbove(this.gen.tile(Math.floor(p.x), Math.floor(p.z)), p.y + STEP_LIP + 0.02) - PLAYER_HEIGHT;
+    if (p.y > roof) {
+      p.y = Math.max(g, roof);
+      p.vy = Math.min(p.vy, 0);
+    }
     // arriving on another storey puts the builder's aim back on the storey underfoot
     const level = this.playerLevel;
     if (level !== this.lastLevel) this.buildShift = 0;
