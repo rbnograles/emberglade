@@ -9,7 +9,7 @@ import { Wildlife } from './wildlife.js';
 import { Villagers } from './villagers.js';
 import { Worldgen, WATER_Y, SWIM_DEPTH, DIG_STEP, DIG_LIMIT } from '../world/worldgen.js';
 import { hash2 } from '../core/noise.js';
-import { PLAYER_HEIGHT, slabTopBelow, ceilingAbove, solidAt } from '../world/columns.js';
+import { HEADROOM, PLAYER_HEIGHT, slabTopBelow, ceilingAbove, solidAt } from '../world/columns.js';
 import { WorldState, STOREY, TOP_LEVEL } from '../world/worldstate.js';
 import { cropFor } from '../world/crops.js';
 import { OBJECTS } from '../world/objects.js';
@@ -20,7 +20,7 @@ import { Goals } from './goals.js';
 import { tickSurvival, tickStamina, eat, drink, MAX_HEALTH, MAX_HUNGER, MAX_THIRST, MAX_STAMINA } from './survival.js';
 
 export const DAY_SECONDS = 480;
-const GEN_VERSION = 5; // bump when world generation changes shape, so old saves are moved to safe ground
+const GEN_VERSION = 6; // bump when world generation changes shape, so old saves are moved to safe ground
 export const REACH = 3.5;
 export const CAN_CAPACITY = 10;
 export const HOTBAR = 9;
@@ -181,7 +181,7 @@ export class Game {
         .sort((a, b) => Math.hypot(a.x - wild.x, a.z - wild.z) - Math.hypot(b.x - wild.x, b.z - wild.z));
       for (const st of castles) {
         const { x, z } = st.foot;
-        if (!lowland.has(this.gen.tile(x, z).biome)) continue;
+        if (!lowland.has(this.gen.tile(x, z).biome) || this.gen.tile(x, z).land) continue;
         if (far(x, z, this.gen.frostCentre, this.gen.type.frost + 800) && far(x, z, this.gen.heatCentre, this.gen.type.heat + 800)) return { x, z };
       }
     }
@@ -194,7 +194,7 @@ export class Game {
     for (let attempt = 0; attempt < 1500; attempt++) {
       const x = Math.round((Math.random() - 0.5) * 9000), z = Math.round((Math.random() - 0.5) * 9000);
       const t = this.gen.tile(x, z);
-      if (t.water || t.shore || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
+      if (t.water || t.shore || t.land || !lowland.has(t.biome) || this.gen.object(x, z)) continue;
       // well clear of the two harsh regions: they are places to travel to, not to wake up beside
       const far = (c, r) => Math.hypot(x - c.x, z - c.z) > r;
       if (!far(this.gen.frostCentre, this.gen.type.frost + 800) || !far(this.gen.heatCentre, this.gen.type.heat + 800)) continue;
@@ -590,8 +590,22 @@ export class Game {
     this.lastLevel = level;
   }
 
+  // Is the player standing on rock above this tile? What is under the rock is then out of reach,
+  // and the top of the rock cannot be built on yet.
+  overTile(tx, tz) {
+    const t = this.gen.tile(tx, tz);
+    return !!t.slabs && this.aloft(t);
+  }
+
+  // Would a piece on storey `level` of this tile reach up into the rock over it?
+  noRoom(tx, tz, level, roof = false) {
+    const t = this.gen.tile(tx, tz);
+    return !!t.slabs && t.h + (level + 1) * STOREY + (roof ? 0.75 : 0) > t.slabs[0][0];
+  }
+
   inReach(tx, tz) {
     if (Math.hypot(tx + 0.5 - this.player.x, tz + 0.5 - this.player.z) > REACH) return false;
+    if (this.overTile(tx, tz)) return false;
     // the seabed is only in reach when you have dived down near it
     const t = this.gen.tile(tx, tz);
     return !t.water || this.player.y - t.bed <= 1.6;
@@ -1097,6 +1111,7 @@ export class Game {
   // Why the ground of this tile cannot be dug or built up, or null when it can.
   groundProblem(tx, tz) {
     const t = this.gen.tile(tx, tz);
+    if (this.overTile(tx, tz)) return 'Nothing can be built up here yet';
     if (!this.inReach(tx, tz)) return 'Too far away: step closer';
     if (t.water || t.lava || t.ice) return 'The ground here cannot be worked';
     if (t.settled) return 'This ground belongs to the settlement';
@@ -1123,7 +1138,8 @@ export class Game {
   fill(tx, tz) {
     const t = this.gen.tile(tx, tz), steps = t.dug ?? 0, p = this.player;
     const under = Math.floor(p.x) === tx && Math.floor(p.z) === tz;
-    const problem = this.groundProblem(tx, tz) ?? (steps >= DIG_LIMIT ? 'That is as high as dirt will pile' : under ? 'Step off the tile first' : null);
+    const cramped = !!t.slabs && t.h + DIG_STEP > t.slabs[0][0] - HEADROOM;
+    const problem = this.groundProblem(tx, tz) ?? (cramped ? 'No room under the rock' : steps >= DIG_LIMIT ? 'That is as high as dirt will pile' : under ? 'Step off the tile first' : null);
     if (problem) return void this.toast(problem);
     this.inv.removeAt(this.selected, 1);
     this.gen.setDug(tx, tz, steps + 1);
@@ -1282,6 +1298,8 @@ export class Game {
   placeProblem(tx, tz) {
     const def = this.held ? ITEMS[this.held.id] : null;
     if (!def || (!def.place && !def.floor && !def.roof) || this.canPlace(tx, tz)) return null;
+    if (this.overTile(tx, tz)) return 'Nothing can be built up here yet';
+    if (this.inReach(tx, tz) && this.noRoom(tx, tz, this.buildLevel, !!def.roof)) return 'No room under the rock';
     if (!this.inReach(tx, tz)) return 'Too far away: step closer';
     const t = this.gen.tile(tx, tz), w = this.world, level = this.buildLevel;
     if (t.water || t.lava) return 'It cannot stand on water';
@@ -1317,6 +1335,7 @@ export class Game {
     const def = this.held ? ITEMS[this.held.id] : null;
     if (def?.vehicle) return !this.launchProblem(def.vehicle, tx, tz);
     if (!def || (!def.place && !def.floor && !def.roof) || !this.inReach(tx, tz)) return false;
+    if (this.noRoom(tx, tz, this.buildLevel, !!def.roof)) return false;
     const obj = this.world.get(tx, tz);
     if (this.gen.tile(tx, tz).water || this.gen.tile(tx, tz).lava) return false;
     const level = this.buildLevel;

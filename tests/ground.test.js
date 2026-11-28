@@ -4,7 +4,7 @@ import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
 import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
-import { Game } from '../src/game/game.js';
+import { Game, needsRelocation } from '../src/game/game.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
 const sea = (bed, slabs) => ({ h: -0.3, water: true, bed, slabs });
@@ -452,5 +452,62 @@ describe('walking over and under rock', () => {
     expect(g.blocked(1.5, 0.5)).toBe(true);
     stand(g, 2, 0, 4);
     expect(g.blocked(1.5, 0.5)).toBe(false);
+  });
+});
+
+const hold = (g, id, n = 1) => {
+  g.inv.slots[0] = { id, n };
+  g.selected = 0;
+};
+
+describe('rules beside and beneath rock', () => {
+  const ARCH = { '1,0': { slabs: [[2, 4]] }, '2,0': { h: 4 } };
+
+  it('builds under an arch only where the piece fits', () => {
+    const g = rockWorld(ARCH);
+    hold(g, 'wood_wall');
+    expect(g.canPlace(1, 0)).toBe(true); // one storey is 1.5 tall and the rock is 2 up
+    g.buildShift = 1;
+    expect(g.buildLevel).toBe(1);
+    expect(g.canPlace(1, 0)).toBe(false);
+    expect(g.placeProblem(1, 0)).toBe('No room under the rock');
+  });
+
+  it('refuses to build, dig or reach down through the rock it stands on', () => {
+    const g = rockWorld(ARCH);
+    stand(g, 2, 0, 4);
+    hold(g, 'wood_wall');
+    expect(g.overTile(1, 0)).toBe(true);
+    expect(g.inReach(1, 0)).toBe(false);
+    expect(g.canPlace(1, 0)).toBe(false);
+    expect(g.placeProblem(1, 0)).toBe('Nothing can be built up here yet');
+    expect(g.groundProblem(1, 0)).toBe('Nothing can be built up here yet');
+    // the plateau beside it is ordinary ground
+    expect(g.overTile(3, 0)).toBe(false);
+    expect(g.inReach(3, 0)).toBe(true);
+  });
+
+  it('will not pile the ground up into the rock', () => {
+    const g = rockWorld({ '1,0': { slabs: [[2, 4]] } });
+    const said = [];
+    g.toast = (text) => said.push(text);
+    hold(g, 'dirt', 5);
+    const before = g.gen.dug.get('1,0') ?? 0;
+    g.fill(1, 0);
+    expect(g.gen.dug.get('1,0') ?? 0).toBe(before);
+    expect(said).toContain('No room under the rock');
+  });
+
+  it('moves every world saved under the old land to a fresh start', () => {
+    expect(needsRelocation({ player: { x: 0, z: 0 }, gen: 5 })).toBe(true);
+    expect(needsRelocation(new Game({ seed: 3 }).serialize())).toBe(false);
+  });
+
+  it('never begins a world on the rugged country', () => {
+    for (let i = 0; i < 6; i++) {
+      const g = new Game({ seed: 100 + i });
+      const s = g.wildSpawn();
+      expect(g.gen.tile(s.x, s.z).land).toBeUndefined();
+    }
   });
 });
