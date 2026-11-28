@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HEADROOM, PLAYER_HEIGHT, floorOf, surfaces, slabTopBelow, ceilingAbove, solidAt, solids } from '../src/world/columns.js';
+import { Landforms, LAYERS, settle } from '../src/world/landforms.js';
 
 const land = (h, slabs) => ({ h, water: false, bed: null, slabs });
 const sea = (bed, slabs) => ({ h: -0.3, water: true, bed, slabs });
@@ -38,5 +39,114 @@ describe('a tile read as a column of rock and air', () => {
   it('lists its solid ranges from the bottom up', () => {
     expect(solids(land(2))).toEqual([[-Infinity, 2]]);
     expect(solids(sea(-4, [[2, 5]]))).toEqual([[-Infinity, -4], [2, 5]]);
+  });
+});
+
+// Worlds with nothing in them but what the landforms need: all land, or all shallow sea.
+const allLand = (seed) => new Landforms({ seed, sea: 0, rugged: 1, continent: () => 1, plain: () => true });
+const allSea = (seed) => new Landforms({ seed, sea: 0, rugged: 1, continent: () => -0.01, plain: () => true });
+const GROUND = { h: 0, water: false, salt: false, bed: null };
+const SEA = { h: -0.3, water: true, salt: true, bed: -4 };
+const topOf = (form) => Math.max(form.h ?? -Infinity, ...(form.slabs ?? []).map((s) => s[1]));
+const of = (list, id) => list.filter((f) => f.layer.id === id);
+
+// Do the slabs of a reshaped tile obey the rules? floor: the ground they stand over.
+function slabsAreSound(slabs, floor) {
+  for (const [lo, hi] of slabs) {
+    if ((lo * 2) % 1 || (hi * 2) % 1 || hi - lo < 0.5 || lo < floor + HEADROOM) return false;
+    floor = hi;
+  }
+  return true;
+}
+
+describe('settling the rock above a tile', () => {
+  it('joins rock that is too close to the ground onto the ground', () => {
+    expect(settle(0, [[1, 3]], false)).toEqual({ h: 3, slabs: undefined });
+    expect(settle(4, [[3, 4]], false)).toEqual({ h: 4, slabs: undefined });
+  });
+  it('sorts slabs and merges those without headroom between them', () => {
+    expect(settle(0, [[5, 6], [2, 3]], false)).toEqual({ h: 0, slabs: [[2, 3], [5, 6]] });
+    expect(settle(0, [[2, 3], [4, 6]], false)).toEqual({ h: 0, slabs: [[2, 6]] });
+  });
+  it('never fills the sea in: rock over water is trimmed to leave headroom', () => {
+    expect(settle(-0.3, [[1, 5]], true)).toEqual({ h: -0.3, slabs: [[2, 5]] });
+    expect(settle(-0.3, [[1, 2]], true)).toEqual({ h: -0.3, slabs: undefined });
+  });
+});
+
+describe('landforms planned from the seed', () => {
+  it('gives the same answer for the same seed', () => {
+    const a = allLand(5), b = allLand(5);
+    const f = of(a.near(0, 0, 4000), 'plateau')[0];
+    for (let x = f.x - 60; x <= f.x + 60; x += 7) {
+      for (let z = f.z - 60; z <= f.z + 60; z += 7) expect(a.at(x, z, GROUND)).toEqual(b.at(x, z, GROUND));
+    }
+  });
+
+  it('raises plateaus and mesas inland, stacks and islands at sea', () => {
+    for (const seed of [5, 11]) {
+      const inland = allLand(seed).near(0, 0, 4000), coast = allSea(seed).near(0, 0, 1500);
+      expect(of(inland, 'plateau').length).toBeGreaterThan(5);
+      expect(of(inland, 'mesa').length).toBeGreaterThan(5);
+      expect(of(inland, 'stack').length + of(inland, 'island').length).toBe(0);
+      expect(of(coast, 'stack').length).toBeGreaterThan(50);
+      expect(of(coast, 'island').length).toBeGreaterThan(5);
+    }
+  });
+
+  it('makes each as tall as it says, within the range of its kind', () => {
+    const land = allLand(5), sea = allSea(5);
+    for (const [forms, base, id] of [[land, GROUND, 'plateau'], [sea, SEA, 'stack'], [sea, SEA, 'island']]) {
+      const layer = LAYERS.find((l) => l.id === id);
+      for (const f of of(forms.near(0, 0, 3000), id).slice(0, 8)) {
+        expect(f.h).toBeGreaterThanOrEqual(layer.h[0]);
+        expect(f.h).toBeLessThanOrEqual(layer.h[1]);
+        expect(topOf(forms.at(f.x, f.z, base))).toBe(f.h);
+      }
+    }
+  });
+
+  it('keeps clear of the heart of the world and of each other', () => {
+    const all = [...allLand(5).near(0, 0, 4000)];
+    for (const f of [...all, ...allSea(5).near(0, 0, 1500)]) expect(Math.hypot(f.x, f.z) - f.reach).toBeGreaterThanOrEqual(200);
+    for (const a of all) {
+      for (const b of all) if (a.layer !== b.layer) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(a.reach + b.reach);
+    }
+  });
+
+  it('only makes slabs that obey the rules', () => {
+    const sea = allSea(11), land = allLand(11);
+    let slabTiles = 0;
+    for (const [forms, base, id, step] of [[sea, SEA, 'stack', 1], [sea, SEA, 'island', 1], [land, GROUND, 'plateau', 2], [land, GROUND, 'mesa', 3]]) {
+      for (const f of of(forms.near(0, 0, 4000), id).slice(0, 3)) {
+        const reach = Math.ceil(f.reach);
+        for (let x = f.x - reach; x <= f.x + reach; x += step) {
+          for (let z = f.z - reach; z <= f.z + reach; z += step) {
+            const form = forms.at(x, z, base);
+            if (!form?.slabs) continue;
+            slabTiles++;
+            const dry = form.dry || !base.water;
+            expect(slabsAreSound(form.slabs, dry ? form.h : 0), `${id} at ${x},${z}`).toBe(true);
+          }
+        }
+      }
+    }
+    expect(slabTiles).toBeGreaterThan(500);
+  });
+
+  it('turns none of the ground under an arch or a lip into land', () => {
+    const sea = allSea(5);
+    const f = of(sea.near(0, 0, 1500), 'stack')[0];
+    let over = 0;
+    for (let x = f.x - 20; x <= f.x + 20; x++) {
+      for (let z = f.z - 20; z <= f.z + 20; z++) {
+        const form = sea.at(x, z, SEA);
+        if (form?.slabs && !form.dry) {
+          over++;
+          expect(form.h).toBe(SEA.h);
+        }
+      }
+    }
+    expect(over).toBeGreaterThan(0);
   });
 });
