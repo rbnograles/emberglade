@@ -1463,6 +1463,7 @@ export class Game {
     const p = this.player;
     p.riding = null;
     const dropped = this.dropPack();
+    const wake = p.bed ? 'your bed' : 'your original start';
     p.health = 6;
     p.hunger = 6;
     p.thirst = 6;
@@ -1480,7 +1481,9 @@ export class Game {
     p.vy = 0;
     for (const e of [...this.enemies]) this.removeEnemy(e);
     this.startDay(true);
-    this.toast(dropped ? 'You fainted. Your pack is where you fell (red dot on the map)' : 'You fainted and woke up the next morning');
+    this.toast(dropped
+      ? `You fainted and woke at ${wake}. Your pack is where you fell (red dot on the map)`
+      : `You fainted and woke at ${wake} the next morning`);
     this.emit('faint');
   }
 }

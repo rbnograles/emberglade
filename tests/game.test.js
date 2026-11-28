@@ -994,6 +994,45 @@ describe('game rules', () => {
     expect(g.world.get(x, z).crop).toBe(-1);
   });
 
+  it('natural dawn preserves the player position', () => {
+    const g = newGame();
+    const [x, z] = findTile(g, (o) => !!o);
+    g.world.remove(x, z, 2, 1);
+    Object.assign(g.player, { x: x + 0.5, z: z + 0.5, y: g.ground(x + 0.5, z + 0.5), vy: 0 });
+    g.day = 2;
+    g.time = 0.999;
+    const before = { x: g.player.x, y: g.player.y, z: g.player.z };
+
+    g.tick(1);
+
+    expect(g.day).toBe(3);
+    expect({ x: g.player.x, y: g.player.y, z: g.player.z }).toEqual(before);
+    expect(g.world.get(x, z)).not.toBe(null); // nearby nature may regrow without moving the player
+  });
+
+  it('fainting explains an intentional morning relocation', () => {
+    const atStart = newGame();
+    const startToasts = [];
+    atStart.on((type, data) => { if (type === 'toast') startToasts.push(data.text); });
+    atStart.inv.slots[9] = { id: 'wood', n: 1 }; // exercise the dropped-pack message too
+    atStart.player.health = 0;
+    atStart.faint();
+    expect(atStart.player.x).toBe(atStart.player.spawn.x + 0.5);
+    expect(atStart.player.z).toBe(atStart.player.spawn.z + 0.5);
+    expect(startToasts.at(-1)).toMatch(/fainted.*original start/i);
+    expect(startToasts.at(-1)).toMatch(/pack/i);
+
+    const atBed = newGame();
+    const bedToasts = [];
+    atBed.on((type, data) => { if (type === 'toast') bedToasts.push(data.text); });
+    atBed.player.bed = { x: 4, z: 5 };
+    atBed.player.health = 0;
+    atBed.faint();
+    expect(atBed.player.x).toBe(4.5);
+    expect(atBed.player.z).toBe(6.5);
+    expect(bedToasts.at(-1)).toMatch(/fainted.*bed/i);
+  });
+
   it('eats, sleeps only late, faints and round-trips a save', () => {
     const g = newGame();
     g.inv.add('bread', 1);
