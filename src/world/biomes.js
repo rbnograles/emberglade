@@ -45,6 +45,10 @@ BIOMES.winter = {
 BIOMES.winter.spawn.push(['rock_rime', 0.016], ['weather_cairn', 0.0009], ['frost_hoard', 0.0007]);
 BIOMES.ash.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009], ['ember_hoard', 0.0007]);
 BIOMES.volcano.spawn.push(['rock_ember', 0.016], ['kiln_ruin', 0.0009], ['ember_hoard', 0.0007]);
+BIOMES.canyon = {
+  name: 'Canyon Lands', ground: [0xd9a066, 0xcf9459],
+  spawn: [['tree_dead', 0.012], ['boulder', 0.03], ['pebble', 0.03], ['rock_copper', 0.02], ['rock_coal', 0.015], ['stick', 0.01]],
+};
 // sea tiles; ground is only used by the minimap
 BIOMES.ocean = { name: 'Open Ocean', ground: [0x4f9fd6, 0x4a98cf], spawn: [] };
 
@@ -59,3 +63,19 @@ export const WATER_COLORS = [0x82cbec, 0x74c0e6];
 export const LAVA_COLORS = [0xff7a1a, 0xffb02e];
 export const ICE_COLORS = [0xbfe6f5, 0xa9d8ee];
 export const SEABED_COLORS = { shallow: 0xeadfae, deep: 0x4f8fb5 }; // sand near the surface, blue-grey far below
+
+// The three kinds of rugged country, by the `land` of a tile: the name shown on screen, and the
+// colours of the layers in their cliffs.
+export const LAND_NAMES = { stacks: 'Stack Coast', table: 'Tablelands', canyon: 'Canyon Lands' };
+export const ROCK_COLORS = {
+  stacks: [0xb8b4a8, 0xa39f94, 0xc6c2b5, 0x8f8c84], // grey limestone
+  table: [0x8a6a4a, 0x7a5c40, 0x9a7854, 0x6b5038], // brown earth
+  canyon: [0xd08f58, 0xb9743f, 0xe0a56a, 0xa5633a], // sandstone
+};
+
+// What to call the place a tile is in: its rugged country if it is in one, else its biome.
+export const placeName = (t) => LAND_NAMES[t.land] ?? BIOMES[t.biome].name;
+// The colour of a tile on a map when rock covers it (an arch, an overhang, a cave roof), else null:
+// the grass or sand on top of the rock, as the ground there is drawn. Rock over the sea is grassed
+// over like any rock risen from it.
+export const roofColour = (t) => (t.slabs ? BIOMES[t.biome === 'ocean' ? 'meadow' : t.biome].ground[0] : null);

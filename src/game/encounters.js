@@ -16,6 +16,7 @@ const SPOILS = {
 export const rewardFor = (k) => SPOILS[k.biome] ?? SPOILS[k.tier];
 
 export function suitsSite(k, tile) {
+  if (tile.land) return false; // never on the stacks, plateaus and mesas, nor in the sea among them
   if (k.biome === 'deep') return tile.salt && tile.water && tile.bed <= -6 && !tile.boiling;
   if (tile.water || tile.lava || tile.ice || tile.shore) return false;
   if (k.biome === 'heat' || k.biome === 'frost') return tile[k.biome] > 0.3;

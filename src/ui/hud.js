@@ -1,7 +1,7 @@
 import { ITEMS, FLASK_DRINKS, ARMOR_SLOTS } from '../game/items.js';
 import { GOALS } from '../game/goals.js';
 import { xpToNext, MAX_LEVEL } from '../game/progress.js';
-import { BIOMES } from '../world/biomes.js';
+import { placeName } from '../world/biomes.js';
 import { HOTBAR, CAN_CAPACITY } from '../game/game.js';
 import { OBJECTS } from '../world/objects.js';
 import { cropFor } from '../world/crops.js';
@@ -259,7 +259,7 @@ export class Hud {
   refresh() {
     const g = this.game, p = g.player;
     const tile = g.gen.tile(Math.floor(p.x), Math.floor(p.z));
-    $('biome').textContent = BIOMES[tile.biome].name;
+    $('biome').textContent = placeName(tile);
     const goal = g.goals.current;
     if (goal) {
       const { done, total } = g.goals.status;
