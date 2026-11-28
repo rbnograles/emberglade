@@ -105,7 +105,7 @@ Where each appears:
 **Routes up**
 
 - Every island, plateau and mesa has a route from its foot to its top that needs no step higher than `0.5`. Stacks under 40 tiles across have none: they are reached by glider, or left as scenery.
-- A route is a level cut, 3 tiles wide, leading in through the cliff, then a trail of the same width winding up just inside the edge. It gains less than half a tile per tile and ends on a short landing at the top. A tiered plateau has one for each tier, starting on the far side from the one below.
+- A route is a level cut, 3 tiles wide, leading in through the cliff, then a trail of the same width winding up just inside the edge. It gains less than half a tile per tile and ends on a short landing at the top. Where the cut or the foot of the trail would lie under water it is a strip of beach instead, so a swimmer can walk straight onto it. A tiered plateau has one for each tier, starting on the far side from the one below.
 - Routes are placed per landform from the seed, so they are the same every time the world is loaded. Nothing grows on them, no rock hangs over them, and no canyon cuts the rim beside them.
 
 **How it is generated** (for the plan to refine)
@@ -134,6 +134,9 @@ All changes are in `src/game/game.js`.
 - Digging moves `h` only. Raising the ground stops `HEADROOM` below a slab.
 - Villages and castles are not planned where any tile of their footprint has `land` set.
 - `pickSpawn` and `wildSpawn` never choose a tile with `land` set.
+- Keeper sites are never placed on a tile with `land` set: a stack has no route, and a keeper must be reachable.
+- Stepping out of a boat, and the pack dropped on fainting in the water, never go to a tile of the new country that is more than a bank's height above the boat or the swimmer. On ordinary coasts both behave as before.
+- Use (`F`) does not reach a tile the player stands above.
 
 ## Seeing it
 
