@@ -405,14 +405,14 @@ export class Game {
     return t.water && WATER_Y - t.bed > SWIM_DEPTH;
   }
 
-  // Height the player's feet rest at: the ground, the bed of shallow water, or afloat in deep water.
-  // On land this is the highest surface at or just below `y`: the ground, a built floor on an upper
-  // storey, or the slope of a staircase. So someone upstairs stays upstairs, and someone walking
-  // underneath stays on the ground.
   // Is this height on or above rock that reaches over the tile? Then the ground and the water
   // beneath are another place: out of reach, and nothing to do with whoever is up here.
   aloft(t, y = this.player.y) { return slabTopBelow(t, y + STEP_LIP + 0.02) > -Infinity; }
 
+  // Height the player's feet rest at: the ground, the bed of shallow water, or afloat in deep water.
+  // On land this is the highest surface at or just below `y`: the ground, a built floor on an upper
+  // storey, or the slope of a staircase. So someone upstairs stays upstairs, and someone walking
+  // underneath stays on the ground.
   standY(x, z, y = this.player.y) {
     const tx = Math.floor(x), tz = Math.floor(z), t = this.gen.tile(tx, tz);
     const lip = y + STEP_LIP + 0.02;
@@ -444,12 +444,16 @@ export class Game {
     return this.gen.tile(tx, tz).h + level * STOREY + Math.min(1, Math.max(0, up)) * STOREY;
   }
 
+  // Height of what is underfoot, that storeys are counted up from: the ground, or the top of the
+  // rock of an arch or a ledge the player stands on.
+  get underfoot() {
+    const p = this.player, t = this.gen.tile(Math.floor(p.x), Math.floor(p.z));
+    return Math.max(t.h, slabTopBelow(t, p.y + STEP_LIP + 0.02));
+  }
+
   // Which storey the player's feet are on: 0 on the ground, 1 or 2 on the floors above.
   get playerLevel() {
-    const p = this.player, t = this.gen.tile(Math.floor(p.x), Math.floor(p.z));
-    // storeys are counted from what is underfoot: the ground, or the rock of an arch or a ledge
-    const foot = Math.max(t.h, slabTopBelow(t, p.y + STEP_LIP + 0.02));
-    return Math.max(0, Math.min(TOP_LEVEL, Math.round((p.y - foot) / STOREY)));
+    return Math.max(0, Math.min(TOP_LEVEL, Math.round((this.player.y - this.underfoot) / STOREY)));
   }
 
   // The storey that building and dismantling act on: the player's own, or one above or below it
@@ -1525,6 +1529,7 @@ export class Game {
 
   // ---- E: use a placed object ----
   interact(tx, tz) {
+    if (this.overTile(tx, tz)) return false; // what stands under the rock underfoot is out of reach
     const level = this.playerLevel;
     const obj = this.world.getAt(tx, tz, level);
     if (!obj) return false;

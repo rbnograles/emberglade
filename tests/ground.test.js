@@ -5,6 +5,7 @@ import { Worldgen, WATER_Y } from '../src/world/worldgen.js';
 import { BIOMES, LAND_NAMES, ROCK_COLORS, placeName, roofColour } from '../src/world/biomes.js';
 import { WORLD_TYPES } from '../src/world/worldtypes.js';
 import { Game, needsRelocation } from '../src/game/game.js';
+import { STOREY } from '../src/world/worldstate.js';
 import { Encounters, suitsSite } from '../src/game/encounters.js';
 import { KEEPER_BY_ID } from '../src/game/keepers.js';
 import { buildTerrain, gaps, CHUNK } from '../src/render/terrain.js';
@@ -500,6 +501,65 @@ describe('walking over and under rock', () => {
     stand(g, 2, 0, 4);
     expect(g.blocked(1.5, 0.5)).toBe(false);
   });
+
+  it('lands on the top of an arch when it drops onto it from above', () => {
+    const g = rockWorld(ARCH);
+    stand(g, 1, 0, 12);
+    settleDown(g);
+    expect(g.player.y).toBe(4);
+  });
+
+  it('stands on the lower or the upper of two slabs, and fits between them', () => {
+    const g = rockWorld({ '1,0': { slabs: [[2, 4], [7, 9]] } });
+    // dropping from high above, it comes to rest on the upper slab
+    stand(g, 1, 0, 30);
+    settleDown(g);
+    expect(g.player.y).toBe(9);
+    // on the lower slab it stays there, and a jump stops short under the upper one
+    stand(g, 1, 0, 4);
+    settleDown(g);
+    expect(g.player.y).toBe(4);
+    let highest = 4;
+    for (let i = 0; i < 120; i++) {
+      g.physics(1 / 60, true);
+      highest = Math.max(highest, g.player.y);
+    }
+    expect(highest).toBeGreaterThan(4.2);
+    expect(highest).toBeLessThanOrEqual(7 - PLAYER_HEIGHT + 1e-6);
+    // and beneath both it is on the ground
+    stand(g, 1, 0, 0);
+    settleDown(g);
+    expect(g.player.y).toBe(0);
+  });
+
+  it('walks across a cave roof from one side to the other without dropping in', () => {
+    const roof = { slabs: [[3, 6]] };
+    const g = rockWorld({ '0,0': { h: 6 }, '1,0': roof, '2,0': roof, '3,0': roof, '4,0': { h: 6 } });
+    stand(g, 0, 0, 6);
+    let lowest = 6;
+    for (let i = 0; i < 200 && g.player.x < 4.5; i++) {
+      g.move(0.05, 0);
+      g.physics(1 / 60, false);
+      lowest = Math.min(lowest, g.player.y);
+    }
+    expect(Math.floor(g.player.x)).toBe(4);
+    expect(lowest).toBe(6);
+  });
+
+  it('counts storeys from what is underfoot: the ground, or the rock it stands on', () => {
+    const g = rockWorld({ ...ARCH, '3,0': { h: 1.5 } });
+    stand(g, 1, 0, 0);
+    expect(g.underfoot).toBe(0);
+    stand(g, 1, 0, 4);
+    expect(g.underfoot).toBe(4);
+    expect(g.playerLevel).toBe(0);
+    stand(g, 1, 0, 4 + STOREY);
+    expect(g.underfoot).toBe(4);
+    expect(g.playerLevel).toBe(1);
+    // ordinary ground is underfoot as it always was
+    stand(g, 3, 0, 1.5);
+    expect(g.underfoot).toBe(g.ground(3.5, 0.5));
+  });
 });
 
 const hold = (g, id, n = 1) => {
@@ -532,6 +592,20 @@ describe('rules beside and beneath rock', () => {
     // the plateau beside it is ordinary ground
     expect(g.overTile(3, 0)).toBe(false);
     expect(g.inReach(3, 0)).toBe(true);
+  });
+
+  it('cannot use what stands under the rock it stands on', () => {
+    const g = rockWorld(ARCH);
+    g.world.set(1, 0, { t: 'chest', placed: true, items: Array(18).fill(null) });
+    const opened = [];
+    g.on((type, data) => type === 'open' && opened.push(data));
+    stand(g, 2, 0, 4);
+    expect(g.interact(1, 0)).toBe(false);
+    expect(opened).toEqual([]);
+    // from the ground beside it, under the arch, it opens as usual
+    stand(g, 0, 0, 0);
+    expect(g.interact(1, 0)).toBe(true);
+    expect(opened).toEqual([{ what: 'chest', x: 1, z: 0, l: 0 }]);
   });
 
   it('will not pile the ground up into the rock', () => {
@@ -662,9 +736,11 @@ describe('naming and mapping the rugged country', () => {
     expect(placeName({ biome: 'pine' })).toBe(BIOMES.pine.name);
   });
 
-  it('maps a tile under rock as rock, whatever lies beneath', () => {
-    expect(roofColour({ biome: 'ocean', water: true, land: 'stacks', slabs: [[2, 9]] })).toBe(ROCK_COLORS.stacks[0]);
-    expect(roofColour({ biome: 'canyon', land: 'canyon', slabs: [[4, 20]] })).toBe(ROCK_COLORS.canyon[0]);
+  it('maps a tile under rock by the top of the rock, whatever lies beneath', () => {
+    // rock over the sea is grassed over like any rock risen from it
+    expect(roofColour({ biome: 'ocean', water: true, land: 'stacks', slabs: [[2, 9]] })).toBe(BIOMES.meadow.ground[0]);
+    expect(roofColour({ biome: 'canyon', land: 'canyon', slabs: [[4, 20]] })).toBe(BIOMES.canyon.ground[0]);
+    expect(roofColour({ biome: 'pine', land: 'table', slabs: [[3, 12]] })).toBe(BIOMES.pine.ground[0]);
     expect(roofColour({ biome: 'meadow', land: 'table' })).toBe(null);
     expect(roofColour({ biome: 'meadow' })).toBe(null);
   });

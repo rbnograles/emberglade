@@ -523,6 +523,13 @@ addEventListener('mouseup', (e) => {
   secondaryAction();
 });
 let placeNote = 0; // seconds until the next "why it will not go there" message may show
+// Aimed at a tile under the rock the player stands on: digging, filling and taking things apart
+// there are refused, so say why instead of doing nothing.
+function overNote() {
+  if (!target || target.reach || !game.overTile(target.x, target.z) || placeNote > 0) return;
+  placeNote = 1.5;
+  game.toast(game.groundProblem(target.x, target.z));
+}
 function secondaryAction() {
   camera.updateMatrixWorld();
   target = currentTarget();
@@ -531,7 +538,7 @@ function secondaryAction() {
   if (problem && placeNote <= 0) {
     placeNote = 1.5;
     game.toast(problem);
-  }
+  } else if (ITEMS[game.held?.id]?.fill) overNote();
   if (target || !ITEMS[game.held?.id]?.vehicle) game.secondary(target?.x ?? 0, target?.z ?? 0, !!target?.reach, playerModel.facing);
   hud.refresh();
 }
@@ -555,7 +562,8 @@ function interact() {
   if (best) game.interact(best.x, best.z);
 }
 
-// The closest thing on the player's own storey that Use works on, or null.
+// The closest thing on the player's own storey that Use works on, or null. Nothing under the rock
+// the player stands on counts.
 function nearestUsable() {
   const px = Math.floor(p.x), pz = Math.floor(p.z), level = game.playerLevel;
   let best = null, bestD = 2.6;
@@ -563,7 +571,7 @@ function nearestUsable() {
     for (let x = px - 3; x <= px + 3; x++) {
       const obj = game.world.getAt(x, z, level);
       const d = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z);
-      if (obj && usable(obj.t) && d < bestD) {
+      if (obj && usable(obj.t) && d < bestD && !game.overTile(x, z)) {
         best = { x, z, obj };
         bestD = d;
       }
@@ -698,10 +706,11 @@ const stairRotation = () => {
 function pickTarget() {
   raycaster.setFromCamera(mouse, camera);
   // Aiming at a storey above the ground: the cursor points at that storey's own level plane, so
-  // the tile under it is the one meant, however the camera is tilted.
+  // the tile under it is the one meant, however the camera is tilted. Storeys count up from what
+  // is underfoot, which may be the top of an arch rather than the ground beneath it.
   const level = game.buildLevel;
   if (level > 0) {
-    const ray = raycaster.ray, planeY = game.ground(p.x, p.z) + level * STOREY + 0.05;
+    const ray = raycaster.ray, planeY = game.underfoot + level * STOREY + 0.05;
     if (Math.abs(ray.direction.y) < 1e-4) return null;
     const t = (planeY - ray.origin.y) / ray.direction.y;
     if (t <= 0) return null;
@@ -1123,7 +1132,7 @@ function step(dt) {
     hitColor = obj ? colorFor(obj.t) : 0xffffff;
     hitSound = !obj ? 'pick' : obj.t.startsWith('tree_') ? 'chop' : OBJECTS[obj.t].tool === 'pickaxe' ? 'mine' : OBJECTS[obj.t].hp ? 'hit' : 'pick';
     game.primary(target.x, target.z);
-  }
+  } else if (wantUse && swingCooldown <= 0 && !riding) overNote();
 
   chunks.time.value = clock;
   sky.update(game.time, p.x, playerY, p.z, camDist, camera.position, clock, game.raining, haze);

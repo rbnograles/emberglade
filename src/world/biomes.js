@@ -75,5 +75,7 @@ export const ROCK_COLORS = {
 
 // What to call the place a tile is in: its rugged country if it is in one, else its biome.
 export const placeName = (t) => LAND_NAMES[t.land] ?? BIOMES[t.biome].name;
-// The colour of a tile on a map when rock covers it (an arch, an overhang, a cave roof), else null.
-export const roofColour = (t) => (t.slabs ? ROCK_COLORS[t.land][0] : null);
+// The colour of a tile on a map when rock covers it (an arch, an overhang, a cave roof), else null:
+// the grass or sand on top of the rock, as the ground there is drawn. Rock over the sea is grassed
+// over like any rock risen from it.
+export const roofColour = (t) => (t.slabs ? BIOMES[t.biome === 'ocean' ? 'meadow' : t.biome].ground[0] : null);

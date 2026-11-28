@@ -10,7 +10,7 @@ const mix = (a, b, k) => {
 
 // The colour of one spot on a small map of the world.
 function colour(t) {
-  if (t.slabs) return roofColour(t); // seen from above, an arch or an overhang is rock
+  if (t.slabs) return roofColour(t); // seen from above, an arch or an overhang shows the top of its rock
   if (t.salt) {
     const depth = Math.min(1, (-0.3 - t.bed) / 12);
     const sea = mix(0x6fc0e8, 0x2c5a96, depth);
