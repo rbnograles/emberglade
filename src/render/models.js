@@ -1,3 +1,4 @@
+import { ROOF_COURSES } from '../world/castle-roofs.js';
 import { homesteadModels } from './homestead.js';
 import { addFieldModels, addFieldItemModels } from './fieldmodels.js';
 import { KEEPERS, carvingId } from '../game/keepers.js';
@@ -293,6 +294,8 @@ export function buildItemModels(world) {
   const m = new Map();
   const use = (id, key = id) => m.set(id, world.get(key));
   for (const k of KEEPERS) use(carvingId(k));
+  for (const { id } of ROOF_COURSES) use(id);
+  for (const id of ['stone_arch', 'stone_pier', 'slit_window', 'chart_table']) use(id);
   // straight from the world
   for (const id of ['campfire', 'workbench', 'bed', 'chest', 'wood_wall', 'stone_wall', 'coral_wall', 'door', 'wood_floor', 'stone_floor',
     'lantern', 'boat', 'submarine', 'kelp', 'clam', 'coral']) use(id);

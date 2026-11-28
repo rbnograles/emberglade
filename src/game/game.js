@@ -1,3 +1,4 @@
+import { turnedRoof, roofItem } from '../world/castle-roofs.js';
 import { Encounters } from './encounters.js';
 import { ENHANCEMENTS, LOOT, fits } from './enhance.js';
 import { Progress, xpFor } from './progress.js';
@@ -117,6 +118,21 @@ export class Game {
       Object.assign(p, { x: p.spawn.x + 0.5, z: p.spawn.z + 0.5, y: undefined, vy: 0, riding: null, bed: null, lost: null });
       this.vehicles = [];
     }
+    if (save?.player && !save.cliffCastles && !this.relocated) {
+      const lift = entity => {
+        if (!Number.isFinite(entity.y)) return;
+        const x = Math.floor(entity.x), z = Math.floor(entity.z), st = this.gen.settlementAt(x, z);
+        if (!st?.court) return;
+        const oldCourt = Math.max(Math.abs(x - st.x), Math.abs(z - st.z)) <= 15;
+        const oldH = oldCourt ? this.gen.natural(st.x, st.z).h : this.gen.natural(x, z).h;
+        const tile = this.gen.tile(x, z);
+        entity.y += tile.h - (tile.dug ?? 0) * DIG_STEP - oldH;
+      };
+      this.player = { ...this.player };
+      this.vehicles = this.vehicles.map(v => ({ ...v }));
+      lift(this.player);
+      this.vehicles.forEach(lift);
+    }
     this.player.y ??= this.ground(this.player.x, this.player.z);
     this.player.vy ??= 0;
     this.player.thirst ??= MAX_THIRST;
@@ -146,12 +162,9 @@ export class Game {
       const castles = this.gen.settlementsNear(wild.x, wild.z, reach).filter((st) => st.kind === 'castle')
         .sort((a, b) => Math.hypot(a.x - wild.x, a.z - wild.z) - Math.hypot(b.x - wild.x, b.z - wild.z));
       for (const st of castles) {
-        // a few steps south of the gate, on open ground
-        for (const [dx, dz] of [[0, 4], [1, 4], [-1, 4], [0, 5], [2, 5], [-2, 5], [0, 6]]) {
-          const x = st.x + dx, z = st.z + st.radius + dz, t = this.gen.tile(x, z);
-          if (t.water || t.shore || !lowland.has(t.biome) || Math.abs(t.h - st.h) > 1 || this.gen.object(x, z)) continue;
-          if (far(x, z, this.gen.frostCentre, 3400) && far(x, z, this.gen.heatCentre, 3000)) return { x, z };
-        }
+        const { x, z } = st.foot;
+        if (!lowland.has(this.gen.tile(x, z).biome)) continue;
+        if (far(x, z, this.gen.frostCentre, 3400) && far(x, z, this.gen.heatCentre, 3000)) return { x, z };
       }
     }
     return wild;
@@ -203,7 +216,7 @@ export class Game {
 
   serialize() {
     return {
-      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
+      seed: this.seed, difficulty: this.difficulty, gen: GEN_VERSION, cliffCastles: true, world: this.world.toJSON(), floors: Object.fromEntries(this.world.floors), roofs: Object.fromEntries(this.world.roofs), upper: this.world.upperJSON(), dug: Object.fromEntries(this.gen.dug),
       livestock: this.wildlife.list.filter(a => a.tame), markers: this.markers, progress: this.progress.toJSON(),
       armor: this.armor.slots, vehicles: this.vehicles, inv: this.inv.slots, craft: this.craftGrid.slots, goals: this.goals.toJSON(), encounters: this.encounters.toJSON(),
       day: this.day, time: this.time, selected: this.selected, player: this.player,
@@ -373,7 +386,8 @@ export class Game {
     let best = t.h;
     for (let l = 0; l <= TOP_LEVEL; l++) {
       const base = t.h + l * STOREY;
-      if (l > 0 && base <= lip && this.world.getFloor(tx, tz, l)) best = Math.max(best, base);
+      if (base > lip) break;
+      if (l > 0 && this.world.getFloor(tx, tz, l)) best = Math.max(best, base);
       const h = this.stairHeight(x, z, l);
       if (h !== null && h <= lip) best = Math.max(best, h);
       // the top of a wall can be stood on, by anyone who has climbed that high
@@ -1075,7 +1089,7 @@ export class Game {
     const roof = this.world.getRoof(tx, tz);
     if (roof && (def?.roof || (!obj && !def))) {
       this.world.setRoof(tx, tz, null);
-      this.give(roof, 1);
+      this.give(roofItem(roof), 1);
       return;
     }
     if (!obj) {
@@ -1137,7 +1151,7 @@ export class Game {
       power = def.power;
       this.wearTool();
     }
-    if ((obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') && obj.items.some(Boolean)) {
+    if ((obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') && obj.items?.some(Boolean)) {
       this.toast(obj.t === 'chest' ? 'Empty the chest first' : 'Open it with F and take your things first');
       return;
     }
@@ -1165,7 +1179,7 @@ export class Game {
     const obj = w.getAt(tx, tz, level), roof = w.getRoof(tx, tz, level), floor = w.getFloor(tx, tz, level);
     if (roof && (def?.roof || (!obj && !def))) {
       w.setRoof(tx, tz, null, level);
-      this.give(roof, 1);
+      this.give(roofItem(roof), 1);
       return;
     }
     if (obj) {
@@ -1192,7 +1206,7 @@ export class Game {
     }
     if (roof) {
       w.setRoof(tx, tz, null, level);
-      this.give(roof, 1);
+      this.give(roofItem(roof), 1);
     }
   }
 
@@ -1295,7 +1309,7 @@ export class Game {
   // Does turning this kind of thing change anything? Walls and fences look the same from every side.
   turns(kind) {
     const od = OBJECTS[kind];
-    return !!od && !od.block && kind !== 'fence' && kind !== 'door' && kind !== 'soil';
+    return !!od && (!od.block || od.turns === true) && kind !== 'fence' && kind !== 'door' && kind !== 'soil';
   }
 
   // The turn the builder has asked for with the rotate key, or null while it is left to the game.
@@ -1317,12 +1331,18 @@ export class Game {
 
   // The rotate key: a quarter turn of whatever is about to be placed.
   turnPlacing(facing = 0) {
-    const kind = ITEMS[this.held?.id]?.place;
-    if (!kind || !(this.turns(kind) || kind === 'door')) return null;
+    const def = ITEMS[this.held?.id];
+    const kind = def?.turnRoof ? this.held.id : def?.place;
+    if (!kind || !(def.turnRoof || this.turns(kind) || kind === 'door')) return null;
     const now = this.placeRotation(kind, facing);
     this.turnFor = kind;
     this.turn = (now + 1) % 4;
     return this.turn;
+  }
+
+  roofForPlacement(id, facing) {
+    // The sculpture rises toward +z, quarter turn zero.
+    return ITEMS[id].turnRoof ? turnedRoof(id, (1 - this.placeRotation(id, facing) + 4) % 4) : id;
   }
 
   newPlaced(kind, tx, tz, facing, level) {
@@ -1357,7 +1377,7 @@ export class Game {
       if (!def?.roof && !def?.floor && !def?.place) return void this.interact(tx, tz);
       if (!this.canPlace(tx, tz)) return;
       this.inv.removeAt(this.selected, 1);
-      if (def.roof) this.world.setRoof(tx, tz, held.id, level);
+      if (def.roof) this.world.setRoof(tx, tz, this.roofForPlacement(held.id, facing), level);
       else if (def.floor) {
         this.world.setFloor(tx, tz, held.id, level);
         this.record('place:floor');
@@ -1402,7 +1422,7 @@ export class Game {
 
     if (def?.roof) {
       if (!this.canPlace(tx, tz)) return;
-      this.world.setRoof(tx, tz, held.id);
+      this.world.setRoof(tx, tz, this.roofForPlacement(held.id, facing));
       this.inv.removeAt(this.selected, 1);
       this.emit('inv');
       return;
@@ -1435,6 +1455,15 @@ export class Game {
     const level = this.playerLevel;
     const obj = this.world.getAt(tx, tz, level);
     if (!obj) return false;
+    if (obj.t === 'chart_table') {
+      const distance = s => Math.hypot(s.x - tx, s.z - tz);
+      const next = this.gen.settlementsNear(tx, tz, 2000)
+        .filter(s => s !== this.gen.settlementAt(tx, tz))
+        .sort((a, b) => distance(a) - distance(b))[0];
+      if (next) this.emit('survey', { x: next.x, z: next.z, name: next.name, distance: Math.round(distance(next)) });
+      else this.toast('No other settlement charted within 2,000 tiles');
+      return true;
+    }
     if (OBJECTS[obj.t].hoard) {
       // a one-time treasure: it is gone for good once opened
       this.world.set(tx, tz, { t: 'empty' });
@@ -1454,8 +1483,10 @@ export class Game {
     } else if (obj.t === 'bed') {
       this.player.bed = level ? { x: tx, z: tz, l: level } : { x: tx, z: tz };
       this.sleep();
-    } else if (obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') this.emit('open', { what: 'chest', x: tx, z: tz, l: level });
-    else if (obj.t === 'campfire' || obj.t === 'workbench') this.emit('open', { what: 'craft' });
+    } else if (obj.t === 'chest' || obj.t === 'cabinet' || obj.t === 'lostbag') {
+      if (!obj.items) this.world.setAt(tx, tz, level, { ...obj, items: Array(CHEST_SLOTS).fill(null) });
+      this.emit('open', { what: 'chest', x: tx, z: tz, l: level });
+    } else if (obj.t === 'campfire' || obj.t === 'workbench') this.emit('open', { what: 'craft' });
     else return false;
     return true;
   }

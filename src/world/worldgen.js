@@ -1,6 +1,6 @@
 import { fbm, hash2 } from '../core/noise.js';
 import { BIOMES, SHORE, SEABED } from './biomes.js';
-import { CELL, planSettlement } from './structures.js';
+import { CELL, planSettlement, castleGround } from './structures.js';
 
 export const WATER_Y = -0.3;
 export const DIG_STEP = 0.5; // how far one spadeful lowers or raises the ground
@@ -96,9 +96,14 @@ export class Worldgen {
     if (t) return t;
     t = this.natural(x, z);
     // a village or castle stands on level, dry ground at the height of its middle
-    if (this.settlementAt(x, z)) {
-      const st = this.settlementAt(x, z);
-      Object.assign(t, { h: st.h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true });
+    const st = this.settlementAt(x, z);
+    if (st) {
+      const h = st.court ? castleGround(st, x, z, t.h) : st.h;
+      if (st.court) {
+        t.cliff = true;
+        if (t.water || t.lava || t.ice) t.biome = 'meadow';
+      }
+      Object.assign(t, { h, bed: null, water: false, salt: false, shore: false, lava: false, ice: false, boiling: false, settled: true });
     }
     // ground the player has dug out or built up, in half-tile steps
     const steps = this.dug.size ? this.dug.get(x + ',' + z) : 0;
@@ -128,6 +133,7 @@ export class Worldgen {
   // The settlement whose ground this tile is part of, or null.
   settlementAt(x, z) {
     const st = this.settlementFor(Math.floor(x / CELL), Math.floor(z / CELL));
+    if (st?.court) return Math.max(Math.abs(x - st.x - st.court.dx), Math.abs(z - st.z - st.court.dz)) <= st.radius ? st : null;
     return st && Math.abs(x - st.x) <= st.radius + 1 && Math.abs(z - st.z) <= st.radius + 1 ? st : null;
   }
 

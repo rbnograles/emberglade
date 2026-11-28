@@ -1,8 +1,17 @@
+import { ROOF_COURSES } from '../world/castle-roofs.js';
 // tool/power: what it harvests. food: hunger restored. place: object id it becomes. stack: max per slot.
 import { KEEPERS, carvingId, carvingName } from './keepers.js';
 
 export const ITEMS = {
   ...Object.fromEntries(KEEPERS.map(k => [carvingId(k), { name: carvingName(k), place: carvingId(k), hint: 'RMB: place your keeper carving' }])),
+  ...Object.fromEntries(ROOF_COURSES.map(({ id, name, shape }) => [id, {
+    name, roof: true, turnRoof: shape !== 'peak',
+    hint: 'Build inward from eave to middle to upper. Slopes form rows, corners turn them, ridges and peaks finish the centre.',
+  }])),
+  stone_arch: { name: 'Dressed stone arch', place: 'stone_arch', hint: 'Walk through the arch or build a floor across its crown' },
+  stone_pier: { name: 'Stone pier', place: 'stone_pier', hint: 'Stack piers to support galleries and bridges' },
+  slit_window: { name: 'Arrow loop', place: 'slit_window', hint: 'A narrow opening in a solid tower wall' },
+  chart_table: { name: 'Chart table', place: 'chart_table', hint: 'Survey the route to the nearest other settlement' },
   roof: { name: 'Shingle roof', roof: true, hint: 'RMB: cover tile. Hold a roof and click to lift it' },
   slate_roof: { name: 'Slate roof', roof: true, hint: 'RMB: cover tile. Hold a roof and click to lift it' },
   tile_roof: { name: 'Clay tile roof', roof: true, hint: 'RMB: cover tile. Hold a roof and click to lift it' },

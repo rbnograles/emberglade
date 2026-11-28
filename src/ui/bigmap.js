@@ -45,7 +45,8 @@ export class BigMap {
     else this.show();
   }
 
-  show() {
+  show(survey = null) {
+    this.survey = survey;
     this.root.classList.remove('hidden');
     this.game.encounters.visit(this.game, 'travel:map');
     this.start();
@@ -54,13 +55,14 @@ export class BigMap {
   hide() { this.root.classList.add('hidden'); }
 
   start() {
-    const p = this.game.player;
+    const p = this.survey ?? this.game.player;
     this.centre = { x: Math.floor(p.x), z: Math.floor(p.z) };
     this.row = 0;
     this.ctx.fillStyle = '#1c2542';
     this.ctx.fillRect(0, 0, CELLS * PX, CELLS * PX);
     const span = CELLS * ZOOMS[this.zoom];
-    this.info.textContent = `${span} × ${span} tiles · click to place or remove a marker · scroll to zoom · M or Esc to close`;
+    const route = this.survey ? this.survey.name + ' · ' + this.survey.distance + ' tiles away · ' : '';
+    this.info.textContent = route + `${span} × ${span} tiles · click to place or remove a marker · scroll to zoom · M or Esc to close`;
   }
 
   colour(t) {
@@ -154,6 +156,7 @@ export class BigMap {
         this.marker(st.x, st.z, st.kind === 'village' ? '#f2c94c' : '#c9c9d6', st.name);
       }
     }
+    if (this.survey) this.marker(this.survey.x, this.survey.z, '#ffd24a', this.survey.name);
     g.markers.forEach((m, i) => this.marker(m.x, m.z, m.color, 'Marker ' + (i + 1), true));
     this.marker(p.x, p.z, '#ffffff', 'You');
   }

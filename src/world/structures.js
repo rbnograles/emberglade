@@ -1,3 +1,4 @@
+import { turnedRoof } from './castle-roofs.js';
 import { hash2 } from '../core/noise.js';
 
 // Settlements that the world generator scatters over the land: villages and castle ruins.
@@ -96,10 +97,23 @@ function village(rand) {
   return { cells: plan.cells, radius: 12, spots: spots.slice(0, 2 + ((rand() * 3) | 0)) };
 }
 
+// Lay one square roof from the same rotatable pieces a player can craft.
+function towerRoof(dx, dz, radius) {
+  const ring = Math.max(Math.abs(dx), Math.abs(dz));
+  if (!ring) return 'castle_peak_' + radius;
+  const tier = radius - ring;
+  if (Math.abs(dx) === Math.abs(dz)) {
+    const turn = dz < 0 ? (dx < 0 ? 0 : 3) : (dx < 0 ? 1 : 2);
+    return turnedRoof('castle_corner_' + tier, turn);
+  }
+  const turn = Math.abs(dx) > Math.abs(dz) ? (dx < 0 ? 1 : 3) : (dz < 0 ? 0 : 2);
+  return turnedRoof('castle_slope_' + tier, turn);
+}
+
 // A castle: a curtain wall two storeys high with a toothed parapet and a wall-walk behind it, a
 // spired tower at each corner and the middle of three sides, a twin-towered gatehouse to the south,
 // and in the yard a three-storey keep under a tall slate roof, a barracks, a smithy and a paddock.
-function castle(rand) {
+function castle(rand, court) {
   const plan = new Plan(), brick = rand() < 0.5, wall = brick ? 'brick_wall' : 'stone_wall', spire = brick ? 'spire' : 'spire_red';
   const W = 13; // the curtain wall runs along |x| = W and |z| = W
   const solid = (x, z, t = wall) => plan.obj(x, z, placed(t));
@@ -115,7 +129,11 @@ function castle(rand) {
       up(x, z, 2).obj = placed(wall);
       up(x, z, 2).floor = null;
     }
-    up(cx, cz, 2).roof = spire;
+    if (cz === W && Math.abs(cx) === 3) {
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        up(cx + dx, cz + dz, 2).roof = towerRoof(dx, dz, 1);
+      }
+    } else up(cx, cz, 2).roof = spire;
   };
 
   // the yard: a cobbled road from the gate to the keep, and a ring of cobbles under the wall-walk
@@ -146,6 +164,7 @@ function castle(rand) {
     up(x, W, 2).obj = placed('battlement');
     up(x, W - 1, 2).floor = 'stone_floor';
   }
+  plan.obj(0, W + 1, placed('stone_arch'));
   plan.obj(-1, W + 1, placed('lantern'));
   plan.obj(1, W + 1, placed('lantern'));
 
@@ -192,7 +211,7 @@ function castle(rand) {
   up(1, -9, 1).obj = placed('shelf');
   up(-2, -8, 1).obj = placed('table');
   up(2, -6, 1).obj = placed('lamp');
-  up(0, -7, 2).obj = placed('table');
+  up(0, -7, 2).obj = placed('chart_table');
   up(1, -7, 2).obj = placed('chair');
   up(2, -9, 2).obj = placed('lamp');
   for (const [x, z] of [[-3, -3], [3, -3]]) plan.obj(x, z, placed('planter'));
@@ -205,12 +224,16 @@ function castle(rand) {
     if (edge) solid(x, z, 'stone_wall');
     up(x, z, 1).obj = edge ? placed(!corner && (x + z) % 2 === 0 ? 'window' : 'wood_wall') : null;
     up(x, z, 1).floor = edge ? null : 'wood_floor';
-    up(x, z, 1).roof = 'roof';
+    // Two rings of slate meet at the peak. Each square can be lifted individually.
+    up(x, z, 1).roof = towerRoof(x + 7, z - 6, 2);
   }
   plan.obj(-5, 6, placed('door', { open: false, rotation: 1 }));
   plan.obj(-8, 5, placed('bed'));
   plan.obj(-8, 7, placed('bed'));
   plan.obj(-6, 5, placed('shelf'));
+  plan.obj(-7, 6, placed('stairs', { rotation: 3 }));
+  up(-7, 6, 1).floor = null;
+  up(-6, 7, 1).obj = placed('chest');
 
   // ---- the smithy, east of the road: a timber shed with a forge and a bench ----
   for (let z = 4; z <= 8; z++) for (let x = 5; x <= 9; x++) {
@@ -235,8 +258,178 @@ function castle(rand) {
   plan.obj(-3, 3, placed('table'));
   plan.obj(-4, 3, placed('chair'));
 
-  // its guards: two inside the gate, one before the keep
-  return { cells: plan.cells, radius: W + 1, spots: [[-2, 11], [2, 11], [0, 0]] };
+  // The upper keep rises above the outer watchtowers. Alternating stair bays
+  // leave both the approach and landing clear on each floor.
+  for (let l = 3; l <= 5; l++) {
+    for (let z = K.z0; z <= K.z1; z++) for (let x = K.x0; x <= K.x1; x++) {
+      const edge = x === K.x0 || x === K.x1 || z === K.z0 || z === K.z1;
+      const c = up(x, z, l);
+      if (edge) c.obj = placed((x + z) % 3 === 0 ? 'slit_window' : wall);
+      else c.floor = 'wood_floor';
+      if (l === 5) c.roof = courses[z - K.z0];
+      if (l === 3) up(x, z, 2).roof = null;
+    }
+    const stairX = l % 2 ? 3 : -3;
+    up(stairX, -6, l - 1).obj = placed('stone_stairs', { rotation: 3 });
+    up(stairX, -6, l).floor = null;
+    up(0, -9, l).obj = placed(['shelf', 'cabinet', 'chart_table'][l - 3]);
+  }
+  // A high lantern spire crowns the central bay of the great hall.
+  for (let z = -8; z <= -6; z++) for (let x = -1; x <= 1; x++) {
+    up(x, z, 5).roof = x === 0 && z === -7 ? 'spire' : null;
+  }
+  // Two vaulted galleries flank the keep. The side doors on its third
+  // floor open onto the galleries, with the well and paddock still below.
+  for (const side of [-1, 1]) {
+    up(side * 4, -7, 2).obj = placed('door', { rotation: 1 });
+    up(side * 4, -7, 2).floor = 'stone_floor';
+    for (let wing = 5; wing <= 10; wing++) for (let z = -10; z <= -4; z++) {
+      const x = side * wing, edge = wing === 10 || z === -10 || z === -4;
+      if (edge && (wing === 10 || wing === 5) && (z === -10 || z === -4)) {
+        solid(x, z, 'stone_pier');
+        up(x, z, 1).obj = placed('stone_pier');
+      }
+      up(x, z, 2).floor = 'stone_floor';
+      if (edge) up(x, z, 2).obj = placed(z % 2 ? 'window' : wall);
+      up(x, z, 2).roof = courses[z + 10];
+    }
+    up(side * 8, -7, 2).obj = placed(side < 0 ? 'shelf' : 'cabinet');
+    // A pair of high spires frames the roof ridge above each gallery.
+    for (const end of [-10, -4]) {
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const x = side * 9 + dx, z = end + dz;
+        up(x, z, 2).roof = null;
+        for (let l = 3; l <= 4; l++) up(x, z, l).obj = placed((!dx || !dz) && l === 4 ? 'window' : wall);
+      }
+      up(side * 9, end, 4).roof = spire;
+    }
+  }
+  outerWard(plan, court, 'stone_wall');
+  return plan.cells;
+}
+
+const WALL = 45, CLIFF_EDGE = 50, FLIGHTS = 10;
+const FLIGHT_HEIGHT = 1.5;
+
+// The old keep stays at its seed coordinates. Offset the larger bailey just
+// enough to keep its cliff, steps and buildings inside their generation cell.
+function courtOffset(anchor, grid) {
+  const local = anchor - grid * CELL;
+  return Math.max(CLIFF_EDGE, Math.min(CELL - 1 - CLIFF_EDGE, local)) - local;
+}
+
+function outerWard(plan, court, wall) {
+  const { dx: cx, dz: cz } = court;
+  const floor = (x, z) => plan.floor(x, z, 'stone_floor');
+  const tower = (x, z) => {
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const edge = Math.max(Math.abs(dx), Math.abs(dz)) === 2;
+      for (let l = 0; l <= 3; l++) {
+        const c = l ? plan.up(x + dx, z + dz, l) : plan.at(x + dx, z + dz);
+        c.floor = 'stone_floor';
+        c.obj = edge ? placed(l && (dx === 0 || dz === 0) ? 'slit_window' : wall) : null;
+        if (l === 3) c.roof = towerRoof(dx, dz, 2);
+      }
+    }
+    // Face the entrance into the ward. A landing alternates to either side.
+    const entryZ = z > cz ? -2 : 2;
+    plan.obj(x, z + entryZ, placed('door'));
+    for (let l = 0; l < 3; l++) {
+      const sx = x + (l % 2 ? -1 : 1);
+      const c = l ? plan.up(sx, z, l) : plan.at(sx, z);
+      c.obj = placed('stone_stairs', { rotation: 3 });
+      plan.up(sx, z, l + 1).floor = null;
+    }
+    plan.up(x, z + 1, 3).obj = placed('lamp');
+  };
+  for (let i = -WALL; i <= WALL; i++) {
+    for (const [dx, dz] of [[i, -WALL], [i, WALL], [-WALL, i], [WALL, i]]) {
+      const x = cx + dx, z = cz + dz;
+      floor(x, z);
+      plan.obj(x, z, placed(wall));
+      plan.up(x, z, 1).obj = placed('battlement');
+    }
+  }
+  for (const dx of [-WALL + 1, WALL - 1]) {
+    for (const dz of [-WALL + 1, 0, WALL - 1]) tower(cx + dx, cz + dz);
+  }
+  const gateZ = cz + WALL;
+  for (const dx of [-5, 5]) tower(cx + dx, gateZ - 1);
+  for (let dx = -1; dx <= 1; dx++) {
+    plan.obj(cx + dx, gateZ, placed('stone_arch'));
+    for (let dz = -2; dz <= 4; dz++) floor(cx + dx, gateZ + dz);
+  }
+  // A broad stone stair runs sideways along the cliff face to the gate.
+  for (let dx = 1; dx <= FLIGHTS; dx++) for (let dz = 2; dz <= 4; dz++)
+    plan.obj(cx + dx, gateZ + dz, placed('stone_stairs', { rotation: 2 }));
+
+  // A paved street skirts the old citadel and joins its southern gate.
+  const streetZ = Math.min(22, gateZ - 2);
+  for (let z = streetZ; z < gateZ; z++) floor(cx, z);
+  for (let x = Math.min(0, cx); x <= Math.max(0, cx); x++) floor(x, streetZ);
+  for (let z = 14; z <= streetZ; z++) floor(0, z);
+
+  for (let i = 1; i <= court.innerFlights; i++) for (let x = -1; x <= 1; x++)
+    plan.obj(x, 14 + i, placed('stone_stairs', { rotation: 3 }));
+
+  // Workshops, granaries, dormitories and kitchen gardens fill the new wards.
+  // Reserve the original citadel and the approach before laying out a plot.
+  let plot = 0;
+  for (const dz of [-30, -15, 0, 15, 30]) for (const dx of [-30, -15, 0, 15, 30]) {
+    const x = cx + dx, z = cz + dz;
+    if (Math.abs(x) < 25 && Math.abs(z) < 24) continue;
+    if (dx === 0 && z >= streetZ - 4) continue;
+    if (Math.abs(z - streetZ) <= 4 && x >= Math.min(0, cx) - 5 && x <= Math.max(0, cx) + 5) continue;
+    const use = plot++ % 4;
+    if (use === 3) {
+      field(plan, x, z, () => 0.2);
+      plan.obj(x, z, placed('irrigator'));
+      continue;
+    }
+    for (let rz = -3; rz <= 3; rz++) for (let rx = -4; rx <= 4; rx++) {
+      const edge = Math.abs(rx) === 4 || Math.abs(rz) === 3;
+      floor(x + rx, z + rz);
+      if (edge) plan.obj(x + rx, z + rz, placed(rx % 3 === 0 && Math.abs(rz) === 3 ? 'window' : wall));
+      const roof = rz === 0 ? 'castle_ridge_3' : 'castle_slope_' + (3 - Math.abs(rz));
+      plan.roof(x + rx, z + rz, turnedRoof(roof, rz > 0 ? 2 : 0));
+    }
+    plan.obj(x, z + 3, placed('door'));
+    plan.obj(x - 2, z, placed(['workbench', 'cabinet', 'bed'][use]));
+    plan.obj(x + 2, z, placed(['campfire', 'chest', 'bed'][use]));
+    floor(x, z + 4);
+    for (let path = -6; path <= 6; path++) floor(x + path, z + 5);
+    plan.obj(x - 5, z + 5, placed('lantern'));
+    plan.obj(x + 5, z + 5, placed('planter'));
+  }
+  // Pines on the broken rock faces soften the boundary between hill and forest.
+  for (let i = -WALL; i <= WALL; i += 2) {
+    for (const [dx, dz] of [[i, -48], [i, 48], [-48, i], [48, i]]) {
+      if (dz === 48 && dx >= -4 && dx <= FLIGHTS + 5) continue;
+      const roll = hash2(cx + dx, cz + dz, 433);
+      if (roll < 0.45) plan.obj(cx + dx, cz + dz, { t: 'tree_pine' });
+      else if (roll < 0.7) plan.obj(cx + dx, cz + dz, { t: 'bush' });
+    }
+  }
+}
+
+export function castleGround(st, x, z, naturalHeight) {
+  const localX = x - st.x, localZ = z - st.z;
+  const dx = localX - st.court.dx, dz = localZ - st.court.dz;
+  const outer = st.h - st.court.innerFlights * FLIGHT_HEIGHT;
+  if (dz >= WALL + 2 && dz <= CLIFF_EDGE && dx >= -1 && dx <= FLIGHTS + 3) {
+    return outer - Math.min(FLIGHTS, Math.max(0, dx)) * FLIGHT_HEIGHT;
+  }
+  const ring = Math.max(Math.abs(dx), Math.abs(dz));
+  const grain = hash2(x >> 1, z >> 1, 912);
+  if (ring <= WALL + 1) {
+    const distance = Math.max(Math.abs(localX), Math.abs(localZ)) - 14;
+    if (distance <= 0) return st.h;
+    if (distance > st.court.innerFlights) return outer;
+    if (Math.abs(localX) <= 1 && localZ > 14) return st.h - distance * FLIGHT_HEIGHT;
+    return Math.max(outer, st.h - Math.round((distance + grain) * 3) / 2);
+  }
+  const fraction = Math.max(0, (CLIFF_EDGE - ring + grain - 0.5) / (CLIFF_EDGE - WALL));
+  return Math.round((naturalHeight + (outer - naturalHeight) * fraction) * 2) / 2;
 }
 // The settlement planned for one square of the grid, or null. `natural(x, z)` gives the untouched
 // terrain, so the choice of site never depends on settlements themselves.
@@ -259,7 +452,15 @@ export function planSettlement(seed, cellX, cellZ, natural) {
   }
   let n = 0;
   const rand = () => hash2(cellX * 7 + n, cellZ * 13 - n++, seed + 310);
-  const made = kind === 'village' ? village(rand) : castle(rand);
   const names = kind === 'village' ? VILLAGE_NAMES : CASTLE_NAMES;
-  return { kind, x, z, h: here.h, name: names[(hash2(cellX, cellZ, seed + 304) * names.length) | 0], key: cellX + ',' + cellZ, ...made };
+  const st = { kind, x, z, h: here.h, name: names[(hash2(cellX, cellZ, seed + 304) * names.length) | 0], key: cellX + ',' + cellZ };
+  if (kind === 'village') return { ...st, ...village(rand) };
+  const court = { dx: courtOffset(x, cellX), dz: courtOffset(z, cellZ) };
+  court.innerFlights = Math.min(6, Math.max(0, WALL - Math.max(Math.abs(court.dx), Math.abs(court.dz)) - 20));
+  const foot = { x: x + court.dx + FLIGHTS + 1, z: z + court.dz + WALL + 4 };
+  const base = Math.max(0, natural(foot.x, foot.z + 2).h);
+  // Map searches need only the anchor. Draw the tile plan on first visit.
+  let cells;
+  return { ...st, court, foot, h: base + (FLIGHTS + court.innerFlights) * FLIGHT_HEIGHT, radius: CLIFF_EDGE,
+    spots: [[-2, 11], [2, 11], [0, 0]], get cells() { return cells ??= castle(rand, court); } };
 }

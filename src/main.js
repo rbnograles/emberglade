@@ -1,3 +1,4 @@
+import { roofTurn } from './world/castle-roofs.js';
 import * as THREE from 'three';
 import { installControllers } from './ui/controllers.js';
 import { ask } from './ui/dialog.js';
@@ -285,6 +286,7 @@ game.on((type, data) => {
       fade.style.opacity = 0;
     }));
   }
+  if (type === 'survey') bigmap.show(data);
   if (type === 'restored') {
     game.toast(RESTORATION);
     bigmap.show();
@@ -523,6 +525,7 @@ function useVerb() {
   const obj = aimed && usable(aimed.t) ? aimed : nearestUsable()?.obj;
   if (!obj) return game.wildlife.near(p.x, p.z, 1.6) ? 'Tend' : 'Use';
   if (obj.t === 'door' || obj.t === 'gate') return obj.open ? 'Close' : 'Open';
+  if (obj.t === 'chart_table') return 'Survey';
   if (obj.t === 'bed') return 'Sleep';
   if (obj.t === 'campfire' || obj.t === 'workbench') return 'Craft';
   if (OBJECTS[obj.t].cache || OBJECTS[obj.t].hoard) return 'Search';
@@ -538,7 +541,7 @@ let tapHold = 0; // seconds a tapped tile stays the target before aiming goes ba
 addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touchMode = true; }, true);
 addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') touchMode = false; }, true);
 
-const USABLE = ['bed', 'chest', 'cabinet', 'campfire', 'workbench', 'gate', 'door', 'lostbag'];
+const USABLE = ['chart_table', 'bed', 'chest', 'cabinet', 'campfire', 'workbench', 'gate', 'door', 'lostbag'];
 const usable = (t) => USABLE.includes(t) || !!OBJECTS[t]?.cache || !!OBJECTS[t]?.hoard;
 
 // The nearest thing within reach, favouring whatever the character is facing. With something to
@@ -619,9 +622,10 @@ function toggleFullscreen() {
 }
 // What stands on the storey that building and tools are aimed at.
 const objAt = (x, z) => game.world.getAt(x, z, game.buildLevel);
-const STOREY_NAMES = ['Ground', 'Floor 2', 'Floor 3'];
+const storeyName = level => level ? 'Floor ' + (level + 1) : 'Ground';
 // Is the thing in hand one that the rotate key turns?
 const canTurn = () => {
+  if (ITEMS[game.held?.id]?.turnRoof) return true;
   const kind = ITEMS[game.held?.id]?.place;
   return !!kind && (game.turns(kind) || kind === 'door');
 };
@@ -792,6 +796,7 @@ function updateGhost() {
     // turned the way it will stand: stairs by the way they climb, the rest by where the front is
     const r = OBJECTS[what] && game.turns(what) ? game.placeRotation(what, playerModel.facing) : null;
     ghost.rotation.y = r === null ? 0 : (OBJECTS[what].stairs ? [0, -Math.PI / 2, Math.PI, Math.PI / 2] : [Math.PI / 2, 0, -Math.PI / 2, Math.PI])[r];
+    if (def.turnRoof) ghost.rotation.y = roofTurn(game.roofForPlacement(what, playerModel.facing)) * Math.PI / 2;
     showFront(r, target.x + 0.5, y, target.z + 0.5);
     return;
   }
@@ -1116,7 +1121,7 @@ function step(dt) {
   // while building, the hint names the storey being built on, and touch gets its layer buttons
   const building = holdingBuildable(), label = targetLabel();
   const quiet = touchMode || panels.open, hintTool = quiet ? '' : toolVerb(), hintUse = quiet ? '' : useVerb();
-  hud.setHint({ target: label, primary: hintTool === 'Tool' ? '' : hintTool, use: hintUse === 'Use' ? '' : hintUse, extra: building ? STOREY_NAMES[game.buildLevel] : '', rotate: canTurn() ? keyName(K.rotate) : '' });
+  hud.setHint({ target: label, primary: hintTool === 'Tool' ? '' : hintTool, use: hintUse === 'Use' ? '' : hintUse, extra: building ? storeyName(game.buildLevel) : '', rotate: canTurn() ? keyName(K.rotate) : '' });
   for (const b of layerButtons) if (b.hidden === building) b.hidden = !building;
   if (touchMode) {
     const verb = toolVerb();

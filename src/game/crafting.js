@@ -1,3 +1,4 @@
+import { ROOF_COURSES } from '../world/castle-roofs.js';
 // Grid crafting. The grid is always 3x3 cells (row-major); by hand only the top-left 2x2 is usable.
 // pattern: rows of legend characters, '.' = empty. Shaped recipes may sit anywhere in the grid and may be mirrored.
 // shapeless: list of items, any arrangement. station: null, 'workbench' or 'campfire' (must be standing near one).
@@ -7,6 +8,15 @@ export const GRID = 3;
 const LEGEND = { '#': 'stone', '|': 'stick', W: 'wood', C: 'copper_bar', F: 'fiber', K: 'coal', H: 'hide', I: 'iron_bar', P: 'pearl', X: 'crystal', O: 'coral' };
 
 export const RECIPES = [
+  ...ROOF_COURSES.map(({ id, shape, tier }) => ({
+    out: id, n: 4, station: 'workbench',
+    shapeless: [...Array(tier + 1).fill('stone_floor'), 'fiber',
+      { slope: 'stick', corner: 'wood', ridge: 'stone', peak: 'coal' }[shape]],
+  })),
+  { out: 'stone_arch', n: 4, station: 'workbench', pattern: ['###', '#.#', '#.#'] },
+  { out: 'stone_pier', n: 4, station: 'workbench', pattern: ['#', '#', '#'] },
+  { out: 'slit_window', n: 4, station: 'workbench', pattern: ['###', '#|#', '###'] },
+  { out: 'chart_table', n: 1, station: 'workbench', shapeless: ['table', 'fiber', 'coal'] },
   ...KEEPERS.map(k => ({ out: carvingId(k), n: 1, station: 'workbench', keeper: k.id, shapeless: ['stone', 'wood', 'wood', k.medium] })),
   { out: 'fiber', n: 4, shapeless: ['fleece'], station: null },
   { out: 'leather', n: 1, shapeless: ['hide'], station: 'campfire' },

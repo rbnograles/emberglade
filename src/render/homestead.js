@@ -1,3 +1,4 @@
+import { ROOF_COURSES } from '../world/castle-roofs.js';
 import { Vox } from './voxel.js';
 
 const oak = 0xa16a42, edge = 0x624332, honey = 0xd8a467, iron = 0x6b7481, brass = 0xd08a50;
@@ -46,6 +47,27 @@ export function homesteadModels(m) {
   }
   // a tall pitched roof, one tile deep per course: n rises toward +z, s falls away, the ridge joins them
   const slate = (x, y, z) => [0x4f5f78, 0x5f7090, 0x44526a][Math.abs(x + (y >> 1) * 2 + (z >> 1)) % 3];
+  // Each tile spans eight voxels. Successive courses meet eight voxels higher.
+  for (const { id, shape, tier } of ROOF_COURSES) {
+    const v = new Vox();
+    for (let z = 0; z < 8; z++) for (let x = 0; x < 8; x++) {
+      const ridge = Math.min(z, 7 - z);
+      const rise = shape === 'slope' ? z : shape === 'corner' ? Math.min(x, z)
+        : shape === 'ridge' ? ridge : Math.min(x, 7 - x, ridge);
+      const top = tier * 8 + rise;
+      v.box(x, 0, z, x, top, z, 0x403c39).box(x, top, z, x, top + 1, z, slate);
+    }
+    add(id, v);
+  }
+  add('stone_arch', new Vox().box(0, 0, 2, 0, 9, 5, stone).box(7, 0, 2, 7, 9, 5, stone)
+    .box(0, 9, 2, 1, 10, 5, stone).box(6, 9, 2, 7, 10, 5, stone)
+    .box(1, 10, 2, 6, 11, 5, stone).box(3, 10, 1, 4, 11, 6, 0xc2bdac));
+  add('stone_pier', new Vox().box(0, 0, 0, 5, 1, 5, stone).box(1, 2, 1, 4, 9, 4, stone)
+    .box(0, 10, 0, 5, 11, 5, stone));
+  add('slit_window', new Vox().box(0, 0, 0, 7, 2, 5, stone).box(0, 3, 0, 2, 8, 5, stone)
+    .box(5, 3, 0, 7, 8, 5, stone).box(0, 9, 0, 7, 11, 5, stone));
+  add('chart_table', legs(new Vox(), 6, 5, 3).box(0, 4, 0, 6, 4, 5, oak)
+    .box(1, 5, 1, 5, 5, 4, 0xe9d19b).box(2, 5, 2, 4, 5, 2, 0x739aa0).set(4, 6, 3, brass));
   const RISE = 6;
   for (let k = 0; k < 3; k++) {
     for (const dir of ['n', 's']) {

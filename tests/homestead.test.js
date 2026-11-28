@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Game, ENEMY_KINDS, VEHICLES } from '../src/game/game.js';
 import { ITEMS } from '../src/game/items.js';
 import { OBJECTS } from '../src/world/objects.js';
-import { RECIPES } from '../src/game/crafting.js';
+import { ROOF_COURSES, roofItem, roofTurn } from '../src/world/castle-roofs.js';
+import { RECIPES, layout, matchRecipe } from '../src/game/crafting.js';
 import { CROPS } from '../src/world/crops.js';
 import { WILDLIFE } from '../src/game/wildlife.js';
 import { KEEPERS, carvingId } from '../src/game/keepers.js';
@@ -756,13 +757,14 @@ describe('settlements', () => {
       expect(Math.hypot(st.x, st.z)).toBeGreaterThanOrEqual(90);
       for (const [dx, dz] of [[0, 0], [st.radius, st.radius], [-st.radius, 0], [3, -st.radius]]) {
         const t = a.tile(st.x + dx, st.z + dz);
-        expect(t.h).toBe(st.h);
+        if (!st.court || (dx === 0 && dz === 0)) expect(t.h).toBe(st.h);
+        if (st.court && a.settlementAt(st.x + dx, st.z + dz) !== st) continue;
         expect(t.water || t.lava).toBe(false);
       }
       for (const cell of st.cells.values()) {
         if (cell.obj) expect(OBJECTS[cell.obj.t], cell.obj.t).toBeTruthy();
         if (cell.floor) expect(ITEMS[cell.floor].floor, cell.floor).toBe(true);
-        if (cell.roof) expect(ITEMS[cell.roof].roof, cell.roof).toBe(true);
+        if (cell.roof) expect(ITEMS[roofItem(cell.roof)].roof, cell.roof).toBe(true);
       }
     }
     // the start itself stays as it was
@@ -869,11 +871,11 @@ describe('castle starts, guards and digging', () => {
     let atCastle = 0;
     for (let i = 0; i < 4; i++) {
       const g = new Game(null), { x, z } = g.player.spawn;
-      const castle = g.gen.settlementsNear(x, z, 30).find((st) => st.kind === 'castle');
+      const castle = g.gen.settlementAt(x, z);
       if (!castle) continue;
       atCastle++;
-      expect(z).toBeGreaterThan(castle.z + castle.radius); // outside the wall, south of the gate
-      expect(Math.abs(x - castle.x)).toBeLessThanOrEqual(2);
+      expect({ x, z }).toEqual(castle.foot);
+      expect(g.gen.tile(x, z).h).toBe(castle.h - 15 - castle.court.innerFlights * STOREY);
     }
     expect(atCastle).toBeGreaterThan(0);
   });
@@ -951,7 +953,48 @@ describe('a castle worth the name', () => {
     // the keep has floors upstairs and a pitched roof over the top one
     expect(w.getFloor(c.x, c.z - 7, 1)).toBe('wood_floor');
     expect(w.getFloor(c.x, c.z - 7, 2)).toBe('wood_floor');
-    expect(w.getRoof(c.x, c.z - 7, 2)).toBe('pitch_ridge');
+    expect(w.getRoof(c.x, c.z - 7, 5)).toBe('spire');
+    expect(w.getRoof(c.x + 2, c.z - 7, 5)).toBe('pitch_ridge');
+  });
+
+  it('lifts an older save with its keep floor and preserves edits after a second load', () => {
+    const g = newGame(), c = g.gen.settlementsNear(0, 0, 3000).find(s => s.kind === 'castle');
+    const save = g.serialize();
+    delete save.cliffCastles;
+    Object.assign(save.player, { x: c.x + 0.5, z: c.z - 6.5, y: g.gen.natural(c.x, c.z).h + 2 * STOREY });
+    save.world[c.x + ',' + (c.z - 8)] = { t: 'empty' };
+    const loaded = new Game(save);
+    expect(loaded.player.y).toBe(c.h + 2 * STOREY);
+    expect(loaded.world.get(c.x, c.z - 8)).toBeNull();
+    expect(new Game(JSON.parse(JSON.stringify(loaded.serialize()))).player.y).toBe(loaded.player.y);
+  });
+
+  it('walks from the foot of the cliff up all ten stone flights and through the outer gate', () => {
+    const g = newGame();
+    const c = g.gen.settlementsNear(0, 0, 3000).find(s => s.kind === 'castle');
+    const cx = c.x + c.court.dx, cz = c.z + c.court.dz;
+    expect(g.world.get(cx - 45, cz - 20)?.placed).toBe(true);
+    expect(g.world.get(cx + 45, cz - 20)?.placed).toBe(true);
+    standAt(g, c.foot.x, c.foot.z);
+    const low = g.player.y;
+    for (let i = 0; i < 220; i++) {
+      g.move(-0.05, 0);
+      g.physics(0.016, false);
+    }
+    expect(g.player.x).toBeCloseTo(cx + 0.5);
+    expect(g.player.y - low).toBeCloseTo(15);
+    for (let i = 0; i < 120; i++) {
+      g.move(0, -0.05);
+      g.physics(0.016, false);
+    }
+    expect(g.player.z).toBeLessThan(cz + 45);
+    expect(g.player.y).toBe(c.h - c.court.innerFlights * STOREY);
+    standAt(g, c.x, c.z + 15 + c.court.innerFlights);
+    for (let i = 0; i < (1 + c.court.innerFlights) * 20; i++) {
+      g.move(0, -0.05);
+      g.physics(0.016, false);
+    }
+    expect(g.player.y).toBeCloseTo(c.h);
   });
 
   it('can be climbed: the keep stairs lead up two floors, and the yard stairs to the wall-walk', () => {
@@ -1039,12 +1082,71 @@ describe('turning things and building upward freely', () => {
     expect(g.inv.count('stone_wall')).toBe(0);
     // a floor may carry on sideways from what is built beside it
     hold(g, 'wood_floor');
-    g.shiftBuildLevel(1);
     expect(g.canPlace(W[0] + 1, W[1])).toBe(true);
     // the top of a wall holds you up once you are that high, and not before
     const ground = g.ground(W[0] + 0.5, W[1] + 0.5);
     expect(g.standY(W[0] + 0.5, W[1] + 0.5, ground)).toBe(ground);
     expect(g.standY(W[0] + 0.5, W[1] + 0.5, ground + STOREY)).toBe(ground + STOREY);
+  });
+});
+
+describe('the castle workshop', () => {
+  it('makes each slate shape from its own workbench recipe', () => {
+    for (const { id } of ROOF_COURSES) {
+      const recipe = recipeFor(id);
+      expect(matchRecipe(layout(recipe), new Set(['workbench']))).toBe(recipe);
+      expect(matchRecipe(layout(recipe), new Set())).toBeNull();
+      expect(recipe.n).toBe(4);
+    }
+  });
+
+  it('turns a roof on a six-storey tower, saves it and returns the original piece', () => {
+    const g = newGame(), [x, z] = clearing(g, 3);
+    standAt(g, x + 1, z);
+    hold(g, 'stone_wall', 6);
+    for (let l = 0; l < 6; l++) {
+      if (l) g.shiftBuildLevel(1);
+      g.secondary(x, z, true);
+      expect(g.world.getAt(x, z, l)?.t).toBe('stone_wall');
+    }
+    const id = 'castle_corner_1';
+    hold(g, id, 2);
+    expect(g.shiftBuildLevel(1)).toBe(5);
+    const before = g.roofForPlacement(id, 0);
+    g.turnPlacing(0);
+    g.secondary(x, z, true);
+    const placed = g.world.getRoof(x, z, 5);
+    expect(roofTurn(placed)).not.toBe(roofTurn(before));
+    expect(roofItem(placed)).toBe(id);
+    g.secondary(x, z, true);
+    expect(g.inv.count(id)).toBe(1);
+    const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(copy.world.getRoof(x, z, 5)).toBe(placed);
+    copy.shiftBuildLevel(5);
+    copy.primary(x, z);
+    expect(copy.world.getRoof(x, z, 5)).toBeNull();
+    expect(copy.inv.count(id)).toBe(2);
+  });
+
+  it('surveys a different settlement from the lookout and uses the barracks chest', () => {
+    const g = new Game(null);
+    const castle = g.gen.settlementsNear(g.player.spawn.x, g.player.spawn.z, 2400).find(s => s.kind === 'castle');
+    const { x, z, h } = castle;
+    standAt(g, x + 1, z - 7);
+    g.player.y = h + 2 * STOREY;
+    let route;
+    g.on((type, data) => { if (type === 'survey') route = data; });
+    expect(g.interact(x, z - 7)).toBe(true);
+    expect(route.distance).toBeGreaterThan(castle.radius);
+    expect(route.name).toBeTruthy();
+    standAt(g, x - 7, z + 7);
+    g.player.y = h + STOREY;
+    expect(g.interact(x - 6, z + 7)).toBe(true);
+    const chest = g.world.getAt(x - 6, z + 7, 1);
+    expect(chest.items).toHaveLength(18);
+    chest.items[0] = { id: 'stone', n: 3 };
+    const copy = new Game(JSON.parse(JSON.stringify(g.serialize())));
+    expect(copy.world.getAt(x - 6, z + 7, 1).items[0]).toEqual(chest.items[0]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { cropFor } from './crops.js';
 
-export const TOP_LEVEL = 2; // storeys are 0 (ground), 1 and 2
+export const TOP_LEVEL = 5; // ground plus five upper storeys
 export const STOREY = 1.5; // height of one storey, the same as a wall
 
 // Player changes layered over the generated world.
