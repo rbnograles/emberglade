@@ -60,6 +60,8 @@ const COLD_HUNGER = 1; // extra hunger drain when cold with no armor (x2 in tota
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
 export const MARKER_COLORS = ['#ff5a7a', '#4fd0ff', '#ffd24a', '#8be06a', '#c58bff'];
+const MARKER_REACH = 2; // tiles: walking this close to a marker clears it
+const MARKER_ARM = 5; // a marker only clears once you have been at least this far from it
 
 export function needsRelocation(save) {
   return !!save?.player && save.gen !== GEN_VERSION;
@@ -733,6 +735,24 @@ export class Game {
     items.forEach((s, i) => (this.inv.slots[HOTBAR + i] = s));
     this.emit('inv');
     return cap;
+  }
+
+  // Move everything from an open chest or dropped pack into the inventory; what does not fit stays.
+  // at: {x, z} of the container. An emptied dropped pack is cleared away, as it has no further use.
+  takeAll(from, at = null) {
+    const before = from.slots.filter(Boolean).length;
+    for (let i = 0; i < from.slots.length; i++) from.moveTo(i, this.inv);
+    const left = from.slots.filter(Boolean).length;
+    if (!before) return false;
+    if (left === before) this.toast('Your inventory is full');
+    else this.toast(left ? `Took what fits. ${left} stack${left > 1 ? 's' : ''} left behind` : 'Took everything');
+    const lost = this.player.lost;
+    if (!left && at && lost && lost.x === at.x && lost.z === at.z && this.world.get(at.x, at.z)?.t === 'lostbag') {
+      this.world.remove(at.x, at.z, this.day);
+      this.player.lost = null;
+    }
+    this.emit('inv');
+    return !left;
   }
 
   // Throw away whatever is on the cursor.
@@ -1610,7 +1630,23 @@ export class Game {
   }
 
   // ---- per-frame simulation ----
+  // A marker has done its job once you walk up to it. One set down at your own feet waits until
+  // you have been away from it, so it is not cleared the moment it is placed.
+  reachMarkers() {
+    const p = this.player;
+    for (let i = this.markers.length - 1; i >= 0; i--) {
+      const m = this.markers[i], d = Math.hypot(m.x - p.x, m.z - p.z);
+      if (d > MARKER_ARM) m.far = true;
+      else if (m.far && d < MARKER_REACH) {
+        this.markers.splice(i, 1);
+        this.toast('You reached your marker');
+        this.emit('marker', { x: m.x, z: m.z, color: m.color });
+      }
+    }
+  }
+
   tick(dt, sprinting = false) {
+    this.reachMarkers();
     this.time += dt / DAY_SECONDS;
     if (this.time >= 1) {
       this.startDay();

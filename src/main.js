@@ -34,6 +34,8 @@ import '@fontsource/nunito/latin-500.css';
 import '@fontsource/nunito/latin-700.css';
 import '@fontsource/nunito/latin-800.css';
 import { Hud, drawFace, objectToolVerb } from './ui/hud.js';
+import { startTooltips } from './ui/tooltip.js';
+startTooltips();
 import { needAction, NEED_LABEL } from './ui/touch-actions.js';
 import { setRenderedIcons, iconURL } from './ui/icons.js';
 import { Panels } from './ui/panels.js';
@@ -198,6 +200,7 @@ game.on((type, data) => {
       for (const hex of [0xffd24a, 0xffffff, 0xff8a3a]) sparks.rise(p.x, p.y + 0.3, p.z, hex, 20, 1.6, 3.5);
     } else if (data.key === 'sleep') sparks.rise(p.x, p.y + 0.3, p.z, 0xbfe6f5, 8, 0.5);
   } else if (type === 'newday') sfx('morning');
+  else if (type === 'marker') sparks.rise(data.x, game.ground(data.x, data.z) + 0.5, data.z, new THREE.Color(data.color).getHex(), 16, 0.5, 2); // reached: its beam goes out in a puff
   else if (type === 'charm') sparks.rise(data.x, game.ground(data.x, data.z) + 0.5, data.z, 0xff8ab0, data.born ? 14 : 7, 0.4, 1.6);
   else if (type === 'swing') {
     playerModel.startSwing();
@@ -1064,7 +1067,8 @@ function step(dt) {
   }
   // while building, the hint names the storey being built on, and touch gets its layer buttons
   const building = holdingBuildable(), label = targetLabel();
-  hud.setHint(building ? (label ? label + ' · ' : '') + STOREY_NAMES[game.buildLevel] : label);
+  const quiet = touchMode || panels.open, hintTool = quiet ? '' : toolVerb(), hintUse = quiet ? '' : useVerb();
+  hud.setHint({ target: label, primary: hintTool === 'Tool' ? '' : hintTool, use: hintUse === 'Use' ? '' : hintUse, extra: building ? STOREY_NAMES[game.buildLevel] : '' });
   for (const b of layerButtons) if (b.hidden === building) b.hidden = !building;
   if (touchMode) {
     const verb = toolVerb();

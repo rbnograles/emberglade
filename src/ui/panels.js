@@ -2,7 +2,8 @@ import { ITEMS, ARMOR_SLOTS, MAX_DEFENSE } from '../game/items.js';
 import { RECIPES, ingredients } from '../game/crafting.js';
 import { Inventory } from '../game/inventory.js';
 import { HOTBAR } from '../game/game.js';
-import { renderSlot } from './hud.js';
+import { renderSlot, tipFor } from './hud.js';
+import { refreshTip } from './tooltip.js';
 import { iconURL } from './icons.js';
 import { ENHANCEMENTS, fits } from '../game/enhance.js';
 import { touchDrag } from './dragswap.js';
@@ -21,6 +22,12 @@ const icon = (id, cls = '') => {
 
   img.draggable = false;
   return img;
+};
+// An element that shows the item's card when the mouse rests on it.
+const withTip = (e, id) => {
+  e.tip = tipFor({ id });
+  e.classList.add('has-tip');
+  return e;
 };
 
 // Which tab a recipe sits under.
@@ -61,6 +68,7 @@ export class Panels {
   show(chestPos = null) {
     const obj = chestPos && this.game.world.getAt(chestPos.x, chestPos.z, chestPos.l ?? 0);
     this.chest = obj?.t === 'chest' || obj?.t === 'cabinet' || obj?.t === 'lostbag' ? new Inventory(0, obj.items) : null;
+    this.chestPos = this.chest ? chestPos : null;
     this.root.classList.remove('hidden');
     this.render();
   }
@@ -71,6 +79,7 @@ export class Panels {
     this.hover = null;
     this.game.clearGrid();
     this.renderCursor();
+    refreshTip();
   }
 
   toggle() {
@@ -126,6 +135,16 @@ export class Panels {
     if (this.chest) {
       const head = el('header');
       head.append(el('h2', '', this.chest.slots.length > 18 ? 'Your dropped pack' : 'Chest'));
+      const all = el('button', 'chip take-all', 'Take all');
+      all.disabled = !this.chest.slots.some(Boolean);
+      all.addEventListener('click', () => {
+        // an emptied dropped pack is gone from the world, so its view closes too
+        if (game.takeAll(this.chest, this.chestPos) && !game.world.getAt(this.chestPos.x, this.chestPos.z, this.chestPos.l ?? 0)) {
+          this.chest = null;
+          this.render();
+        }
+      });
+      head.append(all);
       card.append(head, this.grid(this.chest, range(this.chest.slots.length), inv));
     }
 
@@ -147,7 +166,7 @@ export class Panels {
     worn.append(el('b', 'armor-total', `Armor ${game.defense}/${MAX_DEFENSE}`));
     const trash = el('div', 'slot trash', '✕');
     trash.dataset.label = 'discard';
-    trash.title = 'Pick up a stack and click here to throw it away';
+    trash.dataset.tip ='Pick up a stack and click here to throw it away';
     trash.addEventListener('mousedown', () => game.trashCursor());
     worn.append(trash);
     card.append(worn);
@@ -168,7 +187,7 @@ export class Panels {
     const game = this.game;
     const can = game.canMake(r, stations);
     const row = el('div', 'recipe' + (can ? '' : ' dim'));
-    row.append(icon(r.out, 'big'));
+    row.append(withTip(icon(r.out, 'big'), r.out));
 
     const body = el('div', 'body');
     body.append(el('b', '', ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '')));
@@ -176,7 +195,7 @@ export class Panels {
     for (const [id, n] of Object.entries(ingredients(r))) {
       const have = game.inv.count(id);
       const chip = el('span', have >= n ? '' : 'missing');
-      chip.title = ITEMS[id].name;
+      withTip(chip, id);
       chip.append(icon(id), `${Math.min(have, 999)}/${n}`);
       needs.append(chip);
     }
@@ -203,7 +222,7 @@ export class Panels {
       badges.append(el('span', 'badge' + (on ? ' on' : ''), on ? `✓ At ${station}` : `No ${station}`));
     }
     const close = el('button', 'close', '✕');
-    close.title = 'Close (Tab or Esc)';
+    close.dataset.tip ='Close (Tab or Esc)';
     close.addEventListener('click', () => this.hide());
     head.append(badges, close);
     card.append(head);
@@ -248,7 +267,7 @@ export class Panels {
         for (const [item, n] of Object.entries(e.cost)) {
           const have = game.inv.count(item);
           const chip = el('span', have >= n ? '' : 'missing');
-          chip.title = ITEMS[item].name;
+          withTip(chip, item);
           chip.append(icon(item), `${Math.min(have, 999)}/${n}`);
           needs.append(chip);
         }
@@ -281,6 +300,7 @@ export class Panels {
     this.root.replaceChildren(this.renderInventory(), crafting);
     list.scrollTop = scroll;
     this.fit();
+    refreshTip(); // the slot under the mouse was just redrawn
   }
 
   // On a window too narrow for both cards side by side, shrink the pair to fit instead of letting

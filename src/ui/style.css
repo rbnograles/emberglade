@@ -857,3 +857,59 @@ canvas#game { touch-action: none; }
 @media (pointer: fine) { #panel { flex-direction: row !important; align-items: flex-start !important; overflow: visible !important; max-width: none !important; padding: 0 !important; } }
 @media (pointer: fine) { #panel { width: max-content; max-height: none !important; } } /* as wide as its two cards, so centring and scaling work from the true size */
 @media (pointer: fine) { #panel .card { max-height: calc(88vh / var(--fit, 1)) !important; } } /* a shrunken panel may be taller in its own units, and still fits the window */
+
+/* ---------- action hints, item tooltip, held item name ---------- */
+/* the hint bar: what is aimed at, then what each button does, drawn as mice and keycaps */
+#hint { display: flex; align-items: center; gap: 12px; min-height: 30px; padding: 5px 12px; opacity: 0; transform: translateY(4px); transition: opacity 0.16s ease, transform 0.16s ease; }
+#hint.on { opacity: 1; transform: none; }
+#hint .what { font-weight: 800; color: var(--accent); }
+#hint .act { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+#hint .more { opacity: 0.7; }
+#hint .what + .act, #hint .act + .more, #hint .what + .more { padding-left: 12px; border-left: 1px solid rgba(255, 246, 227, 0.22); }
+.mouse { flex: none; width: 13px; height: 19px; vertical-align: -4px; fill: rgba(255, 246, 227, 0.1); stroke: var(--cream); stroke-width: 1.4; }
+.mouse .btn { fill: var(--accent); stroke: none; }
+.mouse.r { transform: scaleX(-1); }
+#hint kbd, #tip kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 4px; font: inherit; font-size: 11px; font-weight: 800; color: #2b2420; background: var(--cream); border-radius: 5px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+
+/* the tooltip: one card that follows the mouse */
+#tip { position: fixed; left: 0; top: 0; z-index: 200; max-width: 250px; padding: 9px 12px 10px; pointer-events: none; color: var(--cream); background: rgba(38, 30, 27, 0.96); border: 2px solid rgba(242, 201, 76, 0.5); border-radius: 12px; box-shadow: 0 5px 0 rgba(0, 0, 0, 0.28), 0 10px 26px rgba(0, 0, 0, 0.35); opacity: 0; transition: opacity 0.12s ease; will-change: transform; }
+#tip.on { opacity: 1; }
+#tip b { display: block; font-size: 15px; font-weight: 800; color: var(--accent); line-height: 1.2; }
+#tip b i { font-style: normal; font-weight: 700; color: var(--cream); opacity: 0.65; }
+#tip small { display: block; margin-top: 1px; font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; opacity: 0.55; }
+#tip dl { display: grid; gap: 2px; margin: 7px 0 0; font-size: 13px; }
+#tip dl div { display: flex; justify-content: space-between; gap: 22px; }
+#tip dt { opacity: 0.7; }
+#tip dd { margin: 0; font-weight: 800; }
+#tip u { display: block; height: 4px; margin-top: 5px; background: rgba(0, 0, 0, 0.45); border-radius: 2px; overflow: hidden; }
+#tip u s { display: block; height: 100%; border-radius: 2px; }
+#tip em { display: block; margin-top: 7px; font-size: 13px; font-style: normal; font-weight: 800; }
+#tip em span { display: block; font-size: 12px; font-weight: 500; color: var(--cream); opacity: 0.8; }
+#tip p { margin: 0; font-size: 12.5px; line-height: 1.35; opacity: 0.85; }
+#tip b ~ p { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255, 246, 227, 0.14); }
+
+/* the name of what is in the hand, popping up over the hotbar when it changes */
+#held-name { position: absolute; left: 50%; bottom: calc(100% + 8px); display: flex; flex-direction: column; align-items: center; gap: 1px; width: max-content; max-width: 90vw; pointer-events: none; text-align: center; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 0, 0, 0.6); opacity: 0; transform: translate(-50%, 6px); transition: opacity 0.45s ease, transform 0.45s ease; }
+#held-name.on { opacity: 1; transform: translate(-50%, 0); transition-duration: 0.14s; }
+#held-name b { font-size: 19px; font-weight: 800; letter-spacing: 0.3px; }
+#held-name span { font-size: 13px; opacity: 0.9; }
+#held-name span:empty { display: none; }
+
+/* slots answer the mouse softly instead of snapping */
+.slot { transition: border-color 0.12s ease, background-color 0.12s ease, transform 0.14s cubic-bezier(0.3, 1.5, 0.6, 1), box-shadow 0.14s ease; }
+@media (hover: hover) { .slot:hover { border-color: rgba(255, 246, 227, 0.55); background-color: rgba(255, 246, 227, 0.2); } }
+#hotbar .slot.selected { transform: translateY(-5px); box-shadow: 0 5px 0 rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(242, 201, 76, 0.25); }
+#hotbar .slot:active { transform: translateY(-2px) scale(0.95); }
+#cursor, .drag-ghost { transition: none; }
+@media (pointer: coarse) {
+  #hint { min-height: 0; gap: 8px; }
+  #held-name b { font-size: 15px; }
+  #held-name span { font-size: 11px; }
+  #hotbar .slot.selected { transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) { .slot, #hint, #tip, #held-name { transition: none; } }
+
+/* take everything out of a chest or a dropped pack in one go */
+.chip.take-all { color: #2b2420; background: var(--accent); border-color: #ffdf82; font-weight: 800; }
+.chip.take-all:hover { background: #ffd866; }
+.chip.take-all:disabled { opacity: 0.4; cursor: default; }

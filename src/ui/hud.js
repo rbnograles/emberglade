@@ -8,6 +8,7 @@ import { cropFor } from '../world/crops.js';
 import { iconURL } from './icons.js';
 import { ENHANCEMENTS } from '../game/enhance.js';
 import { touchDrag } from './dragswap.js';
+import { MOUSE_LEFT, MOUSE_RIGHT, keyed } from './tooltip.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,23 +25,59 @@ export function objectToolVerb(tool, obj) {
   return obj.placed ? 'Take' : 'Tool';
 }
 
-// Tooltip text: the item's name and what it does.
-export function describe(slot) {
-  const def = ITEMS[slot.id], parts = [def.name];
-  if (def.food) parts.push(`+${def.food} food`);
-  if (def.weapon) parts.push(`damage ${def.weapon}`);
-  if (def.power) parts.push(`strength ${def.power}`);
-  if (def.def) parts.push(`armor ${def.def}`);
-  if (def.bag) parts.push(`+${def.bag} slots`);
-  if (def.uses) parts.push(`${slot.d ?? def.uses}/${def.uses} uses left`);
-  if (slot.e && ENHANCEMENTS[slot.e]) parts.push(ENHANCEMENTS[slot.e].name + ': ' + ENHANCEMENTS[slot.e].text);
-  return parts.join(' \u00B7 ');
+const KINDS = [['weapon', 'Weapon'], ['tool', 'Tool'], ['food', 'Food'], ['flask', 'Drink'], ['armor', 'Worn'], ['vehicle', 'Vehicle'], ['plant', 'Seeds'],
+  ['roof', 'Building'], ['floor', 'Building'], ['place', 'Building']];
+const hexColor = (n) => '#' + n.toString(16).padStart(6, '0');
+
+// The item card the themed tooltip draws (see tooltip.js).
+export function tipFor(slot) {
+  const def = ITEMS[slot.id], stats = [], e = slot.e && ENHANCEMENTS[slot.e];
+  if (def.food) stats.push(['Food', '+' + def.food]);
+  if (def.water) stats.push(['Water', '+' + def.water]);
+  if (def.weapon) stats.push(['Damage', def.weapon]);
+  if (def.power) stats.push(['Strength', def.power]);
+  if (def.def) stats.push(['Armor', def.def]);
+  if (def.bag) stats.push(['Slots', '+' + def.bag]);
+  if (def.uses) stats.push(['Uses left', `${slot.d ?? def.uses} / ${def.uses}`]);
+  return {
+    name: def.name,
+    count: slot.n ?? 1,
+    kind: def.armor ? 'Worn on the ' + def.armor : KINDS.find(([key]) => def[key])?.[1] ?? 'Material',
+    stats,
+    wear: def.uses ? Math.max(0, (slot.d ?? def.uses) / def.uses) : undefined,
+    enh: e ? { name: e.name, text: e.text, color: hexColor(e.color) } : null,
+    color: e ? hexColor(e.color) : '',
+    note: def.hint ? touchWords(def.hint) : '',
+  };
 }
 
-// Fills a slot element with an item icon and count.
+// What the right mouse button does with this item in hand.
+export function secondaryVerb(def) {
+  if (!def) return '';
+  if (def.food) return 'Eat';
+  if (def.armor) return 'Wear';
+  if (def.flask) return 'Drink';
+  if (def.vehicle) return def.vehicle === 'trail_cart' ? 'Park' : 'Launch';
+  if (def.roof) return 'Roof over';
+  if (def.floor) return 'Lay floor';
+  if (def.place) return 'Place';
+  if (def.plant) return 'Plant';
+  if (def.tool === 'can') return 'Water';
+  return '';
+}
+
+// Fills a slot element with an item icon and count. Nothing is rebuilt while the slot holds the same
+// thing, so hovering and transitions are not interrupted by the HUD's regular refresh.
 export function renderSlot(el, slot) {
+  const sig = slot ? `${slot.id}|${slot.n}|${slot.d}|${slot.e}` : '';
+  const old = el.dataset.sig;
+  if (old === sig) return;
+  // a new item, or a stack that grew, gives a little bounce
+  const [oldId, oldN] = (old ?? '').split('|');
+  if (slot && old !== undefined && el.animate && (oldId !== slot.id || slot.n > +oldN)) el.animate([{ transform: 'scale(1.14)' }, { transform: 'scale(1)' }], { duration: 160, easing: 'ease-out' });
+  el.dataset.sig = sig;
   el.replaceChildren();
-  el.title = slot ? describe(slot) : '';
+  el.tip = slot ? tipFor(slot) : null;
   if (!slot) return;
   const img = document.createElement('img');
   img.src = iconURL(slot.id);
@@ -233,14 +270,14 @@ export class Hud {
         slot.dataset.id = worn?.id ?? '';
         renderSlot(slot, worn);
       }
-      if (!worn) slot.title = 'Nothing worn on your ' + ARMOR_SLOTS[i];
+      if (!worn) slot.dataset.tip = 'Nothing worn on your ' + ARMOR_SLOTS[i];
     });
     // the portrait: the ring fills with experience toward the next level
     const full = pr.level >= MAX_LEVEL ? 1 : pr.xp / need;
     $('xp-ring').style.strokeDashoffset = RING * (1 - full);
     $('level').textContent = 'Lv ' + pr.level;
     $('level-points').textContent = points > 0 ? '+' + points : '';
-    $('portrait').title = (pr.level >= MAX_LEVEL ? 'Highest level reached' : pr.xp + ' / ' + need + ' experience') + '. Press K for your character sheet.';
+    $('portrait').dataset.tip = (pr.level >= MAX_LEVEL ? 'Highest level reached' : pr.xp + ' / ' + need + ' experience') + '. Press K for your character sheet.';
     setBar(this.air, p.breath);
     $('air').classList.toggle('hidden', p.breath >= 10 && !g.submerged); // only shown while diving or catching breath
     $('stamina').classList.toggle('winded', !!p.winded);
@@ -250,20 +287,50 @@ export class Hud {
     });
   }
 
-  // Bottom line: what is under the cursor and what the held item does.
-  setHint(targetLabel) {
-    const g = this.game, held = g.held;
-    let text = '';
-    if (held) {
-      const def = ITEMS[held.id];
-      text = def.name + (def.hint ? ' — ' + touchWords(def.hint) : '');
-      if (def.tool === 'can') text += ` (${g.player.water}/${CAN_CAPACITY})`;
-      if (def.flask) text += ` (${g.player.flask}/${FLASK_DRINKS})`;
+  // Bottom line: what is under the cursor, and what each button would do right now. With a mouse
+  // the buttons are drawn as little mice and keycaps; on touch the round buttons already say it.
+  // target: name of the thing aimed at. primary: left button verb. use: F verb. extra: a plain note.
+  setHint({ target = '', primary = '', use = '', extra = '' }) {
+    const g = this.game, held = g.held, def = held ? ITEMS[held.id] : null;
+    const parts = [];
+    if (target) parts.push(`<span class="what">${target}</span>`);
+    if (!TOUCH) {
+      if (primary) parts.push(`<span class="act">${MOUSE_LEFT}${primary}</span>`);
+      const second = secondaryVerb(def);
+      if (second) parts.push(`<span class="act">${MOUSE_RIGHT}${second}</span>`);
+      if (use) parts.push(`<span class="act"><kbd>F</kbd>${use}</span>`);
     }
-    const full = [targetLabel, text].filter(Boolean).join('   •   ');
+    if (def?.tool === 'can') parts.push(`<span class="more">Water ${g.player.water}/${CAN_CAPACITY}</span>`);
+    if (def?.flask) parts.push(`<span class="more">Flask ${g.player.flask}/${FLASK_DRINKS}</span>`);
+    if (extra) parts.push(`<span class="more">${extra}</span>`);
+    const full = parts.join('');
     const el = $('hint');
-    if (el.textContent !== full) el.textContent = full;
-    el.style.visibility = full ? 'visible' : 'hidden';
+    if (this.hintShown !== full) {
+      this.hintShown = full;
+      if (full) el.innerHTML = full; // when emptying, the old words stay while the bar fades out
+      el.classList.toggle('on', !!full);
+    }
+    this.nameHeld();
+  }
+
+  // The name of what is in the hand pops up over the hotbar whenever it changes, then fades.
+  nameHeld() {
+    const held = this.game.held, key = held ? this.game.selected + ':' + held.id : '';
+    if (key === this.heldKey) return;
+    const first = this.heldKey === undefined; // nothing pops up as the game loads
+    this.heldKey = key;
+    const el = $('held-name');
+    clearTimeout(this.heldTimer);
+    if (!held || first) return void el.classList.remove('on');
+    const def = ITEMS[held.id], e = held.e && ENHANCEMENTS[held.e];
+    el.innerHTML = `<b></b><span></span>`;
+    el.firstChild.textContent = def.name + (e ? ' · ' + e.name : '');
+    if (e) el.firstChild.style.color = hexColor(e.color);
+    el.lastChild.innerHTML = def.hint ? keyed(touchWords(def.hint)) : '';
+    el.classList.remove('on');
+    void el.offsetWidth; // start the pop again even if it was already showing
+    el.classList.add('on');
+    this.heldTimer = setTimeout(() => el.classList.remove('on'), 2400);
   }
 
   toast(text) {

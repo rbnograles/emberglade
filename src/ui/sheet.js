@@ -73,7 +73,7 @@ export class Sheet {
       text.append(name, pips, el('small', '', `${stat.text} · now ${now[id]}`));
       const plus = el('button', 'plus', '+');
       plus.disabled = pr.statPoints < 1 || pr.stats[id] >= STAT_CAP;
-      plus.title = 'Spend one point on ' + stat.name;
+      plus.dataset.tip ='Spend one point on ' + stat.name;
       plus.addEventListener('click', () => g.raiseStat(id));
       row.append(text, plus);
       stats.append(row);

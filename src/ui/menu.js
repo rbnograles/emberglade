@@ -274,7 +274,7 @@ function buildCharacter(onLook) {
       b.style.background = hex(c);
       b.dataset.key = key;
       b.dataset.value = String(c);
-      b.title = label;
+      b.dataset.tip = label;
       b.addEventListener('click', () => {
         settings.look[key] = c;
         refresh();

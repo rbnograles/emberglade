@@ -1177,3 +1177,50 @@ describe('world difficulty', () => {
     expect(new Game({ seed: 1, difficulty: 'unknown' }).difficulty).toBe('standard');
   });
 });
+
+describe('take all', () => {
+  const newGame = () => new Game({ seed: 1 });
+
+  it('empties a dropped pack into the inventory and clears the pack away', () => {
+    const g = newGame(), p = g.player;
+    g.inv.slots[9] = { id: 'wood', n: 12 };
+    g.inv.slots[10] = { id: 'stone', n: 5 };
+    g.hurt(99);
+    const { x, z } = p.lost, bag = g.world.get(x, z);
+    expect(g.takeAll(new Inventory(0, bag.items), { x, z })).toBe(true);
+    expect(g.inv.count('wood')).toBe(12);
+    expect(g.inv.count('stone')).toBe(5);
+    expect(g.world.get(x, z)).toBeFalsy();
+    expect(p.lost).toBeNull();
+  });
+
+  it('leaves in a chest what does not fit, and the chest stays', () => {
+    const g = newGame();
+    const items = Array(9).fill(null);
+    items[0] = { id: 'wood', n: 4 };
+    items[1] = { id: 'stone_axe', n: 1, d: 7 };
+    for (let i = 0; i < g.inv.limit; i++) g.inv.slots[i] = { id: 'stone', n: 99 };
+    g.inv.slots[0] = { id: 'wood', n: 97 };
+    const chest = new Inventory(0, items);
+    expect(g.takeAll(chest)).toBe(false);
+    expect(g.inv.slots[0].n).toBe(99);
+    expect(items[0]).toEqual({ id: 'wood', n: 2 });
+    expect(items[1].d).toBe(7);
+  });
+});
+
+describe('reaching a marker', () => {
+  it('clears a marker when the player walks up to it, but not one just set at their feet', () => {
+    const g = new Game({ seed: 1 }), p = g.player;
+    g.toggleMarker(p.x, p.z);
+    g.toggleMarker(p.x + 30, p.z);
+    g.tick(0.016);
+    expect(g.markers.length).toBe(2); // the one underfoot stays until you have been away
+    p.x += 29.5;
+    g.tick(0.016);
+    expect(g.markers.length).toBe(1);
+    p.x -= 29.5;
+    g.tick(0.016);
+    expect(g.markers.length).toBe(0); // and coming back to the first clears that too
+  });
+});

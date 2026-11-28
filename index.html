@@ -21,27 +21,28 @@
         </div>
       </div>
       <div id="topright">
-        <div class="daybar"><div id="day"></div><button id="btn-full" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button><button id="btn-pause" title="Pause (Esc)">&#9776;</button></div>
+        <div class="daybar"><div id="day"></div><button id="btn-full" data-tip="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button><button id="btn-pause" data-tip="Pause (Esc)">&#9776;</button></div>
         <div id="status" class="hidden"></div>
       </div>
       <div id="waypoints"></div>
       <div id="compass"><b class="needle"></b></div>
       <div id="charbox">
-      <button id="portrait" title="Character sheet (K)">
+      <button id="portrait" data-tip="Character sheet (K)">
         <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="45"></circle><circle id="xp-ring" cx="50" cy="50" r="45"></circle></svg>
         <canvas id="face" width="16" height="16"></canvas>
         <b id="level"></b>
         <em id="level-points"></em>
       </button>
-      <div id="gear" title="What you are wearing. Click to open your inventory"></div>
+      <div id="gear" data-tip="What you are wearing. Click to open your inventory"></div>
       </div>
       <div id="bottomright">
         <div id="home-label"></div>
-        <canvas id="minimap" title="Click: open the world map. Right click: place or remove a marker"></canvas>
+        <canvas id="minimap" data-tip="Click: open the world map. Right click: place or remove a marker"></canvas>
       </div>
       <div id="toasts"></div>
       <div id="bottom">
         <div id="hungry" class="hidden"></div>
+        <div id="held-name"></div>
         <div id="hint"></div>
         <div id="bars">
           <div id="hearts" class="bar" data-label="Health"></div>
@@ -52,7 +53,7 @@
         </div>
         <div id="hotbar-row">
           <div id="hotbar"></div>
-          <button id="btn-pack" title="Inventory and crafting (Tab)" aria-label="Inventory and crafting"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a4 4 0 0 1 8 0v2"/><rect x="4.5" y="7" width="15" height="14" rx="4"/><path d="M8.5 13h7v3.5h-7zM4.5 12h15"/></svg></button>
+          <button id="btn-pack" data-tip="Inventory and crafting (Tab)" aria-label="Inventory and crafting"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a4 4 0 0 1 8 0v2"/><rect x="4.5" y="7" width="15" height="14" rx="4"/><path d="M8.5 13h7v3.5h-7zM4.5 12h15"/></svg></button>
         </div>
       </div>
     </div>
